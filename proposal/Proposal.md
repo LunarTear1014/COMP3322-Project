@@ -1,122 +1,133 @@
-# ClubSpace: Venue Booking and Event Platform for University Clubs
+# COMP3322 Group Project Proposal
 
 ## 1. Team Members
 
-| Full Name              | Student Number |
+| Member                 | Student Number |
 | ---------------------- | -------------- |
 | Chan Ka Ho Charlie     | 3035927104     |
 | Lucien Balthazar Neale | 3036720486     |
 | Chan Ka Hei Aubrey     | 3036388381     |
 
-## 2. Project Description
+## 2. Project Title
 
-ClubSpace is a web platform where university clubs book rooms and host events, and where students discover and join them. Club committees can see which venues are free, reserve a timeslot without clashing with other clubs, and publish an event as either **public** (open to everyone) or **members-only**. Students can browse upcoming and past events, filter them by date, club and type, and join the ones they like. **Target users:** club committee members (event organizers) and university students.
+**ClubSpace — University Club Event & Venue Management Platform**
 
-## 3. Feature List
+## 3. Project Description
+
+ClubSpace is a web application that allows university clubs to reserve venues, organize events, and manage student participation. Club committee members can create events and book suitable venues while avoiding conflicting bookings. Students can discover upcoming events, filter them by criteria such as club, date, or venue, and join events that they are eligible to attend. Events may be open to all students or restricted to members of the organizing club.
+
+The target users are **university students** and **club committee members**. Students use the system to discover and join events, while committee members use it to organize events and manage their club's bookings and participants.
+
+## 4. Feature List
 
 ### Must-have
 
-#### Accounts and clubs
+- **User accounts and club membership**
+  - Register, login, logout, and manage personal information.
+  - Join and leave clubs.
+  - Support membership in multiple clubs.
+  - Distinguish ordinary members from club committee members.
 
-- Register, log in and log out, with two roles: _organizer_ (club committee) and _student_
-- Students can edit their personal details
-- Students can join clubs (club membership decides who can access members-only events)
+- **Venue booking**
+  - Browse available venues and timeslots.
+  - Book a venue for a specific date and time.
+  - Prevent conflicting bookings.
+  - Allow authorized organizers to cancel their bookings.
 
-**Venues and booking (organizers)**
+- **Event management**
+  - Create an event associated with a venue booking.
+  - Set event title, description, date/time, and visibility.
+  - Support public and club-members-only events.
+  - Allow organizers to edit or cancel their events.
 
-- View venues and their available timeslots
-- Book a venue and timeslot; the system rejects double-bookings when clubs compete for the same room
+- **Event discovery and participation**
+  - Browse upcoming and past events.
+  - Filter events by date, club, venue, and visibility.
+  - View event details.
+  - Join and leave eligible events.
+  - Prevent duplicate registrations and unauthorized participation.
+  - Allow organizers to view participants.
 
-**Events**
-
-- Organizers create an event on top of a booking: title, description, date/time, venue and promotional material (e.g. poster)
-- Each event is either public or members-only
-
-**Browsing and joining (students)**
-
-- Browse upcoming events with filters (date, club, venue, public / members-only)
-- Browse past events
-- Join and leave events they are eligible for; organizers can see who joined
-
-**Quality basics**
-
-- Client-side and server-side input validation
-- Correct HTTP status codes in the REST API (200, 201, 400, 401, 403, 404, 500)
+- **Validation and authorization**
+  - Validate important input on both client and server.
+  - Enforce permissions for club and event management.
+  - Maintain database integrity and provide appropriate API responses.
 
 ### Nice-to-have
 
-_Only to be started after all must-have features are finished._
+- Event capacity and waitlists.
+- Asynchronous notifications when events are changed or cancelled.
+- Event reviews.
+- External payment system to pay an event's entry fee
 
-- Reviews on past events
-- Rating system for organizers (clubs)
-- Payment for event entry fees, with different prices for members and non-members
-- Organizers manually approve or reject each request to join an event
-- OAuth2.0 login with a Google account
+## 5. Technology Stack
 
-## 4. Technology Stack
+| Area            | Technology                   |
+| --------------- | ---------------------------- |
+| Frontend        | React                        |
+| Backend         | Node.js + Express            |
+| API             | RESTful API                  |
+| Database        | MySQL                        |
+| Deployment      | Linux VM + Docker Compose    |
+| Version Control | Git + GitHub                 |
+| Authentication  | Session-based authentication |
 
-| Item                | Choice                                        |
-| ------------------- | --------------------------------------------- |
-| Frontend            | React (Single Page Application, responsive)   |
-| Backend             | Node.js + Express, RESTful API                |
-| Database            | MySQL                                         |
-| Deployment platform | Linux virtual machine with Docker Compose     |
-| Version control     | Git + GitHub (tags for Alpha, Beta and Final) |
+## 6. Preliminary Team Task Allocation
 
-Deployment files (Dockerfile, docker-compose.yml, README with deployment steps) will be committed to GitHub. No real secrets will be committed; we will use environment variables and a `.env.example` template.
+| Member                     | Primary Responsibilities                                               |
+| -------------------------- | ---------------------------------------------------------------------- |
+| **Chan Ka Ho Charlie**     | Backend/API, authentication, authorization, event business logic       |
+| **Lucien Balthazar Neale** | React frontend, UI components, pages, event browsing and participation |
+| **Chan Ka Hei Aubrey**     | MySQL database design, venue/booking logic, Docker deployment          |
 
-## 5. Preliminary Task Allocation
+All members will participate in integration, testing, debugging, documentation, and code review.
 
-| Member                 | Role                    | Responsibilities                                                                                                                              |
-| ---------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chan Ka Ho Charlie     | Frontend                | React pages (login, events + filters, event detail, venue availability, booking page, past events, profile), responsive layout, UI/UX         |
-| Lucien Balthazar Neale | Backend                 | Express REST API: authentication, venue booking with conflict checking, events, membership and join endpoints, validation, status codes       |
-| Chan Ka Hei Aubrey     | Database and deployment | MySQL schema (users, clubs, venues, bookings, events, participants), queries and seed data, Dockerfile, docker-compose.yml, deployment README |
+## 7. Problem & Target User Context
 
-Everyone also helps with testing, documentation and the presentation, and every member will commit to GitHub through commits and pull requests.
+University clubs often need to coordinate venues, event information, and student participation. These activities can become difficult to manage when booking information and event announcements are handled separately.
 
-## 6. Problem and Target User Context
+ClubSpace brings these activities into one web application. Committee members can organize events and reserve venues, while students can discover relevant events and register for them. A web application is suitable because students and organizers can access the system through a browser without installing specialized software.
 
-**Problem.** Clubs often find it hard to reserve rooms without clashing with other clubs, and to get their events noticed. Bookings and announcements are scattered across chat groups, posters and spreadsheets, so committees waste time coordinating and students miss events.
+## 8. High-level Workflow
 
-**Users.**
+### Club committee member
 
-- **Club committees** want to see free venues, book them quickly and promote their events to more students.
-- **University students** want one place to find events, join activities and meet new people.
-
-**Why a web application.** Both user groups need the same up-to-date information from any device, and venue availability must be shared by all clubs at once to avoid double-booking. A web app needs no installation and keeps one source of truth for bookings and events.
-
-**Similar sites for reference:** simple room-booking systems and event pages such as Eventbrite or Meetup.
-
-## 7. High-level Workflow
-
-### Organizer (club committee)
-
-1. Logs in and opens the **Venue Availability** page to see free and busy timeslots.
-2. Picks a venue, date and timeslot. If it is already taken, the app shows an error and asks for another slot.
-3. On the **Booking Page**, confirms the booking and enters event details: title, description, date/time, venue, poster and whether the event is public or members-only.
-4. After submitting, the event appears in the event list and in **My Events**, where the organizer can see who joined.
+1. Log in and access the club management area.
+2. Create an event and enter its basic information.
+3. Select a venue and date/time.
+4. View whether the venue is available.
+5. Confirm the booking and publish the event.
+6. Manage participants or cancel the event when necessary.
 
 ### Student
 
-1. Registers or logs in and lands on the **Events** page (upcoming events).
-2. Filters events by date, club, venue or type.
-3. Opens an **Event Detail** page and clicks **Join**. The app confirms the join, or explains why it is not possible (for example, members-only event and the student is not a member).
-4. Can browse **Past Events**, join clubs, and edit personal details on the **Profile** page.
+1. Log in.
+2. Browse upcoming events.
+3. Filter events according to their interests.
+4. Open an event to view its details.
+5. Join the event if they satisfy its participation requirements.
+6. View their joined events and past participation.
 
-### Page flow
+If an event is cancelled, its availability is removed from the event listing and participants can be informed through the optional notification feature.
 
-```mermaid
-flowchart LR
-    L[Login / Register] --> H[Events: upcoming + filters]
-    H --> D[Event Detail]
-    D -->|Join| J[Joined confirmation]
-    H --> P[Past Events]
-    H --> PR[Profile]
-    L --> V[Venue Availability]
-    V --> B[Booking Page]
-    B --> M[My Events]
-    M --> H
-```
+## 9. Anticipated Learning Challenges & Self-assessment
 
-## 8. Anticipated Learning Challenges and Self-assessment
+As most team members have limited experience with modern web development, the project will involve a significant learning curve. The main anticipated challenges are:
+
+### 1. Learning and integrating the full web development stack
+
+The team will need to learn how React, Node.js, Express, RESTful APIs, and MySQL work together. Integrating the frontend, backend, and database may initially be challenging.
+
+**Plan:** The team will first build a small end-to-end feature, such as displaying events from the database in the React frontend, before gradually adding more functionality. Team members will also share knowledge and document useful findings during development.
+
+### 2. Implementing authentication and authorization
+
+The team has limited experience implementing user authentication and controlling access to features based on roles and club membership. This is particularly important because different users will have different permissions.
+
+**Plan:** The team will study authentication and authorization early in the project and implement a simple login system before developing protected features. Permissions will be tested with different user roles throughout development.
+
+### 3. Handling more complex application logic
+
+Features such as preventing conflicting venue bookings, restricting members-only events, and maintaining consistent event and booking information require more than basic CRUD operations.
+
+**Plan:** The team will identify the main business rules before implementation and develop these features incrementally. Important edge cases, such as overlapping bookings and unauthorized event registration, will be tested explicitly.
