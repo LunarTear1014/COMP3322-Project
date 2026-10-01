@@ -3,8 +3,8 @@ import { NavLink, useLocation } from 'react-router'
 import '../App.css'
 
 const venue_options = [
-  'Happy Park Hall',
-  'Student Union Room 301',
+  'Lok Yew Hall',
+  'Main Building Room 230',
   'GoldenScene Cinema',
 ]
 
@@ -54,7 +54,7 @@ function BookingPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        set_success_message(data.message)   // e.g. "Happy Park Hall is already booked on ..."
+        set_success_message(data.message)   // e.g. "Lok Yew Hall is already booked on ..."
         return
       }
       set_success_message(

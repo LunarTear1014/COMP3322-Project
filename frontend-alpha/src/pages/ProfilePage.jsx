@@ -12,7 +12,6 @@ function ProfilePage({ student_clubs, onToggleClub }) {
   const [profile, set_profile] = useState({
     name: 'Charlie Chan',
     email: 'charlie@example.com',
-    programme: 'Computer Science',
   })
 
   const [saved_message, set_saved_message] = useState('')
@@ -83,15 +82,6 @@ function ProfilePage({ student_clubs, onToggleClub }) {
               name="email"
               type="email"
               value={profile.email}
-              onChange={handle_change}
-            />
-          </label>
-
-          <label>
-            Programme
-            <input
-              name="programme"
-              value={profile.programme}
               onChange={handle_change}
             />
           </label>

@@ -142,6 +142,19 @@ article p {
   color: var(--ink);
 }
 
+.option > span {
+  display: block;
+}
+
+.option > strong {
+  margin-bottom: 6px;
+}
+
+.option > span {
+  font-size: 14px;
+  font-weight: 400;
+}
+
 .option.selected {
   color: white;
 }
