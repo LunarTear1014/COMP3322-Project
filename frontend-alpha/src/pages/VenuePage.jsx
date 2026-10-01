@@ -1,50 +1,39 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, NavLink } from 'react-router'
 import '../App.css'
 
-const mock_venues = [
-  {
-    id: 1,
-    name: 'Happy Park Hall',
-    location: 'Main Campus',
-    capacity: 80,
-    timeslots: [
-      { time: '10:00 - 12:00', available: true },
-      { time: '13:00 - 15:00', available: false },
-      { time: '16:00 - 18:00', available: true },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Student Union Room 301',
-    location: 'Student Union',
-    capacity: 35,
-    timeslots: [
-      { time: '10:00 - 12:00', available: false },
-      { time: '13:00 - 15:00', available: true },
-      { time: '16:00 - 18:00', available: true },
-    ],
-  },
-  {
-    id: 3,
-    name: 'GoldenScene Cinema',
-    location: 'Arts Building',
-    capacity: 120,
-    timeslots: [
-      { time: '10:00 - 12:00', available: true },
-      { time: '13:00 - 15:00', available: true },
-      { time: '16:00 - 18:00', available: false },
-    ],
-  },
-]
-
 function VenuePage() {
+  const [venues, set_venues] = useState([])
+  const [load_state, set_load_state] = useState('loading')
+  const [date, set_date] = useState(new Date().toISOString().slice(0, 10))
   const [selected_venue_id, set_selected_venue_id] = useState(1)
   const [selected_timeslot, set_selected_timeslot] = useState('')
 
-  const selected_venue = mock_venues.find(
+  // Runs after the first render, and again whenever the date changes
+  useEffect(() => {
+    async function load_venues() {
+      try {
+        const response = await fetch(`/api/venues?date=${date}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        set_venues(await response.json())
+        set_load_state('ready')
+      } catch {
+        set_load_state('error')
+      }
+    }
+    load_venues()
+  }, [date])
+
+  const selected_venue = venues.find(
     (venue) => venue.id === selected_venue_id
   )
+
+  if (load_state === 'error') {
+    return <main><p className="message">Could not reach the server.</p></main>
+  }
+  if (!selected_venue) {
+    return <main><p>Loading venues…</p></main>
+  }
 
   return (
     <main>
@@ -62,10 +51,21 @@ function VenuePage() {
         <p>Organizer tools</p>
         <h2>Venue availability</h2>
         <p>Select a venue to view available timeslots.</p>
+        <label>
+          Date
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => {
+              set_date(e.target.value)
+              set_selected_timeslot('')
+            }}
+          />
+        </label>
       </section>
 
       <section className="list">
-        {mock_venues.map((venue) => (
+        {venues.map((venue) => (
           <button
             className={
               venue.id === selected_venue_id
@@ -119,6 +119,7 @@ function VenuePage() {
             state={{
                 venue: selected_venue.name,
                 timeslot: selected_timeslot,
+                date,
             }}
             >
             Continue to booking

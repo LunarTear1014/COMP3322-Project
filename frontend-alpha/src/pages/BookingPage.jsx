@@ -21,7 +21,7 @@ function BookingPage() {
     club: 'Photography Society',
     title: '',
     description: '',
-    date: '',
+    date: location.state?.date || '',
     venue: location.state?.venue || '',
     timeslot: location.state?.timeslot || '',
     visibility: 'Public',
@@ -37,7 +37,7 @@ function BookingPage() {
     })
   }
 
-  function handle_submit(event) {
+  async function handle_submit(event) {
     event.preventDefault()
 
     if (!form.venue || !form.timeslot) {
@@ -45,9 +45,24 @@ function BookingPage() {
       return
     }
 
-    set_success_message(
-      `${form.title} has been created and the venue booking is confirmed.`
-    )
+    try {
+      const response = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),   // form already has exactly the fields the server wants
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        set_success_message(data.message)   // e.g. "Happy Park Hall is already booked on ..."
+        return
+      }
+      set_success_message(
+        `${data.title} has been created and the venue booking is confirmed.`
+      )
+    } catch {
+      set_success_message('Could not reach the server.')
+    }
   }
 
   return (

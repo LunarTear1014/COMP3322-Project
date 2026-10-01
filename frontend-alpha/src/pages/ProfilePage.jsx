@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router'
 import '../App.css'
 
@@ -17,6 +17,18 @@ function ProfilePage({ student_clubs, onToggleClub }) {
 
   const [saved_message, set_saved_message] = useState('')
 
+  useEffect(() => {
+    async function load_profile() {
+      try {
+        const response = await fetch('/api/profile')
+        if (response.ok) set_profile(await response.json())
+      } catch {
+        // keep the default values if the server isn't reachable
+      }
+    }
+    load_profile()
+  }, [])
+
   function handle_change(event) {
     set_profile({
       ...profile,
@@ -24,9 +36,19 @@ function ProfilePage({ student_clubs, onToggleClub }) {
     })
   }
 
-  function handle_submit(event) {
+  async function handle_submit(event) {
     event.preventDefault()
-    set_saved_message('Profile saved successfully.')
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      })
+      const data = await response.json()
+      set_saved_message(response.ok ? 'Profile saved successfully.' : data.message)
+    } catch {
+      set_saved_message('Could not reach the server.')
+    }
   }
 
   return (

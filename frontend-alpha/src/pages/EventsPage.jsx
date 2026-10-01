@@ -1,50 +1,30 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router'
 import '../App.css'
-
-const mock_events = [
-  {
-    id: 1,
-    title: 'Photography Society Gathering',
-    club: 'Photography Society',
-    date: '6 Oct 18:30',
-    venue: 'Happy Park',
-    description: 'A casual photography walk for students interested in taking better campus photos.',
-    visibility: 'Public',
-    status: 'Upcoming',
-    joined_count: 18,
-  },
-  {
-    id: 2,
-    title: 'Film Society Screening',
-    club: 'Film Society',
-    date: '2 Oct 18:30',
-    venue: 'GoldenScene Cinema',
-    description: 'Watch a selected film with other students, followed by a group discussion.',
-    visibility: 'Members only',
-    status: 'Upcoming',
-    joined_count: 25,
-  },
-  {
-    id: 3,
-    title: 'Debate Club Meeting',
-    club: 'Debate Club',
-    date: '1 Oct 18:30',
-    venue: 'Student Union',
-    description: 'A practice debate for students who want to improve public-speaking skills.',
-    visibility: 'Public',
-    status: 'Past',
-    joined_count: 12,
-  },
-]
 
 function EventsPage({ student_clubs }) {
   const [search_term, set_search_term] = useState('')
   const [selected_event, set_selected_event] = useState(null)
   const [joined_events, set_joined_events] = useState([])
   const [event_status_filter, set_event_status_filter] = useState('Upcoming')
+  const [events, set_events] = useState([])
+  const [load_state, set_load_state] = useState('loading') // loading | ready | error
+
+  useEffect(() => {
+    async function load_events() {
+      try {
+        const response = await fetch('/api/events')
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        set_events(await response.json())
+        set_load_state('ready')
+      } catch {
+        set_load_state('error')
+      }
+    }
+    load_events()
+  }, [])
   
-  const visible_events = mock_events.filter((event) => {
+  const visible_events = events.filter((event) => {
     const searchable_text = `${event.title} ${event.club} ${event.venue} ${event.description}`.toLowerCase()
     return (
       searchable_text.includes(search_term.toLowerCase()) &&
@@ -116,19 +96,20 @@ function EventsPage({ student_clubs }) {
             <p>{event.club}</p>
             <p className="badge">{event.visibility}</p>
             <h4>{event.title}</h4>
-            <p>{event.date}</p>
+            <p>{event.date}, {event.timeslot}</p>
             <p>{event.venue}</p>
             <button onClick={() => set_selected_event(event)}>View event</button>  
           </article>
         ))}
-        {visible_events.length === 0 && <p>No events found</p>}
-        
+        {load_state === 'loading' && <p>Loading events…</p>}
+        {load_state === 'error' && <p className="message">Could not reach the server.</p>}
+        {load_state === 'ready' && visible_events.length === 0 && <p>No events found</p>}
       </section>  
       {selected_event && (
         <section className="panel">
           <p> Event Details </p>
           <h4>{selected_event.title}</h4>
-          <p>Date: {selected_event.date}</p>
+          <p>Date: {selected_event.date}, {selected_event.timeslot}</p>
           <p>Club: {selected_event.club}</p>
           <p>Venue: {selected_event.venue}</p>
           <p>Description: {selected_event.description}</p>
