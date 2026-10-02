@@ -10,9 +10,9 @@ INSERT INTO venues (name, location, capacity, description) VALUES
 
 -- These demo accounts are only for the Alpha environment. Authentication will
 -- replace the placeholder password hashes before Beta.
-INSERT INTO users (email, password_hash, name, student_id, role) VALUES
-  ('charlie@example.com', 'alpha-demo-only', 'Charlie Chan', 'S0000001', 'student'),
-  ('organizer@example.com', 'alpha-demo-only', 'Alex Organizer', 'S0000002', 'admin');
+INSERT INTO users (email, password_hash, name, student_id) VALUES
+  ('charlie@example.com', 'alpha-demo-only', 'Charlie Chan', 'S0000001'),
+  ('organizer@example.com', 'alpha-demo-only', 'Alex Organizer', 'S0000002');
 
 INSERT INTO memberships (user_id, club_id, role)
 SELECT 2, id, 'committee' FROM clubs WHERE name = 'Photography Society';

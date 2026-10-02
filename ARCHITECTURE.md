@@ -18,7 +18,6 @@ erDiagram
         string password_hash
         string name
         string student_id UK
-        enum role "student|admin"
         timestamp created_at
         timestamp updated_at
     }

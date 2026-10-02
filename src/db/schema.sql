@@ -22,7 +22,6 @@ CREATE TABLE `users` (
     `password_hash` VARCHAR(255) NOT NULL,
     `name` VARCHAR(255) NOT NULL,
     `student_id` VARCHAR(50) NOT NULL,
-    `role` ENUM('student', 'admin') NOT NULL DEFAULT 'student',
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
