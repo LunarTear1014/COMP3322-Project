@@ -1,0 +1,8 @@
+schema: spec-driven
+context: |
+  ClubSpace COMP3322. React SPA, Node.js 22 + Express, MySQL 8.4/InnoDB.
+  Linux VM with Docker Compose. Campus timezone Asia/Hong_Kong; persist UTC.
+  Active application: frontend-alpha/, backend-alpha/, src/db/. Baseline aa4fb7d.
+  This is a design-only proposal. Do not implement or apply migrations without approval.
+  Specify routers, controllers, services, repositories and separate parameterized SQL modules.
+  Require non-destructive migrations, explicit wire contracts and real MySQL race tests.
