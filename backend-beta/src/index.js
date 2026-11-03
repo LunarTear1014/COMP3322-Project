@@ -1,5 +1,5 @@
 import express from "express";
-import pool from "./db.js";
+import pool from "./config/db.js";
 
 const app = express();
 app.use(express.json());
@@ -100,7 +100,8 @@ app.get("/api/events", async (_req, res) => {
 
 // POST /api/events: book the venue and create the event in one transaction.
 app.post("/api/events", async (req, res) => {
-  const { club, title, description, date, venue, timeslot, visibility } = req.body;
+  const { club, title, description, date, venue, timeslot, visibility } =
+    req.body;
 
   if (typeof club !== "string" || club.trim() === "") {
     return invalid_request(res, "Club is required");
@@ -135,7 +136,7 @@ app.post("/api/events", async (req, res) => {
 
     const [[club_row]] = await connection.query(
       "SELECT id FROM clubs WHERE name = ?",
-      [club]
+      [club],
     );
     if (!club_row) {
       await connection.rollback();
@@ -144,7 +145,7 @@ app.post("/api/events", async (req, res) => {
 
     const [[venue_row]] = await connection.query(
       "SELECT id, capacity FROM venues WHERE name = ?",
-      [venue]
+      [venue],
     );
     if (!venue_row) {
       await connection.rollback();
@@ -157,7 +158,7 @@ app.post("/api/events", async (req, res) => {
        WHERE venue_id = ? AND status = 'confirmed'
          AND start_time < ? AND end_time > ?
        FOR UPDATE`,
-      [venue_row.id, bounds.end, bounds.start]
+      [venue_row.id, bounds.end, bounds.start],
     );
     if (conflicts.length > 0) {
       await connection.rollback();
@@ -169,7 +170,7 @@ app.post("/api/events", async (req, res) => {
     const [booking_result] = await connection.query(
       `INSERT INTO bookings (venue_id, club_id, start_time, end_time)
        VALUES (?, ?, ?, ?)`,
-      [venue_row.id, club_row.id, bounds.start, bounds.end]
+      [venue_row.id, club_row.id, bounds.start, bounds.end],
     );
     const [event_result] = await connection.query(
       `INSERT INTO events
@@ -184,7 +185,7 @@ app.post("/api/events", async (req, res) => {
         bounds.end,
         database_visibility(visibility),
         venue_row.capacity,
-      ]
+      ],
     );
 
     await connection.commit();
@@ -221,7 +222,7 @@ app.get("/api/venues", async (req, res) => {
 
   try {
     const [venues] = await pool.query(
-      "SELECT id, name, location, capacity FROM venues ORDER BY id"
+      "SELECT id, name, location, capacity FROM venues ORDER BY id",
     );
     const [bookings] = await pool.query(
       `SELECT venue_id,
@@ -229,7 +230,7 @@ app.get("/api/venues", async (req, res) => {
         TIME_FORMAT(end_time, '%H:%i') AS end_time
        FROM bookings
        WHERE status = 'confirmed' AND start_time < ? AND end_time > ?`,
-      [`${next_date} 00:00:00`, `${date} 00:00:00`]
+      [`${next_date} 00:00:00`, `${date} 00:00:00`],
     );
 
     res.json(
@@ -241,11 +242,11 @@ app.get("/api/venues", async (req, res) => {
             (booking) =>
               booking.venue_id === venue.id &&
               `${date} ${booking.start_time}:00` < slot.end &&
-              `${date} ${booking.end_time}:00` > slot.start
+              `${date} ${booking.end_time}:00` > slot.start,
           );
           return { time, available };
         }),
-      }))
+      })),
     );
   } catch (error) {
     database_error(res, error);
@@ -257,7 +258,7 @@ app.get("/api/profile", async (_req, res) => {
   try {
     const [[profile]] = await pool.query(
       "SELECT name, email FROM users WHERE id = ?",
-      [demo_user_id]
+      [demo_user_id],
     );
     if (!profile) {
       return res.status(404).json({ message: "Demo user was not found." });
@@ -280,7 +281,7 @@ app.put("/api/profile", async (req, res) => {
   try {
     const [result] = await pool.query(
       "UPDATE users SET name = ?, email = ? WHERE id = ?",
-      [name.trim(), email.trim(), demo_user_id]
+      [name.trim(), email.trim(), demo_user_id],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Demo user was not found." });
@@ -288,7 +289,9 @@ app.put("/api/profile", async (req, res) => {
     res.json({ name: name.trim(), email: email.trim() });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({ message: "That email address is already in use." });
+      return res
+        .status(409)
+        .json({ message: "That email address is already in use." });
     }
     database_error(res, error);
   }
