@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import mysql from "mysql2/promise";
 
 // Local Node runs read code/.env.
-dotenv.config({ path: new URL("../.env", import.meta.url) });
+dotenv.config({ path: new URL("../../.env", import.meta.url) });
 
 const required_values = ["DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD"];
 const missing_values = required_values.filter((name) => !process.env[name]);
@@ -10,7 +10,7 @@ const missing_values = required_values.filter((name) => !process.env[name]);
 if (missing_values.length > 0) {
   throw new Error(
     `Missing database configuration: ${missing_values.join(", ")}. ` +
-      "Copy .env.example to .env and fill in the values."
+      "Copy .env.example to .env and fill in the values.",
   );
 }
 
