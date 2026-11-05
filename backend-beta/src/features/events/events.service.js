@@ -26,6 +26,8 @@ function event_response(row) {
     description: row.description,
     visibility: display_visibility(row.visibility),
     joined_count: Number(row.joined_count),
+    capacity: Number(row.capacity),
+    is_full: Number(row.joined_count) >= Number(row.capacity),
     is_joined: Boolean(row.is_joined),
     status: row.date >= today() ? "Upcoming" : "Past",
   };
@@ -41,6 +43,7 @@ async function list_events(user_id = demo_user_id) {
         TIME_FORMAT(e.start_time, '%H:%i') AS start_time,
         TIME_FORMAT(e.end_time, '%H:%i') AS end_time,
         e.visibility,
+        e.capacity,
         c.name AS club,
         v.name AS venue,
         (SELECT COUNT(*)
@@ -68,7 +71,7 @@ async function join_event(event_id, user_id = demo_user_id) {
     await connection.beginTransaction();
 
     const [[event]] = await connection.query(
-      "SELECT id, club_id, visibility, status FROM events WHERE id = ? FOR UPDATE",
+      "SELECT id, club_id, visibility, status, capacity FROM events WHERE id = ? FOR UPDATE",
       [event_id],
     );
     if (!event) {
@@ -98,6 +101,16 @@ async function join_event(event_id, user_id = demo_user_id) {
     if (participation?.status === "joined") {
       await connection.rollback();
       return { ok: false, reason: "already_joined" };
+    }
+    const [[signup_count]] = await connection.query(
+      `SELECT COUNT(*) AS joined_count
+       FROM participations
+       WHERE event_id = ? AND status = 'joined'`,
+      [event_id],
+    );
+    if (Number(signup_count.joined_count) >= Number(event.capacity)) {
+      await connection.rollback();
+      return { ok: false, reason: "full" };
     }
     if (participation) {
       await connection.query(

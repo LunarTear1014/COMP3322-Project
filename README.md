@@ -188,6 +188,9 @@ Only signed-in committee members and presidents can book venues and create
 events for clubs where they hold those roles. A user with those roles in
 multiple clubs can book for any of them; regular members can still join events
 but cannot make venue bookings.
+Event signups are capped at the venue capacity recorded for the event. Full
+events show an `Event full` label and no signup button; the API also rejects
+signups once that capacity is reached.
 
 ## Verify the end-to-end flow
 

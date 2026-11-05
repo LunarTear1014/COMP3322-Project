@@ -171,6 +171,11 @@ article p {
   font-weight: 700;
 }
 
+.full-badge {
+  background: #b42318;
+  color: #ffffff;
+}
+
 .row {
   justify-content: space-between;
   gap: 16px;

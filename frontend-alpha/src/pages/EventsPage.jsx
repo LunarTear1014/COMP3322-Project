@@ -63,6 +63,16 @@ function EventsPage({ student_clubs, membership_error }) {
       )
       if (!response.ok) {
         const data = await response.json()
+        if (data.reason === 'full') {
+          const events_response = await fetch('/api/events')
+          if (events_response.ok) {
+            const updated_events = await events_response.json()
+            set_events(updated_events)
+            set_selected_event(
+              updated_events.find((updated_event) => updated_event.id === event.id)
+            )
+          }
+        }
         throw new Error(data.message || 'Could not update event participation.')
       }
 
@@ -150,6 +160,7 @@ function EventsPage({ student_clubs, membership_error }) {
           <article key={event.id}>
             <p>{event.club}</p>
             <p className="badge">{event.visibility}</p>
+            {event.is_full && <p className="badge full-badge">Event full</p>}
             <h4>{event.title}</h4>
             <p>{event.date}, {event.timeslot}</p>
             <p>{event.venue}</p>
@@ -176,22 +187,30 @@ function EventsPage({ student_clubs, membership_error }) {
           <p>Visibility: {selected_event.visibility}</p>
           <p>Status: {selected_event.status}</p>
           <p>Joined Count: {selected_event.joined_count}</p>
-          <button
-            onClick={() => toggle_join_event(selected_event)}
-            disabled={
-              updating_event_id === selected_event.id ||
-              (!selected_event.is_joined && !can_join_event(selected_event))
-            }
-          >
-            {updating_event_id === selected_event.id
-              ? 'Updating…'
-              : selected_event.is_joined
-                ? 'Leave Event'
-                : can_join_event(selected_event)
-                  ? 'Join Event'
-                  : 'Members only'}
-          </button> 
-        {!selected_event.is_joined && !can_join_event(selected_event) && (
+          <p>Capacity: {selected_event.capacity}</p>
+          {selected_event.is_full && (
+            <p className="badge full-badge" role="status">Event full</p>
+          )}
+          {!(selected_event.is_full && !selected_event.is_joined) && (
+            <button
+              onClick={() => toggle_join_event(selected_event)}
+              disabled={
+                updating_event_id === selected_event.id ||
+                (!selected_event.is_joined && !can_join_event(selected_event))
+              }
+            >
+              {updating_event_id === selected_event.id
+                ? 'Updating…'
+                : selected_event.is_joined
+                  ? 'Leave Event'
+                  : can_join_event(selected_event)
+                    ? 'Join Event'
+                    : 'Members only'}
+            </button>
+          )}
+        {!selected_event.is_joined &&
+          !selected_event.is_full &&
+          !can_join_event(selected_event) && (
           <p className="message error-message" role="alert">
             {membership_error
               ? 'Could not verify your club memberships.'

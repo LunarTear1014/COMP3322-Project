@@ -53,6 +53,12 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
     if (result.reason === "unavailable") {
       return res.status(409).json({ message: "This event is not available." });
     }
+    if (result.reason === "full") {
+      return res.status(409).json({
+        reason: "full",
+        message: "This event is full.",
+      });
+    }
     return database_error(res, result.error);
   } catch (error) {
     return database_error(res, error);
