@@ -97,11 +97,38 @@ async function list_club_members(club_id, user_id) {
     `SELECT u.id AS user_id, u.name, m.role
      FROM memberships m
      JOIN users u ON u.id = m.user_id
-     WHERE m.club_id = ? AND m.user_id <> ?
+     WHERE m.club_id = ?
      ORDER BY u.name`,
-    [club_id, user_id],
+    [club_id],
   );
   return { ok: true, members };
+}
+
+async function leave_committee(club_id, user_id) {
+  const [result] = await pool.query(
+    `UPDATE memberships
+     SET role = 'member'
+     WHERE club_id = ? AND user_id = ? AND role = 'committee'`,
+    [club_id, user_id],
+  );
+  if (result.affectedRows > 0) {
+    return { ok: true };
+  }
+
+  const [[club]] = await pool.query("SELECT id FROM clubs WHERE id = ?", [
+    club_id,
+  ]);
+  if (!club) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const [[membership]] = await pool.query(
+    "SELECT role FROM memberships WHERE club_id = ? AND user_id = ?",
+    [club_id, user_id],
+  );
+  return membership
+    ? { ok: false, reason: "not_committee" }
+    : { ok: false, reason: "not_a_member" };
 }
 
 async function promote_club_member(club_id, member_user_id, user_id) {
@@ -166,4 +193,5 @@ export {
   list_memberships,
   list_club_members,
   promote_club_member,
+  leave_committee,
 };

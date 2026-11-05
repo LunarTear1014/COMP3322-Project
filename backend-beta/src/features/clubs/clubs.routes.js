@@ -7,6 +7,7 @@ import {
   list_memberships,
   list_club_members,
   promote_club_member,
+  leave_committee,
 } from "./clubs.service.js";
 
 const router = Router();
@@ -58,6 +59,32 @@ router.post("/api/clubs/:club_id/membership", async (req, res) => {
       return res.status(404).json({ message: "Club not found." });
     }
     return res.status(409).json({ message: "You already joined this club." });
+  } catch (error) {
+    return database_error(res, error);
+  }
+});
+
+router.delete("/api/clubs/:club_id/committee", async (req, res) => {
+  const club_id = parse_club_id(req.params.club_id);
+  if (club_id === null) {
+    return invalid_request(res, "Club ID must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Log in to leave a committee." });
+  }
+
+  try {
+    const result = await leave_committee(club_id, req.session.user_id);
+    if (result.ok) {
+      return res.json({ message: "You are now a regular club member." });
+    }
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Club not found." });
+    }
+    if (result.reason === "not_a_member") {
+      return res.status(404).json({ message: "You are not a member of this club." });
+    }
+    return res.status(409).json({ message: "You are not on this club's committee." });
   } catch (error) {
     return database_error(res, error);
   }

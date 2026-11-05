@@ -3,38 +3,19 @@ import { NavLink } from 'react-router'
 import '../App.css'
 
 async function fetch_clubs_and_memberships() {
-  const [clubs_response, memberships_response, account_response] = await Promise.all([
+  const [clubs_response, memberships_response] = await Promise.all([
     fetch('/api/clubs'),
     fetch('/api/memberships'),
-    fetch('/api/auth/me'),
   ])
   if (!clubs_response.ok || !memberships_response.ok) {
     throw new Error('Could not load clubs.')
-  }
-  if (!account_response.ok && account_response.status !== 401) {
-    throw new Error('Could not check your account permissions.')
   }
 
   const [clubs, memberships] = await Promise.all([
     clubs_response.json(),
     memberships_response.json(),
   ])
-  const account =
-    account_response.status === 401 ? null : await account_response.json()
-  const committee_clubs = account
-    ? clubs.filter((club) => club.role === 'committee')
-    : []
-  const rosters = await Promise.all(
-    committee_clubs.map(async (club) => {
-      const response = await fetch(`/api/clubs/${club.id}/members`)
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || 'Could not load committee members.')
-      }
-      return [club.id, await response.json()]
-    }),
-  )
-  return { clubs, memberships, committee_members: Object.fromEntries(rosters) }
+  return { clubs, memberships }
 }
 
 function ClubsPage({ onMembershipsChange }) {
@@ -44,6 +25,9 @@ function ClubsPage({ onMembershipsChange }) {
   const [updating_club_id, set_updating_club_id] = useState(null)
   const [updating_member, set_updating_member] = useState(null)
   const [committee_members, set_committee_members] = useState({})
+  const [roster_loading, set_roster_loading] = useState({})
+  const [roster_errors, set_roster_errors] = useState({})
+  const [roster_search, set_roster_search] = useState({})
   const [message, set_message] = useState('')
 
   useEffect(() => {
@@ -51,16 +35,11 @@ function ClubsPage({ onMembershipsChange }) {
 
     async function load_clubs_and_memberships() {
       try {
-        const {
-          clubs: next_clubs,
-          memberships: next_memberships,
-          committee_members: next_committee_members,
-        } =
+        const { clubs: next_clubs, memberships: next_memberships } =
           await fetch_clubs_and_memberships()
         if (!active) return
         set_clubs(next_clubs)
         set_memberships(next_memberships)
-        set_committee_members(next_committee_members)
         onMembershipsChange(next_memberships)
         set_load_state('ready')
       } catch {
@@ -75,16 +54,38 @@ function ClubsPage({ onMembershipsChange }) {
   }, [onMembershipsChange])
 
   async function reload_clubs_and_memberships() {
-    const {
-      clubs: next_clubs,
-      memberships: next_memberships,
-      committee_members: next_committee_members,
-    } =
+    const { clubs: next_clubs, memberships: next_memberships } =
       await fetch_clubs_and_memberships()
     set_clubs(next_clubs)
     set_memberships(next_memberships)
-    set_committee_members(next_committee_members)
     onMembershipsChange(next_memberships)
+  }
+
+  async function load_club_members(club_id) {
+    if (
+      Object.hasOwn(committee_members, club_id) ||
+      roster_loading[club_id]
+    ) {
+      return
+    }
+
+    set_roster_loading((current) => ({ ...current, [club_id]: true }))
+    set_roster_errors((current) => ({ ...current, [club_id]: '' }))
+    try {
+      const response = await fetch(`/api/clubs/${club_id}/members`)
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not load club members.')
+      }
+      set_committee_members((current) => ({ ...current, [club_id]: data }))
+    } catch (error) {
+      set_roster_errors((current) => ({
+        ...current,
+        [club_id]: error.message || 'Could not reach the server.',
+      }))
+    } finally {
+      set_roster_loading((current) => ({ ...current, [club_id]: false }))
+    }
   }
 
   async function toggle_membership(club) {
@@ -100,6 +101,11 @@ function ClubsPage({ onMembershipsChange }) {
         throw new Error(data.message || 'Could not update membership.')
       }
       await reload_clubs_and_memberships()
+      set_committee_members((current) => {
+        const next = { ...current }
+        delete next[club.id]
+        return next
+      })
       set_message(
         club.is_member
           ? `You left ${club.name}.`
@@ -125,12 +131,45 @@ function ClubsPage({ onMembershipsChange }) {
         const data = await response.json()
         throw new Error(data.message || 'Could not promote member.')
       }
-      await reload_clubs_and_memberships()
+      const roster_response = await fetch(`/api/clubs/${club.id}/members`)
+      const roster = await roster_response.json()
+      if (!roster_response.ok) {
+        throw new Error(roster.message || 'Could not refresh club members.')
+      }
+      set_committee_members((current) => ({
+        ...current,
+        [club.id]: roster,
+      }))
       set_message(`${member.name} is now on the ${club.name} committee.`)
     } catch (error) {
       set_message(error.message || 'Could not reach the server.')
     } finally {
       set_updating_member(null)
+    }
+  }
+
+  async function leave_committee(club) {
+    set_updating_club_id(club.id)
+    set_message('')
+    try {
+      const response = await fetch(`/api/clubs/${club.id}/committee`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || 'Could not leave the committee.')
+      }
+      await reload_clubs_and_memberships()
+      set_committee_members((current) => {
+        const next = { ...current }
+        delete next[club.id]
+        return next
+      })
+      set_message(`You left the ${club.name} committee and remain a member.`)
+    } catch (error) {
+      set_message(error.message || 'Could not reach the server.')
+    } finally {
+      set_updating_club_id(null)
     }
   }
 
@@ -156,7 +195,15 @@ function ClubsPage({ onMembershipsChange }) {
         {load_state === 'ready' && clubs.length === 0 && (
           <p>No clubs are available.</p>
         )}
-        {clubs.map((club) => (
+        {clubs.map((club) => {
+          const search = (roster_search[club.id] || '')
+            .trim()
+            .toLocaleLowerCase()
+          const filtered_members = (committee_members[club.id] || []).filter(
+            (member) => member.name.toLocaleLowerCase().includes(search),
+          )
+
+          return (
           <article key={club.id}>
             <h4>{club.name}</h4>
             <p>{club.description || 'No description available.'}</p>
@@ -176,33 +223,90 @@ function ClubsPage({ onMembershipsChange }) {
                   ? 'Leave club'
                   : 'Join club'}
             </button>
-            {club.role === 'committee' &&
-              (committee_members[club.id] || []).length > 0 && (
-                <div>
-                  <h5>Manage committee</h5>
-                  {committee_members[club.id].map((member) => (
-                    <div className="row" key={member.user_id}>
-                      <span>
-                        {member.name}
-                        <span className="membership-role"> · {member.role}</span>
-                      </span>
-                      {member.role === 'member' && (
-                        <button
-                          type="button"
-                          disabled={updating_member !== null || updating_club_id !== null}
-                          onClick={() => promote_member(club, member)}
-                        >
-                          {updating_member === `${club.id}:${member.user_id}`
-                            ? 'Promoting…'
-                            : 'Make committee'}
-                        </button>
+            {club.role === 'committee' && (
+              <>
+                <button
+                  type="button"
+                  disabled={updating_club_id !== null || updating_member !== null}
+                  onClick={() => leave_committee(club)}
+                >
+                  {updating_club_id === club.id
+                    ? 'Updating…'
+                    : 'Leave committee'}
+                </button>
+                <details
+                  className="club-roster"
+                  onToggle={(event) => {
+                    if (event.currentTarget.open) {
+                      load_club_members(club.id)
+                    }
+                  }}
+                >
+                  <summary>View club members</summary>
+                  {roster_loading[club.id] && <p>Loading members…</p>}
+                  {roster_errors[club.id] && (
+                    <p className="message">
+                      {roster_errors[club.id]}
+                      <button
+                        type="button"
+                        onClick={() => load_club_members(club.id)}
+                      >
+                        Try again
+                      </button>
+                    </p>
+                  )}
+                  {committee_members[club.id] && (
+                    <>
+                      <label>
+                        Search members by name
+                        <input
+                          type="search"
+                          value={roster_search[club.id] || ''}
+                          onChange={(event) =>
+                            set_roster_search((current) => ({
+                              ...current,
+                              [club.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      {filtered_members.length > 0 ? (
+                        filtered_members.map((member) => (
+                          <div className="row" key={member.user_id}>
+                            <span>
+                              {member.name}
+                              <span className="membership-role">
+                                {' · '}{member.role}
+                              </span>
+                            </span>
+                            {member.role === 'member' && (
+                              <button
+                                type="button"
+                                disabled={
+                                  updating_member !== null ||
+                                  updating_club_id !== null
+                                }
+                                onClick={() => promote_member(club, member)}
+                              >
+                                {updating_member ===
+                                `${club.id}:${member.user_id}`
+                                  ? 'Promoting…'
+                                  : 'Make committee'}
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p>No matching members.</p>
                       )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                    </>
+                  )}
+                </details>
+              </>
+            )}
           </article>
-        ))}
+          )
+        })}
       </section>
 
       <section>

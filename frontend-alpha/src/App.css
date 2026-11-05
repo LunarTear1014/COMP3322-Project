@@ -206,6 +206,20 @@ label {
   text-transform: capitalize;
 }
 
+.club-roster {
+  margin-top: 16px;
+}
+
+.club-roster summary {
+  color: var(--brand-dark);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.club-roster label {
+  margin-top: 16px;
+}
+
 .auth-panel {
   max-width: 520px;
   margin: 32px auto;

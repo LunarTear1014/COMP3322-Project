@@ -152,7 +152,8 @@ needed for local development.
 | `GET`  | `/api/memberships`            | List your club memberships                 |
 | `POST` | `/api/clubs/:club_id/membership` | Join a club                              |
 | `DELETE` | `/api/clubs/:club_id/membership` | Leave a club                            |
-| `GET`  | `/api/clubs/:club_id/members` | List other members (committee only)        |
+| `DELETE` | `/api/clubs/:club_id/committee` | Leave the committee but remain a member |
+| `GET`  | `/api/clubs/:club_id/members` | List club members (committee only)          |
 | `POST` | `/api/clubs/:club_id/members/:user_id/committee` | Promote a member to committee (committee only) |
 | `POST` | `/api/auth/register`          | Create an account with name, email, student ID, and password |
 | `POST` | `/api/auth/login`             | Log in with email and password             |
@@ -168,7 +169,9 @@ promote another club member to committee. Registration and password changes
 require matching confirmation fields. Changing a password and deleting an
 account require the current password; editing a name or email does not.
 Deleting an account also removes its memberships and event signups through the
-database foreign-key cascades.
+database foreign-key cascades. Committee members can leave their committee
+role while remaining ordinary club members; the roster is loaded on demand
+inside a collapsible list and can be filtered by member name.
 
 The API validates requests and returns `422` for invalid input and `409` when a
 venue time slot is already booked.
