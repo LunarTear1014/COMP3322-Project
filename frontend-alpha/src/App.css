@@ -159,6 +159,20 @@ article p {
   color: white;
 }
 
+.event-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.event-filter-grid label {
+  min-width: 0;
+}
+
+.clear-event-filters {
+  width: auto;
+}
+
 .badge {
   display: inline-block;
   width: fit-content;

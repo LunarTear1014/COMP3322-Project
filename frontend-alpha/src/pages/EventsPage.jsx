@@ -13,6 +13,11 @@ function EventsPage({
   const [participation_message_type, set_participation_message_type] = useState('')
   const [updating_event_id, set_updating_event_id] = useState(null)
   const [event_status_filter, set_event_status_filter] = useState('Upcoming')
+  const [date_from_filter, set_date_from_filter] = useState('')
+  const [date_to_filter, set_date_to_filter] = useState('')
+  const [visibility_filter, set_visibility_filter] = useState('')
+  const [club_filter, set_club_filter] = useState('')
+  const [venue_filter, set_venue_filter] = useState('')
   const [events, set_events] = useState([])
   const [notifications, set_notifications] = useState([])
   const [notification_error, set_notification_error] = useState('')
@@ -142,13 +147,29 @@ function EventsPage({
     }
   }, [editing_event_id, edit_form?.date])
   
+  const event_clubs = [...new Set(events.map((event) => event.club))].sort()
+  const event_venues = [...new Set(events.map((event) => event.venue))].sort()
   const visible_events = events.filter((event) => {
     const searchable_text = `${event.title} ${event.club} ${event.venue} ${event.description}`.toLowerCase()
     return (
       searchable_text.includes(search_term.toLowerCase()) &&
-      event.status === event_status_filter
+      event.status === event_status_filter &&
+      (!date_from_filter || event.date >= date_from_filter) &&
+      (!date_to_filter || event.date <= date_to_filter) &&
+      (!visibility_filter || event.visibility === visibility_filter) &&
+      (!club_filter || event.club === club_filter) &&
+      (!venue_filter || event.venue === venue_filter)
     )
   })
+
+  function clear_discovery_filters() {
+    set_search_term('')
+    set_date_from_filter('')
+    set_date_to_filter('')
+    set_visibility_filter('')
+    set_club_filter('')
+    set_venue_filter('')
+  }
 
   function can_join_event(event) {
     if (event.visibility === 'Public') {
@@ -424,11 +445,76 @@ function EventsPage({
           </p>
         )}
         <input
-          placeholder ="Search events for each club" 
+          placeholder="Search event title, club, venue, or description"
           value={search_term}
           onChange={(e) => set_search_term(e.target.value)}
         /> 
       </section>  
+      <section className="event-filters" aria-label="Event discovery filters">
+        <h2>Filter events</h2>
+        <div className="event-filter-grid">
+          <label>
+            From date
+            <input
+              type="date"
+              value={date_from_filter}
+              max={date_to_filter || undefined}
+              onChange={(event) => set_date_from_filter(event.target.value)}
+            />
+          </label>
+          <label>
+            To date
+            <input
+              type="date"
+              value={date_to_filter}
+              min={date_from_filter || undefined}
+              onChange={(event) => set_date_to_filter(event.target.value)}
+            />
+          </label>
+          <label>
+            Visibility
+            <select
+              value={visibility_filter}
+              onChange={(event) => set_visibility_filter(event.target.value)}
+            >
+              <option value="">All visibilities</option>
+              <option value="Public">Public</option>
+              <option value="Members only">Members only</option>
+            </select>
+          </label>
+          <label>
+            Club
+            <select
+              value={club_filter}
+              onChange={(event) => set_club_filter(event.target.value)}
+            >
+              <option value="">All clubs</option>
+              {event_clubs.map((club) => (
+                <option key={club} value={club}>{club}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Venue
+            <select
+              value={venue_filter}
+              onChange={(event) => set_venue_filter(event.target.value)}
+            >
+              <option value="">All venues</option>
+              {event_venues.map((venue) => (
+                <option key={venue} value={venue}>{venue}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <button
+          type="button"
+          className="secondary-button clear-event-filters"
+          onClick={clear_discovery_filters}
+        >
+          Clear discovery filters
+        </button>
+      </section>
       {account_state === 'signed_in' && (
         <section className="panel notifications-panel" aria-label="Notifications">
           <h2>Notifications</h2>
