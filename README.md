@@ -118,6 +118,41 @@ Use `docker compose up -d --build` again for code updates. Keep the
 `db_data` volume and back it up before schema changes. The initialization
 scripts run only for an empty database.
 
+### Redeploy an updated archive
+
+Upload the updated `clubspace-pg19-server.tar.gz` using the Mac commands
+above. In the server SSH session, paste:
+
+```bash
+(
+  set -eu
+  tar -xzf "$HOME/clubspace-pg19-server.tar.gz" -C "$HOME"
+  cd "$HOME/clubspace-pg19"
+  docker compose up -d --build
+  curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
+    --connect-timeout 2 --max-time 5 http://127.0.0.1/api/health
+  printf '\n'
+  docker compose ps
+)
+```
+
+The server's existing `.env` and database volume supply its credentials and
+data. If the MySQL recovery setup uses `compose.override.yaml` and the
+`db_recovery` volume, keep that override in the project directory for
+subsequent deployments.
+
+## Beta interview submission
+
+The course guideline requires the beta source code as a ZIP file in the
+Moodle submission box before the interview starts. It also requires the beta
+source to be committed and pushed to the team GitHub repository using a tag.
+
+Prepare the ZIP from the final, tagged beta source so it contains the
+proposal, frontend, backend, database schema, Dockerfiles, Compose file, and
+README. Keep generated dependencies, database volumes, SSH keys, and real
+secrets out of the ZIP. The server transfer `.tar.gz` is the deployment
+package.
+
 ## Local development
 
 ## Prerequisites
@@ -336,7 +371,7 @@ waitlisted users, from the event details.
    ORDER BY e.id;
    ```
 
-This demonstrates the required React → Express → MySQL → React Alpha path.
+This demonstrates the React → Express → MySQL → React path.
 
 ## Reset local demo data
 
