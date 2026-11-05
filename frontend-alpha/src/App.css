@@ -232,6 +232,24 @@ label {
   margin-top: 16px;
 }
 
+.request-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.request-actions button {
+  width: auto;
+  margin: 0;
+}
+
+.secondary-button {
+  background: #6b7280;
+}
+
+.secondary-button:hover {
+  background: #4b5563;
+}
+
 .auth-panel {
   max-width: 520px;
   margin: 32px auto;

@@ -12,6 +12,8 @@ import {
   create_club,
   transfer_presidency,
   delete_club,
+  list_join_requests,
+  review_join_request,
 } from "./clubs.service.js";
 
 const router = Router();
@@ -34,7 +36,7 @@ function parse_user_id(value) {
 
 router.get("/api/clubs", async (req, res) => {
   try {
-    res.json(await list_clubs(req.session?.user_id));
+    res.json(await list_clubs(req.session?.user_id ?? null));
   } catch (error) {
     database_error(res, error);
   }
@@ -42,7 +44,7 @@ router.get("/api/clubs", async (req, res) => {
 
 router.get("/api/memberships", async (req, res) => {
   try {
-    res.json(await list_memberships(req.session?.user_id));
+    res.json(await list_memberships(req.session?.user_id ?? null));
   } catch (error) {
     database_error(res, error);
   }
@@ -86,20 +88,98 @@ router.post("/api/clubs/:club_id/membership", async (req, res) => {
   if (club_id === null) {
     return invalid_request(res, "Club ID must be a positive integer.");
   }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Please sign in to request to join a club." });
+  }
 
   try {
-    const result = await join_club(club_id, req.session?.user_id);
+    const result = await join_club(club_id, req.session.user_id);
     if (result.ok) {
-      return res.status(201).json(result.membership);
+      return res.status(202).json({
+        message: `Your request to join ${result.club_name} was sent to its committee.`,
+        status: "pending",
+      });
     }
     if (result.reason === "not_found") {
       return res.status(404).json({ message: "Club not found." });
     }
-    return res.status(409).json({ message: "You already joined this club." });
+    if (result.reason === "already_member") {
+      return res.status(409).json({ message: "You are already a member of this club." });
+    }
+    return res.status(409).json({ message: "Your request to join this club is already pending." });
   } catch (error) {
     return database_error(res, error);
   }
 });
+
+router.get("/api/clubs/:club_id/join-requests", async (req, res) => {
+  const club_id = parse_club_id(req.params.club_id);
+  if (club_id === null) {
+    return invalid_request(res, "Club ID must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Sign in to view club join requests." });
+  }
+
+  try {
+    const result = await list_join_requests(club_id, req.session.user_id);
+    if (result.ok) {
+      return res.json(result.requests);
+    }
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Club not found." });
+    }
+    return res.status(403).json({ message: "Only committee members or the president can review join requests." });
+  } catch (error) {
+    return database_error(res, error);
+  }
+});
+
+router.post(
+  "/api/clubs/:club_id/join-requests/:request_id/review",
+  async (req, res) => {
+    const club_id = parse_club_id(req.params.club_id);
+    const request_id = parse_user_id(req.params.request_id);
+    if (club_id === null) {
+      return invalid_request(res, "Club ID must be a positive integer.");
+    }
+    if (request_id === null) {
+      return invalid_request(res, "Join request ID must be a positive integer.");
+    }
+    if (!["accept", "reject"].includes(req.body?.decision)) {
+      return invalid_request(res, "Choose whether to accept or reject this request.");
+    }
+    if (!Number.isSafeInteger(req.session?.user_id)) {
+      return res.status(401).json({ message: "Sign in to review club join requests." });
+    }
+
+    try {
+      const result = await review_join_request(
+        club_id,
+        request_id,
+        req.session.user_id,
+        req.body.decision,
+      );
+      if (result.ok) {
+        return res.json({
+          message:
+            result.decision === "accept"
+              ? "Join request accepted. The student is now a club member."
+              : "Join request rejected.",
+        });
+      }
+      if (result.reason === "not_found") {
+        return res.status(404).json({ message: "Club not found." });
+      }
+      if (result.reason === "forbidden") {
+        return res.status(403).json({ message: "Only committee members or the president can review join requests." });
+      }
+      return res.status(404).json({ message: "This join request is no longer pending." });
+    } catch (error) {
+      return database_error(res, error);
+    }
+  },
+);
 
 router.delete("/api/clubs/:club_id/committee", async (req, res) => {
   const club_id = parse_club_id(req.params.club_id);

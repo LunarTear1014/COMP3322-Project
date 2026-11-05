@@ -4,6 +4,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `participations`;
 DROP TABLE IF EXISTS `events`;
 DROP TABLE IF EXISTS `bookings`;
+DROP TABLE IF EXISTS `club_join_requests`;
 DROP TABLE IF EXISTS `memberships`;
 DROP TABLE IF EXISTS `venues`;
 DROP TABLE IF EXISTS `clubs`;
@@ -98,6 +99,43 @@ CREATE TABLE `memberships` (
         FOREIGN KEY (`club_id`)
         REFERENCES `clubs` (`id`)
         ON DELETE CASCADE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ================================================================
+-- CLUB JOIN REQUESTS
+-- ================================================================
+
+CREATE TABLE `club_join_requests` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `user_id` INT NOT NULL,
+    `club_id` INT NOT NULL,
+    `status` ENUM('pending', 'accepted', 'rejected') NOT NULL DEFAULT 'pending',
+    `requested_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `reviewed_by` INT NULL,
+    `reviewed_at` TIMESTAMP NULL DEFAULT NULL,
+
+    PRIMARY KEY (`id`),
+    INDEX `idx_club_join_requests_club_status`
+        (`club_id`, `status`, `requested_at`),
+    INDEX `idx_club_join_requests_user_club`
+        (`user_id`, `club_id`, `requested_at`),
+
+    CONSTRAINT `fk_club_join_requests_user`
+        FOREIGN KEY (`user_id`)
+        REFERENCES `users` (`id`)
+        ON DELETE CASCADE,
+
+    CONSTRAINT `fk_club_join_requests_club`
+        FOREIGN KEY (`club_id`)
+        REFERENCES `clubs` (`id`)
+        ON DELETE CASCADE,
+
+    CONSTRAINT `fk_club_join_requests_reviewer`
+        FOREIGN KEY (`reviewed_by`)
+        REFERENCES `users` (`id`)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

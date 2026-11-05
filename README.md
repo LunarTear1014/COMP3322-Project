@@ -148,7 +148,9 @@ needed for local development.
 | `GET`  | `/api/clubs`                  | Browse clubs and your membership roles     |
 | `POST` | `/api/clubs`                  | Create a club (creator becomes president)   |
 | `GET`  | `/api/memberships`            | List your club memberships                 |
-| `POST` | `/api/clubs/:club_id/membership` | Join a club                              |
+| `POST` | `/api/clubs/:club_id/membership` | Request to join a club                   |
+| `GET`  | `/api/clubs/:club_id/join-requests` | List pending requests (committee or president) |
+| `POST` | `/api/clubs/:club_id/join-requests/:request_id/review` | Accept or reject a request |
 | `DELETE` | `/api/clubs/:club_id/membership` | Leave a club                            |
 | `DELETE` | `/api/clubs/:club_id/committee` | Leave the committee but remain a member |
 | `GET`  | `/api/clubs/:club_id/members` | List club members (committee only)          |
@@ -175,6 +177,10 @@ Deleting an account also removes its memberships and event signups through the
 database foreign-key cascades. Committee members can leave their committee
 role while remaining ordinary club members; the roster is loaded on demand
 inside a collapsible list and can be filtered by member name.
+Joining a club requires a signed-in user to request membership. Requests are
+stored in `club_join_requests`; club committee members and presidents receive
+an in-app pending-request count and can accept or reject requests. Accepting
+creates a regular membership, while a rejected user can request again.
 
 The API validates requests and returns `422` for invalid input and `409` when a
 venue time slot is already booked.

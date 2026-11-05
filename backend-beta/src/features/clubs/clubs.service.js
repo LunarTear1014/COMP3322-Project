@@ -1,16 +1,23 @@
 import pool from "../../config/db.js";
 
-const demo_user_id = Number(process.env.DEMO_USER_ID || 1);
-
-async function list_clubs(user_id = demo_user_id) {
+async function list_clubs(user_id = null) {
   const [rows] = await pool.query(
     `SELECT c.id, c.name, c.description,
-      m.user_id IS NOT NULL AS is_member, m.role
+      m.user_id IS NOT NULL AS is_member, m.role,
+      (SELECT r.status
+       FROM club_join_requests r
+       WHERE r.club_id = c.id AND r.user_id = ?
+       ORDER BY r.requested_at DESC, r.id DESC
+       LIMIT 1) AS request_status,
+      CASE WHEN m.role IN ('committee', 'president') THEN
+        (SELECT COUNT(*) FROM club_join_requests pending
+         WHERE pending.club_id = c.id AND pending.status = 'pending')
+      ELSE 0 END AS pending_request_count
      FROM clubs c
      LEFT JOIN memberships m
        ON m.club_id = c.id AND m.user_id = ?
      ORDER BY c.name`,
-    [user_id],
+    [user_id, user_id],
   );
   return rows.map((club) => ({
     ...club,
@@ -18,7 +25,7 @@ async function list_clubs(user_id = demo_user_id) {
   }));
 }
 
-async function list_memberships(user_id = demo_user_id) {
+async function list_memberships(user_id = null) {
   const [rows] = await pool.query(
     `SELECT c.id AS club_id, c.name, c.description, m.role, m.joined_at
      FROM memberships m
@@ -30,33 +37,132 @@ async function list_memberships(user_id = demo_user_id) {
   return rows;
 }
 
-async function join_club(club_id, user_id = demo_user_id) {
-  const [[club]] = await pool.query(
-    "SELECT id, name FROM clubs WHERE id = ?",
-    [club_id],
-  );
+async function join_club(club_id, user_id) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[club]] = await connection.query(
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
+      [club_id],
+    );
+    if (!club) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    const [[membership]] = await connection.query(
+      "SELECT user_id FROM memberships WHERE user_id = ? AND club_id = ?",
+      [user_id, club_id],
+    );
+    if (membership) {
+      await connection.rollback();
+      return { ok: false, reason: "already_member" };
+    }
+
+    const [[pending_request]] = await connection.query(
+      `SELECT id FROM club_join_requests
+       WHERE user_id = ? AND club_id = ? AND status = 'pending'
+       LIMIT 1`,
+      [user_id, club_id],
+    );
+    if (pending_request) {
+      await connection.rollback();
+      return { ok: false, reason: "already_pending" };
+    }
+
+    const [result] = await connection.query(
+      "INSERT INTO club_join_requests (user_id, club_id) VALUES (?, ?)",
+      [user_id, club_id],
+    );
+    await connection.commit();
+    return { ok: true, request_id: result.insertId, club_name: club.name };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    throw error;
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+async function list_join_requests(club_id, user_id) {
+  const [[club]] = await pool.query("SELECT id FROM clubs WHERE id = ?", [
+    club_id,
+  ]);
   if (!club) {
     return { ok: false, reason: "not_found" };
   }
+  const [[membership]] = await pool.query(
+    "SELECT role FROM memberships WHERE user_id = ? AND club_id = ?",
+    [user_id, club_id],
+  );
+  if (!["committee", "president"].includes(membership?.role)) {
+    return { ok: false, reason: "forbidden" };
+  }
+  const [requests] = await pool.query(
+    `SELECT r.id, r.user_id, u.name, r.requested_at
+     FROM club_join_requests r
+     JOIN users u ON u.id = r.user_id
+     WHERE r.club_id = ? AND r.status = 'pending'
+     ORDER BY r.requested_at, r.id`,
+    [club_id],
+  );
+  return { ok: true, requests };
+}
 
+async function review_join_request(club_id, request_id, user_id, decision) {
+  let connection;
   try {
-    await pool.query(
-      "INSERT INTO memberships (user_id, club_id) VALUES (?, ?)",
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[club]] = await connection.query(
+      "SELECT id FROM clubs WHERE id = ? FOR UPDATE",
+      [club_id],
+    );
+    if (!club) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    const [[reviewer]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id = ? AND club_id = ? FOR UPDATE",
       [user_id, club_id],
     );
-    return {
-      ok: true,
-      membership: {
-        club_id: club.id,
-        name: club.name,
-        role: "member",
-      },
-    };
-  } catch (error) {
-    if (error.code === "ER_DUP_ENTRY") {
-      return { ok: false, reason: "already_member" };
+    if (!["committee", "president"].includes(reviewer?.role)) {
+      await connection.rollback();
+      return { ok: false, reason: "forbidden" };
     }
+
+    const [[request]] = await connection.query(
+      `SELECT id, user_id FROM club_join_requests
+       WHERE id = ? AND club_id = ? AND status = 'pending'
+       FOR UPDATE`,
+      [request_id, club_id],
+    );
+    if (!request) {
+      await connection.rollback();
+      return { ok: false, reason: "request_not_found" };
+    }
+
+    if (decision === "accept") {
+      await connection.query(
+        "INSERT INTO memberships (user_id, club_id, role) VALUES (?, ?, 'member')",
+        [request.user_id, club_id],
+      );
+    }
+    await connection.query(
+      `UPDATE club_join_requests
+       SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [decision === "accept" ? "accepted" : "rejected", user_id, request_id],
+    );
+    await connection.commit();
+    return { ok: true, decision };
+  } catch (error) {
+    if (connection) await connection.rollback();
     throw error;
+  } finally {
+    if (connection) connection.release();
   }
 }
 
@@ -384,6 +490,8 @@ async function delete_club(club_id, user_id, confirmation) {
 
 export {
   join_club,
+  list_join_requests,
+  review_join_request,
   leave_club,
   list_clubs,
   list_memberships,

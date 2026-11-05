@@ -36,6 +36,10 @@ function ClubsPage({ onMembershipsChange }) {
   const [roster_loading, set_roster_loading] = useState({})
   const [roster_errors, set_roster_errors] = useState({})
   const [roster_search, set_roster_search] = useState({})
+  const [join_requests, set_join_requests] = useState({})
+  const [request_open, set_request_open] = useState({})
+  const [request_loading, set_request_loading] = useState({})
+  const [request_errors, set_request_errors] = useState({})
   const [new_club, set_new_club] = useState({ name: '', description: '' })
   const [transfer_forms, set_transfer_forms] = useState({})
   const [delete_confirmations, set_delete_confirmations] = useState({})
@@ -84,10 +88,66 @@ function ClubsPage({ onMembershipsChange }) {
     }
 
     load_clubs_and_memberships()
+    const notification_interval = window.setInterval(async () => {
+      try {
+        const response = await fetch('/api/clubs')
+        if (!response.ok) {
+          throw new Error('Could not refresh club join-request notifications.')
+        }
+        set_clubs(await response.json())
+      } catch {
+        if (active) {
+          set_message('Could not refresh club notifications. Check your connection.')
+          set_message_type('error')
+        }
+      }
+    }, 15000)
     return () => {
       active = false
+      window.clearInterval(notification_interval)
     }
   }, [onMembershipsChange])
+
+  useEffect(() => {
+    const open_club_ids = Object.entries(request_open)
+      .filter(([, is_open]) => is_open)
+      .map(([club_id]) => club_id)
+    if (!logged_in || open_club_ids.length === 0) return undefined
+
+    let active = true
+    const interval = window.setInterval(async () => {
+      await Promise.all(
+        open_club_ids.map(async (club_id) => {
+          try {
+            const response = await fetch(
+              `/api/clubs/${club_id}/join-requests`,
+            )
+            const data = await response.json()
+            if (!response.ok) {
+              throw new Error(data.message || 'Could not refresh join requests.')
+            }
+            if (active) {
+              set_join_requests((current) => ({ ...current, [club_id]: data }))
+              set_request_errors((current) => ({ ...current, [club_id]: '' }))
+            }
+          } catch (error) {
+            if (active) {
+              set_request_errors((current) => ({
+                ...current,
+                [club_id]:
+                  error.message || 'Could not refresh club join requests.',
+              }))
+            }
+          }
+        }),
+      )
+    }, 15000)
+
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [logged_in, request_open])
 
   async function reload_clubs_and_memberships() {
     const {
@@ -143,6 +203,35 @@ function ClubsPage({ onMembershipsChange }) {
     }
   }
 
+  async function load_join_requests(club_id, force = false) {
+    if (
+      request_loading[club_id] ||
+      (!force && Object.hasOwn(join_requests, club_id))
+    ) {
+      return
+    }
+
+    set_request_loading((current) => ({ ...current, [club_id]: true }))
+    set_request_errors((current) => ({ ...current, [club_id]: '' }))
+    try {
+      const response = await fetch(`/api/clubs/${club_id}/join-requests`)
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not load join requests.')
+      }
+      set_join_requests((current) => ({ ...current, [club_id]: data }))
+    } catch (error) {
+      set_request_errors((current) => ({
+        ...current,
+        [club_id]:
+          error.message ||
+          'Could not load join requests. Check your connection and try again.',
+      }))
+    } finally {
+      set_request_loading((current) => ({ ...current, [club_id]: false }))
+    }
+  }
+
   async function toggle_membership(club) {
     set_updating_club_id(club.id)
     clear_message()
@@ -155,21 +244,59 @@ function ClubsPage({ onMembershipsChange }) {
         const data = await response.json()
         throw new Error(data.message || 'Could not update membership.')
       }
-      await reload_clubs_and_memberships()
-      set_committee_members((current) => {
-        const next = { ...current }
-        delete next[club.id]
-        return next
-      })
-      show_success(
-        club.is_member
-          ? `You left ${club.name}.`
-          : `You joined ${club.name}.`,
-      )
+      if (club.is_member) {
+        await reload_clubs_and_memberships()
+        set_committee_members((current) => {
+          const next = { ...current }
+          delete next[club.id]
+          return next
+        })
+        show_success(`You left ${club.name}.`)
+      } else {
+        const data = await response.json()
+        await reload_clubs_and_memberships()
+        show_success(data.message || `Your request to join ${club.name} was sent.`)
+      }
     } catch (error) {
       show_error(error.message || 'Could not reach the server. Please try again.')
     } finally {
       set_updating_club_id(null)
+    }
+  }
+
+  async function review_join_request(club, request, decision) {
+    const key = `${club.id}:${request.id}`
+    set_updating_member(key)
+    clear_message()
+    try {
+      const response = await fetch(
+        `/api/clubs/${club.id}/join-requests/${request.id}/review`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision }),
+        },
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not review join request.')
+      }
+      await reload_clubs_and_memberships()
+      set_join_requests((current) => ({
+        ...current,
+        [club.id]: (current[club.id] || []).filter(
+          (existing_request) => existing_request.id !== request.id,
+        ),
+      }))
+      show_success(
+        decision === 'accept'
+          ? `${request.name} was accepted into ${club.name}.`
+          : `${request.name}'s request to join ${club.name} was rejected.`,
+      )
+    } catch (error) {
+      show_error(error.message || 'Could not reach the server. Please try again.')
+    } finally {
+      set_updating_member(null)
     }
   }
 
@@ -436,15 +563,33 @@ function ClubsPage({ onMembershipsChange }) {
             )}
             <button
               type="button"
-              disabled={updating_club_id !== null || updating_member !== null}
+              disabled={
+                updating_club_id !== null ||
+                updating_member !== null ||
+                (!club.is_member && club.request_status === 'pending')
+              }
               onClick={() => toggle_membership(club)}
             >
               {updating_club_id === club.id
                 ? 'Updating…'
                 : club.is_member
                   ? 'Leave club'
-                  : 'Join club'}
+                  : club.request_status === 'pending'
+                    ? 'Request pending'
+                    : club.request_status === 'rejected'
+                      ? 'Request to join again'
+                      : 'Request to join'}
             </button>
+            {!club.is_member && club.request_status === 'pending' && (
+              <p className="membership-role" role="status">
+                Your request is waiting for committee or president approval.
+              </p>
+            )}
+            {!club.is_member && club.request_status === 'rejected' && (
+              <p className="membership-role" role="status">
+                Your previous request was rejected. You may request again.
+              </p>
+            )}
             {['committee', 'president'].includes(club.role) && (
               <>
                 {club.role === 'committee' && (
@@ -458,6 +603,72 @@ function ClubsPage({ onMembershipsChange }) {
                       : 'Leave committee'}
                   </button>
                 )}
+                <details
+                  className="club-roster"
+                  onToggle={(event) => {
+                    const is_open = event.currentTarget.open
+                    set_request_open((current) => ({
+                      ...current,
+                      [club.id]: is_open,
+                    }))
+                    if (is_open) {
+                      load_join_requests(club.id, true)
+                    }
+                  }}
+                >
+                  <summary>
+                    Join requests ({Number(club.pending_request_count) || 0})
+                  </summary>
+                  {request_loading[club.id] && <p>Loading join requests…</p>}
+                  {request_errors[club.id] && (
+                    <div className="message error-message" role="alert">
+                      <p>{request_errors[club.id]}</p>
+                      <button
+                        type="button"
+                        onClick={() => load_join_requests(club.id, true)}
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
+                  {join_requests[club.id]?.length === 0 && (
+                    <p>There are no pending join requests.</p>
+                  )}
+                  {(join_requests[club.id] || []).map((request) => (
+                    <div className="row" key={request.id}>
+                      <span>
+                        {request.name}
+                        <span className="membership-role">
+                          {' · Requested '}
+                          {new Date(request.requested_at).toLocaleDateString()}
+                        </span>
+                      </span>
+                      <div className="request-actions">
+                        <button
+                          type="button"
+                          disabled={updating_member !== null}
+                          onClick={() =>
+                            review_join_request(club, request, 'accept')
+                          }
+                        >
+                          {updating_member === `${club.id}:${request.id}`
+                            ? 'Updating…'
+                            : 'Accept'}
+                        </button>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={updating_member !== null}
+                          onClick={() =>
+                            review_join_request(club, request, 'reject')
+                          }
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </details>
                 <details
                   className="club-roster"
                   onToggle={(event) => {
