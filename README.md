@@ -143,7 +143,8 @@ needed for local development.
 | ------ | ----------------------------- | ------------------------------------------ |
 | `GET`  | `/api/health`                 | Confirm API-to-MySQL connectivity          |
 | `GET`  | `/api/events`                 | Browse saved events                        |
-| `GET`  | `/api/events/:event_id/participants` | List joined and waitlisted participants (organizing club committee or president) |
+| `GET`  | `/api/events/mine`             | List your joined, waitlisted, and past event participation (signed-in users) |
+| `GET` | `/api/events/:event_id/participants` | List joined and waitlisted participants (organizing club committee or president) |
 | `POST` | `/api/events`                 | Create an event and venue booking together (committee or president of the club) |
 | `PATCH` | `/api/events/:event_id` | Edit an event and its booking (organizing club committee or president; notifies signups) |
 | `DELETE` | `/api/events/:event_id` | Cancel an event (organizing club committee or president; notifies signups) |

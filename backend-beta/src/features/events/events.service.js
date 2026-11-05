@@ -75,6 +75,49 @@ async function list_events(user_id = null) {
   return rows.map(event_response);
 }
 
+async function list_my_participations(user_id) {
+  const [rows] = await pool.query(
+    `SELECT
+       e.id AS event_id,
+       e.title,
+       e.description,
+       DATE_FORMAT(e.start_time, '%Y-%m-%d') AS date,
+       TIME_FORMAT(e.start_time, '%H:%i') AS start_time,
+       TIME_FORMAT(e.end_time, '%H:%i') AS end_time,
+       e.status AS event_status,
+       e.visibility,
+       c.name AS club,
+       v.name AS venue,
+       p.status AS participation_status,
+       p.joined_at,
+       p.left_at
+     FROM participations p
+     JOIN events e ON e.id = p.event_id
+     JOIN clubs c ON c.id = e.club_id
+     JOIN bookings b ON b.id = e.booking_id
+     JOIN venues v ON v.id = b.venue_id
+     WHERE p.user_id = ?
+     ORDER BY e.start_time DESC, e.id DESC`,
+    [user_id],
+  );
+
+  return rows.map((row) => ({
+    id: row.event_id,
+    title: row.title,
+    description: row.description,
+    club: row.club,
+    date: row.date,
+    timeslot: make_timeslot(row.start_time, row.end_time),
+    venue: row.venue,
+    visibility: display_visibility(row.visibility),
+    event_status: row.event_status,
+    participation_status: row.participation_status,
+    joined_at: row.joined_at,
+    left_at: row.left_at,
+    status: row.date >= today() ? "Upcoming" : "Past",
+  }));
+}
+
 async function list_event_participants(event_id, user_id) {
   const [[event]] = await pool.query(
     "SELECT id, club_id FROM events WHERE id = ?",
@@ -571,6 +614,7 @@ export {
   join_event,
   leave_event,
   list_events,
+  list_my_participations,
   list_event_participants,
   create_event,
   edit_event,

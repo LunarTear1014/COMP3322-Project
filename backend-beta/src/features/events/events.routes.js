@@ -9,6 +9,7 @@ import {
   join_event,
   leave_event,
   list_events,
+  list_my_participations,
   list_event_participants,
   create_event,
   edit_event,
@@ -41,6 +42,17 @@ router.get("/api/events", async (req, res) => {
     res.json(await list_events(req.session?.user_id));
   } catch (error) {
     database_error(res, error);
+  }
+});
+
+router.get("/api/events/mine", async (req, res) => {
+  if (!require_signed_in(req, res, "Sign in to view your event participation.")) {
+    return;
+  }
+  try {
+    return res.json(await list_my_participations(req.session.user_id));
+  } catch (error) {
+    return database_error(res, error);
   }
 });
 

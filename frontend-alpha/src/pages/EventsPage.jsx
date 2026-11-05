@@ -13,12 +13,16 @@ function EventsPage({
   const [participation_message_type, set_participation_message_type] = useState('')
   const [updating_event_id, set_updating_event_id] = useState(null)
   const [event_status_filter, set_event_status_filter] = useState('Upcoming')
+  const [event_view, set_event_view] = useState('discover')
   const [date_from_filter, set_date_from_filter] = useState('')
   const [date_to_filter, set_date_to_filter] = useState('')
   const [visibility_filter, set_visibility_filter] = useState('')
   const [club_filter, set_club_filter] = useState('')
   const [venue_filter, set_venue_filter] = useState('')
   const [events, set_events] = useState([])
+  const [my_participations, set_my_participations] = useState([])
+  const [my_participations_loading, set_my_participations_loading] = useState(false)
+  const [my_participations_error, set_my_participations_error] = useState('')
   const [notifications, set_notifications] = useState([])
   const [notification_error, set_notification_error] = useState('')
   const [cancelling_event_id, set_cancelling_event_id] = useState(null)
@@ -64,12 +68,23 @@ function EventsPage({
       try {
         const response = await fetch('/api/auth/me')
         if (active) {
-          set_account_state(
-            response.ok ? 'signed_in' : response.status === 401 ? 'signed_out' : 'error',
-          )
+          const next_account_state = response.ok
+            ? 'signed_in'
+            : response.status === 401
+              ? 'signed_out'
+              : 'error'
+          set_account_state(next_account_state)
+          if (next_account_state !== 'signed_in') {
+            set_my_participations([])
+            set_my_participations_error('')
+          }
         }
       } catch {
-        if (active) set_account_state('error')
+        if (active) {
+          set_account_state('error')
+          set_my_participations([])
+          set_my_participations_error('')
+        }
       }
     }
     load_events()
@@ -111,6 +126,43 @@ function EventsPage({
 
     refresh_notifications()
     const interval = window.setInterval(refresh_notifications, 15000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [account_state])
+
+  useEffect(() => {
+    if (account_state !== 'signed_in') {
+      return undefined
+    }
+
+    let active = true
+    async function refresh_my_participations() {
+      if (active) set_my_participations_loading(true)
+      try {
+        const response = await fetch('/api/events/mine')
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.message || 'Could not load your event history.')
+        }
+        if (active) {
+          set_my_participations(data)
+          set_my_participations_error('')
+        }
+      } catch (error) {
+        if (active) {
+          set_my_participations_error(
+            error.message || 'Could not load your event history.',
+          )
+        }
+      } finally {
+        if (active) set_my_participations_loading(false)
+      }
+    }
+
+    refresh_my_participations()
+    const interval = window.setInterval(refresh_my_participations, 15000)
     return () => {
       active = false
       window.clearInterval(interval)
@@ -221,6 +273,22 @@ function EventsPage({
       )
     } finally {
       set_participants_loading(false)
+    }
+  }
+
+  async function refresh_my_participations() {
+    try {
+      const response = await fetch('/api/events/mine')
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not refresh your event history.')
+      }
+      set_my_participations(data)
+      set_my_participations_error('')
+    } catch (error) {
+      set_my_participations_error(
+        error.message || 'Could not refresh your event history.',
+      )
     }
   }
 
@@ -386,6 +454,7 @@ function EventsPage({
         current_events.map(update_participation)
       )
       set_selected_event(update_participation)
+      refresh_my_participations()
       if (joining) {
         set_participation_message(
           next_status === 'waitlisted'
@@ -436,85 +505,89 @@ function EventsPage({
         <NavLink to="/account">Account</NavLink>
         </nav>
       </header>
-      <section>
-        <p> Event Search </p>
-        {membership_error && (
-          <p className="message error-message" role="alert">
-            Could not load your memberships. Membership-only event access
-            cannot be checked.
-          </p>
-        )}
-        <input
-          placeholder="Search event title, club, venue, or description"
-          value={search_term}
-          onChange={(e) => set_search_term(e.target.value)}
-        /> 
-      </section>  
-      <section className="event-filters" aria-label="Event discovery filters">
-        <h2>Filter events</h2>
-        <div className="event-filter-grid">
-          <label>
-            From date
+      {event_view === 'discover' && (
+        <>
+          <section>
+            <p> Event Search </p>
+            {membership_error && (
+              <p className="message error-message" role="alert">
+                Could not load your memberships. Membership-only event access
+                cannot be checked.
+              </p>
+            )}
             <input
-              type="date"
-              value={date_from_filter}
-              max={date_to_filter || undefined}
-              onChange={(event) => set_date_from_filter(event.target.value)}
+              placeholder="Search event title, club, venue, or description"
+              value={search_term}
+              onChange={(e) => set_search_term(e.target.value)}
             />
-          </label>
-          <label>
-            To date
-            <input
-              type="date"
-              value={date_to_filter}
-              min={date_from_filter || undefined}
-              onChange={(event) => set_date_to_filter(event.target.value)}
-            />
-          </label>
-          <label>
-            Visibility
-            <select
-              value={visibility_filter}
-              onChange={(event) => set_visibility_filter(event.target.value)}
+          </section>
+          <section className="event-filters" aria-label="Event discovery filters">
+            <h2>Filter events</h2>
+            <div className="event-filter-grid">
+              <label>
+                From date
+                <input
+                  type="date"
+                  value={date_from_filter}
+                  max={date_to_filter || undefined}
+                  onChange={(event) => set_date_from_filter(event.target.value)}
+                />
+              </label>
+              <label>
+                To date
+                <input
+                  type="date"
+                  value={date_to_filter}
+                  min={date_from_filter || undefined}
+                  onChange={(event) => set_date_to_filter(event.target.value)}
+                />
+              </label>
+              <label>
+                Visibility
+                <select
+                  value={visibility_filter}
+                  onChange={(event) => set_visibility_filter(event.target.value)}
+                >
+                  <option value="">All visibilities</option>
+                  <option value="Public">Public</option>
+                  <option value="Members only">Members only</option>
+                </select>
+              </label>
+              <label>
+                Club
+                <select
+                  value={club_filter}
+                  onChange={(event) => set_club_filter(event.target.value)}
+                >
+                  <option value="">All clubs</option>
+                  {event_clubs.map((club) => (
+                    <option key={club} value={club}>{club}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Venue
+                <select
+                  value={venue_filter}
+                  onChange={(event) => set_venue_filter(event.target.value)}
+                >
+                  <option value="">All venues</option>
+                  {event_venues.map((venue) => (
+                    <option key={venue} value={venue}>{venue}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button
+              type="button"
+              className="secondary-button clear-event-filters"
+              onClick={clear_discovery_filters}
             >
-              <option value="">All visibilities</option>
-              <option value="Public">Public</option>
-              <option value="Members only">Members only</option>
-            </select>
-          </label>
-          <label>
-            Club
-            <select
-              value={club_filter}
-              onChange={(event) => set_club_filter(event.target.value)}
-            >
-              <option value="">All clubs</option>
-              {event_clubs.map((club) => (
-                <option key={club} value={club}>{club}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Venue
-            <select
-              value={venue_filter}
-              onChange={(event) => set_venue_filter(event.target.value)}
-            >
-              <option value="">All venues</option>
-              {event_venues.map((venue) => (
-                <option key={venue} value={venue}>{venue}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <button
-          type="button"
-          className="secondary-button clear-event-filters"
-          onClick={clear_discovery_filters}
-        >
-          Clear discovery filters
-        </button>
-      </section>
+              Clear discovery filters
+            </button>
+          </section>
+        </>
+      )}
       {account_state === 'signed_in' && (
         <section className="panel notifications-panel" aria-label="Notifications">
           <h2>Notifications</h2>
@@ -552,47 +625,110 @@ function EventsPage({
         </section>
       )}
       <section>
-        <p> {event_status_filter} Events </p>
         <div className="list">
           <button
-            className={event_status_filter === 'Upcoming' ? 'option selected' : 'option'}
-            onClick={() => set_event_status_filter('Upcoming')}
+            type="button"
+            className={event_view === 'discover' ? 'option selected' : 'option'}
+            onClick={() => set_event_view('discover')}
           >
-            Upcoming
+            Discover events
           </button>
-
-          <button
-            className={event_status_filter === 'Past' ? 'option selected' : 'option'}
-            onClick={() => set_event_status_filter('Past')}
-          >
-            Past
-          </button>
+          {account_state === 'signed_in' && (
+            <button
+              type="button"
+              className={event_view === 'mine' ? 'option selected' : 'option'}
+              onClick={() => set_event_view('mine')}
+            >
+              My participation
+            </button>
+          )}
         </div>
-      </section>  
-      <section>
-        {visible_events.map((event) => (
-          <article key={event.id}>
-            <p>{event.club}</p>
-            <p className="badge">{event.visibility}</p>
-            {event.is_full && <p className="badge full-badge">Event full</p>}
-            {event.participation_status === 'waitlisted' && (
-              <p className="badge">Waitlisted</p>
+      </section>
+      {event_view === 'discover' && (
+        <>
+          <section>
+            <p>{event_status_filter} Events</p>
+            <div className="list">
+              <button
+                type="button"
+                className={event_status_filter === 'Upcoming' ? 'option selected' : 'option'}
+                onClick={() => set_event_status_filter('Upcoming')}
+              >
+                Upcoming
+              </button>
+              <button
+                type="button"
+                className={event_status_filter === 'Past' ? 'option selected' : 'option'}
+                onClick={() => set_event_status_filter('Past')}
+              >
+                Past
+              </button>
+            </div>
+          </section>
+          <section>
+            {visible_events.map((event) => (
+              <article key={event.id}>
+                <p>{event.club}</p>
+                <p className="badge">{event.visibility}</p>
+                {event.is_full && <p className="badge full-badge">Event full</p>}
+                {event.participation_status === 'waitlisted' && (
+                  <p className="badge">Waitlisted</p>
+                )}
+                <h4>{event.title}</h4>
+                <p>{event.date}, {event.timeslot}</p>
+                <p>{event.venue}</p>
+                {event.is_joined && <p className="badge">Joined</p>}
+                <button onClick={() => set_selected_event(event)}>View event</button>
+              </article>
+            ))}
+            {load_state === 'loading' && <p>Loading events…</p>}
+            {load_state === 'error' && (
+              <p className="message error-message" role="alert">
+                Could not load events. Check your connection and try again.
+              </p>
             )}
-            <h4>{event.title}</h4>
-            <p>{event.date}, {event.timeslot}</p>
-            <p>{event.venue}</p>
-              {event.is_joined && <p className="badge">Joined</p>}
-            <button onClick={() => set_selected_event(event)}>View event</button>
-          </article>
-        ))}
-        {load_state === 'loading' && <p>Loading events…</p>}
-        {load_state === 'error' && (
-          <p className="message error-message" role="alert">
-            Could not load events. Check your connection and try again.
-          </p>
-        )}
-        {load_state === 'ready' && visible_events.length === 0 && <p>No events found</p>}
-      </section>  
+            {load_state === 'ready' && visible_events.length === 0 && <p>No events found</p>}
+          </section>
+        </>
+      )}
+      {event_view === 'mine' && (
+        <section>
+          <h2>My participation</h2>
+          {my_participations_error && (
+            <div className="message error-message" role="alert">
+              <p>{my_participations_error}</p>
+              <button type="button" onClick={refresh_my_participations}>
+                Try again
+              </button>
+            </div>
+          )}
+          {my_participations_loading && <p>Loading your event history…</p>}
+          {!my_participations_loading &&
+            !my_participations_error &&
+            my_participations.length === 0 && (
+              <p>You have not joined or waitlisted for any events yet.</p>
+            )}
+          {my_participations.map((participation) => (
+            <article key={participation.id}>
+              <p>{participation.club}</p>
+              <p className="badge">
+                {participation.participation_status === 'waitlisted'
+                  ? 'Waitlisted'
+                  : participation.participation_status === 'left'
+                    ? 'Left'
+                    : 'Joined'}
+              </p>
+              {participation.event_status === 'cancelled' && (
+                <p className="badge full-badge">Event cancelled</p>
+              )}
+              <h4>{participation.title}</h4>
+              <p>{participation.status}: {participation.date}, {participation.timeslot}</p>
+              <p>{participation.venue}</p>
+              <p>{participation.visibility}</p>
+            </article>
+          ))}
+        </section>
+      )}
       {selected_event && (
         <section className="panel">
           <p> Event Details </p>
