@@ -3,11 +3,15 @@ import {
   normalize_email,
   validate_login,
   validate_registration,
+  validate_account_update,
+  validate_account_deletion,
 } from "./users.validation.js";
 import {
+  delete_account,
   get_current_user,
   login_user,
   register_user,
+  update_account,
 } from "./users.service.js";
 
 function regenerate_session(req) {
@@ -96,9 +100,70 @@ async function current_account_handler(req, res) {
   }
 }
 
+async function update_account_handler(req, res) {
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "You are not logged in." });
+  }
+  const message = validate_account_update(req.body);
+  if (message) {
+    return invalid_request(res, message);
+  }
+
+  try {
+    const result = await update_account(req.session.user_id, req.body);
+    if (result.ok) {
+      return res.json(result.user);
+    }
+    if (result.reason === "not_found") {
+      return res.status(401).json({ message: "You are not logged in." });
+    }
+    if (result.reason === "incorrect_password") {
+      return res.status(401).json({ message: "Your current password is incorrect." });
+    }
+    return res.status(409).json({ message: "That email address is already in use." });
+  } catch (error) {
+    return database_error(res, error);
+  }
+}
+
+async function delete_account_handler(req, res) {
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "You are not logged in." });
+  }
+  const message = validate_account_deletion(req.body);
+  if (message) {
+    return invalid_request(res, message);
+  }
+
+  try {
+    const result = await delete_account(
+      req.session.user_id,
+      req.body.current_password,
+    );
+    if (!result.ok) {
+      if (result.reason === "incorrect_password") {
+        return res.status(401).json({ message: "Your password is incorrect." });
+      }
+      return res.status(401).json({ message: "You are not logged in." });
+    }
+
+    req.session.destroy((error) => {
+      if (error) {
+        return database_error(res, error);
+      }
+      res.clearCookie("clubspace.sid");
+      return res.status(204).end();
+    });
+  } catch (error) {
+    return database_error(res, error);
+  }
+}
+
 export {
   current_account_handler,
+  delete_account_handler,
   login_handler,
   logout_handler,
   register_handler,
+  update_account_handler,
 };

@@ -157,12 +157,18 @@ needed for local development.
 | `POST` | `/api/auth/register`          | Create an account with name, email, student ID, and password |
 | `POST` | `/api/auth/login`             | Log in with email and password             |
 | `GET`  | `/api/auth/me`                | Return the currently logged-in account     |
+| `PUT`  | `/api/auth/me`                | Update name/email and optionally password (requires current password) |
+| `DELETE` | `/api/auth/me`              | Delete the account and its memberships and event signups (requires password) |
 | `POST` | `/api/auth/logout`            | Log out                                    |
 
 Passwords are stored as salted scrypt hashes. Login state uses a local
 in-memory session and is cleared when the API restarts; account records remain
 in MySQL. Only logged-in committee members can view their club's roster or
-promote another club member to committee.
+promote another club member to committee. Registration and password changes
+require matching confirmation fields. Changing a password and deleting an
+account require the current password; editing a name or email does not.
+Deleting an account also removes its memberships and event signups through the
+database foreign-key cascades.
 
 The API validates requests and returns `422` for invalid input and `409` when a
 venue time slot is already booked.

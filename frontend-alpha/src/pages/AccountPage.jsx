@@ -2,14 +2,30 @@ import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router'
 import '../App.css'
 
+const empty_registration = {
+  name: '',
+  email: '',
+  student_id: '',
+  password: '',
+  confirm_password: '',
+}
+
 function AccountPage() {
   const [mode, set_mode] = useState('login')
   const [user, set_user] = useState(null)
-  const [form, set_form] = useState({
+  const [form, set_form] = useState(empty_registration)
+  const [details_form, set_details_form] = useState({
     name: '',
     email: '',
-    student_id: '',
-    password: '',
+  })
+  const [password_form, set_password_form] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  })
+  const [delete_form, set_delete_form] = useState({
+    current_password: '',
+    confirmation: '',
   })
   const [message, set_message] = useState('')
   const [loading, set_loading] = useState(true)
@@ -24,7 +40,13 @@ function AccountPage() {
         return response.json()
       })
       .then((current_user) => {
-        if (active) set_user(current_user)
+        if (active && current_user) {
+          set_user(current_user)
+          set_details_form({
+            name: current_user.name,
+            email: current_user.email,
+          })
+        }
       })
       .catch((error) => {
         if (active) set_message(error.message || 'Could not reach the server.')
@@ -47,8 +69,13 @@ function AccountPage() {
 
   async function handle_submit(event) {
     event.preventDefault()
-    set_submitting(true)
     set_message('')
+    if (mode === 'register' && form.password !== form.confirm_password) {
+      set_message('Passwords do not match.')
+      return
+    }
+
+    set_submitting(true)
     try {
       const response = await fetch(
         mode === 'login' ? '/api/auth/login' : '/api/auth/register',
@@ -64,7 +91,119 @@ function AccountPage() {
         return
       }
       set_user(data)
-      set_form((current_form) => ({ ...current_form, password: '' }))
+      set_details_form({
+        name: data.name,
+        email: data.email,
+      })
+      set_form(empty_registration)
+    } catch {
+      set_message('Could not reach the server.')
+    } finally {
+      set_submitting(false)
+    }
+  }
+
+  async function handle_update_details(event) {
+    event.preventDefault()
+    set_message('')
+    set_submitting(true)
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(details_form),
+      })
+      const data = response.status === 204 ? null : await response.json()
+      if (!response.ok) {
+        set_message(data.message || 'Could not update your account.')
+        return
+      }
+      set_user(data)
+      set_details_form({
+        name: data.name,
+        email: data.email,
+      })
+      set_message('Account details updated.')
+    } catch {
+      set_message('Could not reach the server.')
+    } finally {
+      set_submitting(false)
+    }
+  }
+
+  async function handle_change_password(event) {
+    event.preventDefault()
+    set_message('')
+    if (password_form.new_password !== password_form.confirm_password) {
+      set_message('New passwords do not match.')
+      return
+    }
+
+    set_submitting(true)
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: user.name,
+          email: user.email,
+          current_password: password_form.current_password,
+          new_password: password_form.new_password,
+          confirm_password: password_form.confirm_password,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        set_message(data.message || 'Could not change your password.')
+        return
+      }
+      set_user(data)
+      set_password_form({
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      })
+      set_message('Password changed.')
+    } catch {
+      set_message('Could not reach the server.')
+    } finally {
+      set_submitting(false)
+    }
+  }
+
+  async function handle_delete_account(event) {
+    event.preventDefault()
+    set_message('')
+    if (delete_form.confirmation !== 'DELETE') {
+      set_message('Type DELETE to confirm account deletion.')
+      return
+    }
+
+    set_submitting(true)
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_password: delete_form.current_password,
+        }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        set_message(data.message || 'Could not delete your account.')
+        return
+      }
+      set_user(null)
+      set_mode('login')
+      set_form(empty_registration)
+      set_details_form({ name: '', email: '' })
+      set_password_form({
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      })
+      set_delete_form({ current_password: '', confirmation: '' })
+      set_message('Your account and associated memberships and event signups were deleted.')
     } catch {
       set_message('Could not reach the server.')
     } finally {
@@ -79,6 +218,14 @@ function AccountPage() {
       if (!response.ok) throw new Error('Could not log out.')
       set_user(null)
       set_mode('login')
+      set_form(empty_registration)
+      set_details_form({ name: '', email: '' })
+      set_password_form({
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      })
+      set_delete_form({ current_password: '', confirmation: '' })
     } catch (error) {
       set_message(error.message || 'Could not reach the server.')
     }
@@ -86,6 +233,7 @@ function AccountPage() {
 
   function change_mode(next_mode) {
     set_mode(next_mode)
+    set_form(empty_registration)
     set_message('')
   }
 
@@ -112,6 +260,138 @@ function AccountPage() {
             <p>{user.email}</p>
             <p>Student ID: {user.student_id}</p>
             <button type="button" onClick={handle_logout}>Log out</button>
+
+            <h3>Edit account details</h3>
+            <form onSubmit={handle_update_details}>
+              <label>
+                Name
+                <input
+                  autoComplete="name"
+                  maxLength={255}
+                  required
+                  value={details_form.name}
+                  onChange={(event) =>
+                    set_details_form((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  autoComplete="email"
+                  maxLength={255}
+                  required
+                  type="email"
+                  value={details_form.email}
+                  onChange={(event) =>
+                    set_details_form((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button type="submit" disabled={submitting}>
+                Save details
+              </button>
+            </form>
+
+            <h3>Change password</h3>
+            <form onSubmit={handle_change_password}>
+              <label>
+                Current password
+                <input
+                  autoComplete="current-password"
+                  maxLength={128}
+                  required
+                  type="password"
+                  value={password_form.current_password}
+                  onChange={(event) =>
+                    set_password_form((current) => ({
+                      ...current,
+                      current_password: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                New password
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  type="password"
+                  value={password_form.new_password}
+                  onChange={(event) =>
+                    set_password_form((current) => ({
+                      ...current,
+                      new_password: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Confirm new password
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  type="password"
+                  value={password_form.confirm_password}
+                  onChange={(event) =>
+                    set_password_form((current) => ({
+                      ...current,
+                      confirm_password: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button type="submit" disabled={submitting}>
+                Change password
+              </button>
+            </form>
+
+            <h3>Delete account</h3>
+            <p>This permanently deletes your account, memberships, and event signups.</p>
+            <form onSubmit={handle_delete_account}>
+              <label>
+                Current password
+                <input
+                  autoComplete="current-password"
+                  maxLength={128}
+                  required
+                  type="password"
+                  value={delete_form.current_password}
+                  onChange={(event) =>
+                    set_delete_form((current) => ({
+                      ...current,
+                      current_password: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Type DELETE to confirm
+                <input
+                  required
+                  value={delete_form.confirmation}
+                  onChange={(event) =>
+                    set_delete_form((current) => ({
+                      ...current,
+                      confirmation: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <button type="submit" disabled={submitting}>
+                Delete account permanently
+              </button>
+            </form>
           </>
         ) : (
           <>
@@ -172,6 +452,21 @@ function AccountPage() {
                   <span className="field-hint">At least 8 characters.</span>
                 )}
               </label>
+              {mode === 'register' && (
+                <label>
+                  Confirm password
+                  <input
+                    autoComplete="new-password"
+                    maxLength={128}
+                    minLength={8}
+                    name="confirm_password"
+                    required
+                    type="password"
+                    value={form.confirm_password}
+                    onChange={handle_change}
+                  />
+                </label>
+              )}
               <button type="submit" disabled={submitting}>
                 {submitting
                   ? 'Please wait…'
