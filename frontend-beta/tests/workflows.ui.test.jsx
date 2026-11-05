@@ -81,6 +81,21 @@ describe('frontend preview workflows', () => {
     expect(screen.getByRole('link', { name: 'Photography Society' }).getAttribute('href')).toBe('/organizer/clubs/1/reports')
   })
 
+  it('copies event details into a new request without copying the booking time', async () => {
+    window.history.replaceState({}, '', '/organizer/events/1')
+    vi.stubGlobal('fetch', previewFetch())
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Copy details to a new request' }))
+    expect(await screen.findByRole('heading', { name: 'Request a venue for an event' })).toBeTruthy()
+    expect(screen.getByLabelText('Title').value).toBe('Campus photo walk')
+    expect(screen.getByLabelText('Club').value).toBe('1')
+    expect(screen.getByLabelText('Venue').value).toBe('1')
+    expect(screen.getByLabelText('Date').value).toBe('')
+    expect(screen.getByLabelText('Slot').value).toBe('')
+    expect(screen.getByText(/original event remains unchanged/i)).toBeTruthy()
+  })
+
   it('shows clubs to a student with no memberships', async () => {
     window.history.replaceState({}, '', '/profile')
     vi.stubGlobal('fetch', previewFetch('empty-memberships'))

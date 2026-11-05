@@ -1,8 +1,19 @@
 import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { request, setCsrf, campusInstant, weekStart, addDays, overlaps } from '../src/api.js'
+import { requestMainBackend } from '../src/mainBackend.js'
 const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch; setCsrf(null) })
+test('main backend adapter exposes every page of club and venue options', async () => {
+  const rows = Array.from({length: 101}, (_, index) => ({id: index + 1, name: `Option ${index + 1}`}))
+  globalThis.fetch = async () => new Response(JSON.stringify(rows), {status: 200})
+  for (const path of ['/clubs', '/venues']) {
+    const result = await requestMainBackend(`${path}?page=2&page_size=100`)
+    assert.equal(result.meta.total, 101)
+    assert.equal(result.data.length, 1)
+    assert.equal(result.data[0].id, 101)
+  }
+})
 test('Hong Kong week and half-open interval boundaries', () => {
   assert.equal(weekStart('2026-11-11'), '2026-11-09')
   assert.equal(campusInstant('2026-11-09'), '2026-11-08T16:00:00.000Z')

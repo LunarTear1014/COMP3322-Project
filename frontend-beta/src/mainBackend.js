@@ -121,11 +121,19 @@ export async function requestMainBackend(path, { method = 'GET', body, signal } 
     const phase = searchParams.get('phase')
     const state = searchParams.get('state')
     const clubId = searchParams.get('club_id')
+    const venueId = searchParams.get('venue_id')
+    const visibility = searchParams.get('visibility')
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
     const search = searchParams.get('q')?.trim().toLowerCase()
     const events = await get(managed ? '/events?managed=true' : '/events')
     return page(events.map(row => eventResource(row)).filter(event =>
       (!phase || event.phase === phase) && (!state || event.state === state)
       && (!clubId || String(event.club.id) === clubId)
+      && (!venueId || String(event.venue.id) === venueId)
+      && (!visibility || event.visibility === visibility)
+      && (!from || new Date(event.start_at) >= new Date(from))
+      && (!to || new Date(event.start_at) < new Date(to))
       && (!search || [event.title, event.description, event.club.name, event.venue.name]
         .some(value => value?.toLowerCase().includes(search))),
     ), searchParams)

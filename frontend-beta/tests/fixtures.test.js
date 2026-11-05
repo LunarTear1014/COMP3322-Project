@@ -30,6 +30,32 @@ test('preview exposes distinct participation states', async () => {
   assert.equal(cancelled.body.data.state, 'cancelled')
 })
 
+test('event discovery combines filters before pagination', async () => {
+  const filtered = await call('/events?club_id=2&visibility=members_only&venue_id=1')
+  assert.deepEqual(filtered.body.data.map(event => event.id), [6])
+  const all = await call('/events?page_size=2&page=2')
+  assert.equal(all.body.data.length, 2)
+  assert.equal(all.body.meta.page, 2)
+  assert.ok(all.body.meta.total > 2)
+  const instant = filtered.body.data[0].start_at
+  const from = encodeURIComponent(instant)
+  const to = encodeURIComponent(new Date(new Date(instant).getTime() + 1).toISOString())
+  assert.equal((await call(`/events?club_id=2&visibility=members_only&from=${from}&to=${to}`)).body.meta.total, 1)
+  assert.equal((await call(`/events?club_id=2&visibility=members_only&from=2000-01-01T00%3A00%3A00Z&to=${from}`)).body.meta.total, 0)
+})
+
+test('club and venue options honor pagination', async () => {
+  for (const path of ['/clubs', '/venues']) {
+    const first = (await call(`${path}?page=1&page_size=1`)).body
+    const second = (await call(`${path}?page=2&page_size=1`)).body
+    assert.equal(first.data.length, 1)
+    assert.equal(second.data.length, 1)
+    assert.notEqual(first.data[0].id, second.data[0].id)
+    assert.equal(second.meta.page, 2)
+    assert.equal(second.meta.total, first.meta.total)
+  }
+})
+
 test('preview report and booking review expose populated and restricted states', async () => {
   const now = new Date()
   const from = new Date(now.getTime() - 86400000).toISOString()

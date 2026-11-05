@@ -78,7 +78,20 @@ export function fixturePlugin() {
         }
         return send(200, { data: { club_id: 1, from, to, campus_timezone: 'Asia/Hong_Kong', events: included ? [{event_id:1,title:events[0].title,state:'published',capacity:30,joined_count:18,waitlisted_count:0}] : [], daily_actions: daily, venue_hours: included ? [{venue_id:1,venue_name:'Harbour Room',hours:2},{venue_id:2,venue_name:'The Studio for Photography and Creative Workshops',hours:1.5}] : [], history_complete_from: '2026-01-01T00:00:00Z' } })
       }
-      const routes = { '/profile': { data: user }, '/clubs': list(clubs), '/me/memberships': list(empty ? [] : memberships), '/venues': list(venues), '/events': list(url.searchParams.get('phase') === 'past' ? [] : events.filter(e => e.state === 'published' && e.title.toLowerCase().includes((url.searchParams.get('q') || '').toLowerCase()))), '/me/events': list([events[0]]), '/me/registrations': list([]), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list([], { unread_count: 0 }) }
+      const params = url.searchParams
+      const filteredEvents = events.filter(event => event.state === 'published'
+        && (!params.get('phase') || event.phase === params.get('phase'))
+        && (!params.get('q') || [event.title, event.description, event.club.name, event.venue.name].some(value => value.toLowerCase().includes(params.get('q').trim().toLowerCase())))
+        && (!params.get('club_id') || String(event.club.id) === params.get('club_id'))
+        && (!params.get('venue_id') || String(event.venue.id) === params.get('venue_id'))
+        && (!params.get('visibility') || event.visibility === params.get('visibility'))
+        && (!params.get('from') || new Date(event.start_at) >= new Date(params.get('from')))
+        && (!params.get('to') || new Date(event.start_at) < new Date(params.get('to'))))
+      const page = Number(params.get('page')) || 1
+      const pageSize = Number(params.get('page_size')) || 20
+      const eventList = { data: filteredEvents.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: filteredEvents.length } }
+      const pagedList = rows => ({ data: rows.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: rows.length } })
+      const routes = { '/profile': { data: user }, '/clubs': pagedList(clubs), '/me/memberships': pagedList(empty ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list([events[0]]), '/me/registrations': list([]), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list([], { unread_count: 0 }) }
       return routes[url.pathname] ? send(200, routes[url.pathname]) : fail(404, 'NOT_FOUND', 'This endpoint is not included in the preview.')
     })
   } }
