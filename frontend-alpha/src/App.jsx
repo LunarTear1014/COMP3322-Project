@@ -35,6 +35,17 @@ function App() {
     error: false,
   })
 
+  const refresh_memberships = useCallback(async () => {
+    try {
+      const response = await fetch('/api/memberships')
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = await response.json()
+      set_membership_state({ memberships: data, error: false })
+    } catch {
+      set_membership_state({ memberships: [], error: true })
+    }
+  }, [])
+
   const update_memberships = useCallback((memberships) => {
     set_membership_state({ memberships, error: false })
   }, [])
@@ -62,6 +73,9 @@ function App() {
   const student_clubs = membership_state.memberships.map(
     (membership) => membership.name
   )
+  const can_manage_venues = membership_state.memberships.some((membership) =>
+    ['committee', 'president'].includes(membership.role),
+  )
 
   return (
     <BrowserRouter>
@@ -74,22 +88,37 @@ function App() {
             <EventsPage
               student_clubs={student_clubs}
               membership_error={membership_state.error}
+              can_manage_venues={can_manage_venues}
             />
           }
         />
 
-        <Route path="/account" element={<AccountPage />} />
+        <Route
+          path="/account"
+          element={
+            <AccountPage
+              onMembershipsRefresh={refresh_memberships}
+              can_manage_venues={can_manage_venues}
+            />
+          }
+        />
         <Route
           path="/clubs"
           element={
-            <ClubsPage onMembershipsChange={update_memberships} />
+            <ClubsPage
+              onMembershipsChange={update_memberships}
+              can_manage_venues={can_manage_venues}
+            />
           }
         />
         <Route
           path="/venues"
-          element={<VenuePage />}
+          element={<VenuePage can_manage_venues={can_manage_venues} />}
         />
-        <Route path="/bookings/new" element={<BookingPage />} />
+        <Route
+          path="/bookings/new"
+          element={<BookingPage can_manage_venues={can_manage_venues} />}
+        />
         <Route
           path="/organizer"
           element={<PlaceholderPage title="Organizer dashboard" />}

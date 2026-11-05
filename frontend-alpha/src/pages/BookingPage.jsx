@@ -14,7 +14,7 @@ const timeslot_options = [
   '16:00 - 18:00',
 ]
 
-function BookingPage() {
+function BookingPage({ can_manage_venues }) {
   const location = useLocation()
 
   const [form, set_form] = useState({
@@ -118,7 +118,7 @@ function BookingPage() {
 
         <nav>
           <NavLink to="/events">Events</NavLink>
-          <NavLink to="/venues">Venues</NavLink>
+          {can_manage_venues && <NavLink to="/venues">Venues</NavLink>}
           <NavLink to="/clubs">Clubs</NavLink>
           <NavLink to="/account">Account</NavLink>
         </nav>

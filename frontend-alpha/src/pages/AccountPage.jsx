@@ -10,7 +10,7 @@ const empty_registration = {
   confirm_password: '',
 }
 
-function AccountPage() {
+function AccountPage({ onMembershipsRefresh, can_manage_venues }) {
   const [mode, set_mode] = useState('login')
   const [user, set_user] = useState(null)
   const [form, set_form] = useState(empty_registration)
@@ -107,6 +107,7 @@ function AccountPage() {
         return
       }
       set_user(data)
+      await onMembershipsRefresh()
       set_details_form({
         name: data.name,
         email: data.email,
@@ -210,6 +211,7 @@ function AccountPage() {
         return
       }
       set_user(null)
+      await onMembershipsRefresh()
       set_mode('login')
       set_form(empty_registration)
       set_details_form({ name: '', email: '' })
@@ -233,6 +235,7 @@ function AccountPage() {
       const response = await fetch('/api/auth/logout', { method: 'POST' })
       if (!response.ok) throw new Error('Could not log out.')
       set_user(null)
+      await onMembershipsRefresh()
       set_mode('login')
       set_form(empty_registration)
       set_details_form({ name: '', email: '' })
@@ -259,7 +262,7 @@ function AccountPage() {
         <h1>ClubSpace</h1>
         <nav>
           <NavLink to="/events">Events</NavLink>
-          <NavLink to="/venues">Venues</NavLink>
+          {can_manage_venues && <NavLink to="/venues">Venues</NavLink>}
           <NavLink to="/clubs">Clubs</NavLink>
           <NavLink to="/account">Account</NavLink>
         </nav>

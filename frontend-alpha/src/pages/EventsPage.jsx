@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router'
 import '../App.css'
 
-function EventsPage({ student_clubs, membership_error }) {
+function EventsPage({
+  student_clubs,
+  membership_error,
+  can_manage_venues,
+}) {
   const [search_term, set_search_term] = useState('')
   const [selected_event, set_selected_event] = useState(null)
   const [participation_message, set_participation_message] = useState('')
@@ -11,19 +15,56 @@ function EventsPage({ student_clubs, membership_error }) {
   const [event_status_filter, set_event_status_filter] = useState('Upcoming')
   const [events, set_events] = useState([])
   const [load_state, set_load_state] = useState('loading') // loading | ready | error
+  const [account_state, set_account_state] = useState('loading')
 
   useEffect(() => {
+    let active = true
+
     async function load_events() {
       try {
         const response = await fetch('/api/events')
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        set_events(await response.json())
-        set_load_state('ready')
+        const next_events = await response.json()
+        if (active) {
+          set_events(next_events)
+          set_selected_event((current) =>
+            current
+              ? next_events.find((event) => event.id === current.id) || current
+              : null,
+          )
+          set_load_state('ready')
+        }
+      } catch (error) {
+        if (active) {
+          set_load_state('error')
+          set_participation_message(
+            error.message || 'Could not refresh event signup status.',
+          )
+          set_participation_message_type('warning')
+        }
+      }
+    }
+    async function load_account_state() {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (active) {
+          set_account_state(
+            response.ok ? 'signed_in' : response.status === 401 ? 'signed_out' : 'error',
+          )
+        }
       } catch {
-        set_load_state('error')
+        if (active) set_account_state('error')
       }
     }
     load_events()
+    load_account_state()
+    const interval = window.setInterval(load_events, 15000)
+    const account_interval = window.setInterval(load_account_state, 15000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+      window.clearInterval(account_interval)
+    }
   }, [])
   
   const visible_events = events.filter((event) => {
@@ -44,7 +85,15 @@ function EventsPage({ student_clubs, membership_error }) {
   }
 
   async function toggle_join_event(event) {
-    const joining = !event.is_joined
+    if (account_state !== 'signed_in') {
+      set_participation_message('Sign in to join or leave an event.')
+      set_participation_message_type('error')
+      return
+    }
+
+    const prior_status =
+      event.participation_status || (event.is_joined ? 'joined' : null)
+    const joining = !['joined', 'waitlisted'].includes(prior_status)
     if (joining && !can_join_event(event)) {
       set_participation_message(
         'Join the organizing club before joining this members-only event.'
@@ -63,31 +112,47 @@ function EventsPage({ student_clubs, membership_error }) {
       )
       if (!response.ok) {
         const data = await response.json()
-        if (data.reason === 'full') {
-          const events_response = await fetch('/api/events')
-          if (events_response.ok) {
-            const updated_events = await events_response.json()
-            set_events(updated_events)
-            set_selected_event(
-              updated_events.find((updated_event) => updated_event.id === event.id)
-            )
-          }
-        }
         throw new Error(data.message || 'Could not update event participation.')
       }
 
+      const signup = joining ? await response.json() : null
+      const next_status = joining ? signup.status : null
       const update_participation = (current_event) =>
         current_event?.id === event.id
           ? {
               ...current_event,
-              is_joined: joining,
-              joined_count: current_event.joined_count + (joining ? 1 : -1),
+              is_joined: next_status === 'joined',
+              participation_status: next_status,
+              joined_count:
+                current_event.joined_count +
+                (joining
+                  ? next_status === 'joined'
+                    ? 1
+                    : 0
+                  : prior_status === 'joined'
+                    ? -1
+                    : 0),
             }
           : current_event
       set_events((current_events) =>
         current_events.map(update_participation)
       )
       set_selected_event(update_participation)
+      if (joining) {
+        set_participation_message(
+          next_status === 'waitlisted'
+            ? 'The event is full. You have been added to the waitlist.'
+            : 'You joined the event.',
+        )
+        set_participation_message_type('success')
+      } else {
+        set_participation_message(
+          prior_status === 'waitlisted'
+            ? 'You left the event waitlist.'
+            : 'You left the event.',
+        )
+        set_participation_message_type('success')
+      }
 
       const events_response = await fetch('/api/events')
       if (!events_response.ok) {
@@ -118,7 +183,7 @@ function EventsPage({ student_clubs, membership_error }) {
         <h1> ClubSpace </h1>
         <nav>
         <NavLink to="/events">Events</NavLink>
-        <NavLink to="/venues">Venues</NavLink>
+        {can_manage_venues && <NavLink to="/venues">Venues</NavLink>}
         <NavLink to="/clubs">Clubs</NavLink>
         <NavLink to="/account">Account</NavLink>
         </nav>
@@ -161,6 +226,9 @@ function EventsPage({ student_clubs, membership_error }) {
             <p>{event.club}</p>
             <p className="badge">{event.visibility}</p>
             {event.is_full && <p className="badge full-badge">Event full</p>}
+            {event.participation_status === 'waitlisted' && (
+              <p className="badge">Waitlisted</p>
+            )}
             <h4>{event.title}</h4>
             <p>{event.date}, {event.timeslot}</p>
             <p>{event.venue}</p>
@@ -191,25 +259,48 @@ function EventsPage({ student_clubs, membership_error }) {
           {selected_event.is_full && (
             <p className="badge full-badge" role="status">Event full</p>
           )}
-          {!(selected_event.is_full && !selected_event.is_joined) && (
+          {selected_event.participation_status === 'waitlisted' && (
+            <p className="message" role="status">
+              You are on the waitlist. We will promote you automatically when a
+              spot opens.
+            </p>
+          )}
+          {account_state === 'signed_in' ? (
             <button
               onClick={() => toggle_join_event(selected_event)}
               disabled={
                 updating_event_id === selected_event.id ||
-                (!selected_event.is_joined && !can_join_event(selected_event))
+                (!selected_event.is_joined &&
+                  selected_event.participation_status !== 'waitlisted' &&
+                  !can_join_event(selected_event))
               }
             >
               {updating_event_id === selected_event.id
                 ? 'Updating…'
                 : selected_event.is_joined
                   ? 'Leave Event'
-                  : can_join_event(selected_event)
-                    ? 'Join Event'
-                    : 'Members only'}
+                  : selected_event.participation_status === 'waitlisted'
+                    ? 'Leave waitlist'
+                    : !can_join_event(selected_event)
+                      ? 'Members only'
+                      : selected_event.is_full
+                        ? 'Join waitlist'
+                        : 'Join Event'}
             </button>
+          ) : account_state === 'signed_out' ? (
+            <p className="message">
+              <NavLink to="/account">Sign in</NavLink> to join this event.
+            </p>
+          ) : account_state === 'loading' ? (
+            <p className="message" role="status">Checking your sign-in status…</p>
+          ) : (
+            <p className="message error-message" role="alert">
+              Could not verify your sign-in status. Refresh the page before
+              joining an event.
+            </p>
           )}
         {!selected_event.is_joined &&
-          !selected_event.is_full &&
+          selected_event.participation_status !== 'waitlisted' &&
           !can_join_event(selected_event) && (
           <p className="message error-message" role="alert">
             {membership_error

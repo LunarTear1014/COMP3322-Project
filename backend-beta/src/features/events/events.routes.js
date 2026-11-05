@@ -33,11 +33,20 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
   if (event_id === null) {
     return invalid_request(res, "Event ID must be a positive integer.");
   }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Sign in to join an event." });
+  }
 
   try {
     const result = await join_event(event_id, req.session?.user_id);
     if (result.ok) {
-      return res.status(201).json({ message: "You joined the event." });
+      return res.status(result.status === "waitlisted" ? 202 : 201).json({
+        status: result.status,
+        message:
+          result.status === "waitlisted"
+            ? "The event is full. You have been added to the waitlist."
+            : "You joined the event.",
+      });
     }
     if (result.reason === "not_found") {
       return res.status(404).json({ message: "Event not found." });
@@ -53,10 +62,9 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
     if (result.reason === "unavailable") {
       return res.status(409).json({ message: "This event is not available." });
     }
-    if (result.reason === "full") {
+    if (result.reason === "already_waitlisted") {
       return res.status(409).json({
-        reason: "full",
-        message: "This event is full.",
+        message: "You are already on this event's waitlist.",
       });
     }
     return database_error(res, result.error);
@@ -69,6 +77,9 @@ router.delete("/api/events/:event_id/participation", async (req, res) => {
   const event_id = parse_event_id(req.params.event_id);
   if (event_id === null) {
     return invalid_request(res, "Event ID must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Sign in to change event participation." });
   }
 
   try {

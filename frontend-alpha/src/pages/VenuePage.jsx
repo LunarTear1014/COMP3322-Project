@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, NavLink } from 'react-router'
 import '../App.css'
 
-function VenuePage() {
+function VenuePage({ can_manage_venues }) {
   const [venues, set_venues] = useState([])
   const [load_state, set_load_state] = useState('loading')
   const [date, set_date] = useState(new Date().toISOString().slice(0, 10))
@@ -42,7 +42,7 @@ function VenuePage() {
 
         <nav>
           <NavLink to="/events">Events</NavLink>
-          <NavLink to="/venues">Venues</NavLink>
+          {can_manage_venues && <NavLink to="/venues">Venues</NavLink>}
           <NavLink to="/clubs">Clubs</NavLink>
           <NavLink to="/account">Account</NavLink>
         </nav>

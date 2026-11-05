@@ -189,8 +189,10 @@ events for clubs where they hold those roles. A user with those roles in
 multiple clubs can book for any of them; regular members can still join events
 but cannot make venue bookings.
 Event signups are capped at the venue capacity recorded for the event. Full
-events show an `Event full` label and no signup button; the API also rejects
-signups once that capacity is reached.
+events show an `Event full` label and allow users to join the waitlist. When a
+joined participant leaves, the earliest waitlisted participant is promoted
+automatically. Waitlist order is based on signup time, and users can leave the
+waitlist at any time. Joining an event or its waitlist requires signing in.
 
 ## Verify the end-to-end flow
 

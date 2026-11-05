@@ -24,7 +24,7 @@ async function fetch_clubs_and_memberships() {
   return { clubs, memberships, account }
 }
 
-function ClubsPage({ onMembershipsChange }) {
+function ClubsPage({ onMembershipsChange, can_manage_venues }) {
   const [clubs, set_clubs] = useState([])
   const [memberships, set_memberships] = useState([])
   const [logged_in, set_logged_in] = useState(false)
@@ -474,7 +474,7 @@ function ClubsPage({ onMembershipsChange }) {
         <h1>ClubSpace</h1>
         <nav>
           <NavLink to="/events">Events</NavLink>
-          <NavLink to="/venues">Venues</NavLink>
+          {can_manage_venues && <NavLink to="/venues">Venues</NavLink>}
           <NavLink to="/clubs">Clubs</NavLink>
           <NavLink to="/account">Account</NavLink>
         </nav>

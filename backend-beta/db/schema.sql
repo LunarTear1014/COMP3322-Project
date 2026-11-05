@@ -247,8 +247,8 @@ CREATE TABLE `participations` (
     `user_id` INT NOT NULL,
     `event_id` INT NOT NULL,
     `status` ENUM('joined', 'left', 'waitlisted') NOT NULL DEFAULT 'joined',
-    `joined_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `left_at` TIMESTAMP NULL DEFAULT NULL,
+    `joined_at` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `left_at` TIMESTAMP(6) NULL DEFAULT NULL,
 
     PRIMARY KEY (`user_id`, `event_id`),
 
@@ -264,6 +264,9 @@ CREATE TABLE `participations` (
 
     INDEX `idx_participations_event_status`
         (`event_id`, `status`),
+
+    INDEX `idx_participations_waitlist_order`
+        (`event_id`, `status`, `joined_at`, `user_id`),
 
     INDEX `idx_participations_user_status`
         (`user_id`, `status`)

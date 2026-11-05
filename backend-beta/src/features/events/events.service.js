@@ -1,8 +1,6 @@
 import pool from "../../config/db.js";
 import { today } from "../../shared/timeslots.js";
 
-const demo_user_id = Number(process.env.DEMO_USER_ID || 1);
-
 function display_visibility(visibility) {
   return visibility === "members_only" ? "Members only" : "Public";
 }
@@ -29,11 +27,12 @@ function event_response(row) {
     capacity: Number(row.capacity),
     is_full: Number(row.joined_count) >= Number(row.capacity),
     is_joined: Boolean(row.is_joined),
+    participation_status: row.participation_status,
     status: row.date >= today() ? "Upcoming" : "Past",
   };
 }
 
-async function list_events(user_id = demo_user_id) {
+async function list_events(user_id = null) {
   const [rows] = await pool.query(`
       SELECT
         e.id,
@@ -53,18 +52,27 @@ async function list_events(user_id = demo_user_id) {
           SELECT 1
           FROM participations mine
           WHERE mine.event_id = e.id AND mine.user_id = ? AND mine.status = 'joined'
-        ) AS is_joined
+        ) AS is_joined,
+        (SELECT mine.status
+         FROM participations mine
+         WHERE mine.event_id = e.id AND mine.user_id = ?
+           AND mine.status IN ('joined', 'waitlisted')
+         LIMIT 1) AS participation_status
       FROM events e
       JOIN clubs c ON c.id = e.club_id
       JOIN bookings b ON b.id = e.booking_id
       JOIN venues v ON v.id = b.venue_id
       WHERE e.status = 'published'
       ORDER BY e.start_time ASC
-    `, [user_id]);
+    `, [user_id, user_id]);
   return rows.map(event_response);
 }
 
-async function join_event(event_id, user_id = demo_user_id) {
+async function join_event(event_id, user_id) {
+  if (!Number.isSafeInteger(user_id)) {
+    return { ok: false, reason: "unauthenticated" };
+  }
+
   let connection;
   try {
     connection = await pool.getConnection();
@@ -102,6 +110,10 @@ async function join_event(event_id, user_id = demo_user_id) {
       await connection.rollback();
       return { ok: false, reason: "already_joined" };
     }
+    if (participation?.status === "waitlisted") {
+      await connection.rollback();
+      return { ok: false, reason: "already_waitlisted" };
+    }
     const [[signup_count]] = await connection.query(
       `SELECT COUNT(*) AS joined_count
        FROM participations
@@ -109,13 +121,26 @@ async function join_event(event_id, user_id = demo_user_id) {
       [event_id],
     );
     if (Number(signup_count.joined_count) >= Number(event.capacity)) {
-      await connection.rollback();
-      return { ok: false, reason: "full" };
+      if (participation) {
+        await connection.query(
+          `UPDATE participations
+           SET status = 'waitlisted', joined_at = CURRENT_TIMESTAMP(6), left_at = NULL
+           WHERE user_id = ? AND event_id = ?`,
+          [user_id, event_id],
+        );
+      } else {
+        await connection.query(
+          "INSERT INTO participations (user_id, event_id, status) VALUES (?, ?, 'waitlisted')",
+          [user_id, event_id],
+        );
+      }
+      await connection.commit();
+      return { ok: true, status: "waitlisted" };
     }
     if (participation) {
       await connection.query(
         `UPDATE participations
-         SET status = 'joined', joined_at = CURRENT_TIMESTAMP, left_at = NULL
+         SET status = 'joined', joined_at = CURRENT_TIMESTAMP(6), left_at = NULL
          WHERE user_id = ? AND event_id = ?`,
         [user_id, event_id],
       );
@@ -127,7 +152,7 @@ async function join_event(event_id, user_id = demo_user_id) {
     }
 
     await connection.commit();
-    return { ok: true };
+    return { ok: true, status: "joined" };
   } catch (error) {
     if (connection) await connection.rollback();
     return { ok: false, reason: "database", error };
@@ -136,23 +161,72 @@ async function join_event(event_id, user_id = demo_user_id) {
   }
 }
 
-async function leave_event(event_id, user_id = demo_user_id) {
-  const [result] = await pool.query(
-    `UPDATE participations
-     SET status = 'left', left_at = CURRENT_TIMESTAMP
-     WHERE user_id = ? AND event_id = ? AND status = 'joined'`,
-    [user_id, event_id],
-  );
-  if (result.affectedRows > 0) {
-    return { ok: true };
+async function leave_event(event_id, user_id) {
+  if (!Number.isSafeInteger(user_id)) {
+    return { ok: false, reason: "unauthenticated" };
   }
 
-  const [[event]] = await pool.query("SELECT id FROM events WHERE id = ?", [
-    event_id,
-  ]);
-  return event
-    ? { ok: false, reason: "not_joined" }
-    : { ok: false, reason: "not_found" };
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[event]] = await connection.query(
+      "SELECT id FROM events WHERE id = ? FOR UPDATE",
+      [event_id],
+    );
+    if (!event) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    const [[participation]] = await connection.query(
+      `SELECT status FROM participations
+       WHERE user_id = ? AND event_id = ? FOR UPDATE`,
+      [user_id, event_id],
+    );
+    if (
+      !participation ||
+      !["joined", "waitlisted"].includes(participation.status)
+    ) {
+      await connection.rollback();
+      return { ok: false, reason: "not_joined" };
+    }
+
+    await connection.query(
+      `UPDATE participations
+       SET status = 'left', left_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? AND event_id = ?`,
+      [user_id, event_id],
+    );
+
+    let promoted_user_id = null;
+    if (participation.status === "joined") {
+      const [[next_waitlisted]] = await connection.query(
+        `SELECT user_id FROM participations
+         WHERE event_id = ? AND status = 'waitlisted'
+         ORDER BY joined_at ASC, user_id ASC
+         LIMIT 1 FOR UPDATE`,
+        [event_id],
+      );
+      if (next_waitlisted) {
+        await connection.query(
+          `UPDATE participations
+           SET status = 'joined', left_at = NULL
+           WHERE user_id = ? AND event_id = ?`,
+          [next_waitlisted.user_id, event_id],
+        );
+        promoted_user_id = next_waitlisted.user_id;
+      }
+    }
+
+    await connection.commit();
+    return { ok: true, promoted_user_id };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    return { ok: false, reason: "database", error };
+  } finally {
+    if (connection) connection.release();
+  }
 }
 
 // Book the venue and create the event in one transaction. Returns
