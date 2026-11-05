@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router'
 import '../App.css'
 
@@ -18,7 +18,7 @@ function BookingPage() {
   const location = useLocation()
 
   const [form, set_form] = useState({
-    club: 'Photography Society',
+    club: '',
     title: '',
     description: '',
     date: location.state?.date || '',
@@ -31,6 +31,41 @@ function BookingPage() {
   const [message, set_message] = useState('')
   const [message_type, set_message_type] = useState('')
   const [submitting, set_submitting] = useState(false)
+  const [authorized_clubs, set_authorized_clubs] = useState([])
+  const [membership_state, set_membership_state] = useState('loading')
+
+  useEffect(() => {
+    let active = true
+
+    async function load_authorized_clubs() {
+      try {
+        const response = await fetch('/api/memberships')
+        if (!response.ok) {
+          throw new Error('Could not verify your club roles.')
+        }
+        const memberships = await response.json()
+        const eligible_clubs = memberships.filter((membership) =>
+          ['committee', 'president'].includes(membership.role),
+        )
+        if (!active) return
+        set_authorized_clubs(eligible_clubs)
+        set_form((current) => ({
+          ...current,
+          club: eligible_clubs.some((club) => club.name === current.club)
+            ? current.club
+            : eligible_clubs[0]?.name || '',
+        }))
+        set_membership_state('ready')
+      } catch {
+        if (active) set_membership_state('error')
+      }
+    }
+
+    load_authorized_clubs()
+    return () => {
+      active = false
+    }
+  }, [])
 
   function handle_change(event) {
     set_form({
@@ -93,110 +128,125 @@ function BookingPage() {
         <p>Organizer tools</p>
         <h2>Book venue and create event</h2>
 
-        <form onSubmit={handle_submit}>
-          <label>
-            Club
-            <select name="club" value={form.club} onChange={handle_change}>
-              <option>Photography Society</option>
-              <option>Film Society</option>
-              <option>Debate Club</option>
-            </select>
-          </label>
+        {membership_state === 'loading' && <p>Checking your club roles…</p>}
+        {membership_state === 'error' && (
+          <p className="message error-message" role="alert">
+            Could not verify your club roles. Refresh the page and try again.
+          </p>
+        )}
+        {membership_state === 'ready' && authorized_clubs.length === 0 && (
+          <p className="message" role="status">
+            You must be signed in as a committee member or president of a club
+            to book a venue. Regular members can still join events.
+          </p>
+        )}
 
-          <label>
-            Event title
-            <input
-              required
-              name="title"
-              value={form.title}
-              onChange={handle_change}
-              placeholder="e.g. Night Photography Walk"
-            />
-          </label>
+        {membership_state === 'ready' && authorized_clubs.length > 0 && (
+          <form onSubmit={handle_submit}>
+            <label>
+              Club
+              <select name="club" value={form.club} onChange={handle_change}>
+                {authorized_clubs.map((club) => (
+                  <option key={club.club_id} value={club.name}>
+                    {club.name} ({club.role})
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label>
-            Event description
-            <textarea
-              required
-              name="description"
-              value={form.description}
-              onChange={handle_change}
-              placeholder="Describe the event for students."
-            />
-          </label>
+            <label>
+              Event title
+              <input
+                required
+                name="title"
+                value={form.title}
+                onChange={handle_change}
+                placeholder="e.g. Night Photography Walk"
+              />
+            </label>
 
-          <label>
-            Event date
-            <input
-              required
-              type="date"
-              name="date"
-              value={form.date}
-              onChange={handle_change}
-            />
-          </label>
+            <label>
+              Event description
+              <textarea
+                required
+                name="description"
+                value={form.description}
+                onChange={handle_change}
+                placeholder="Describe the event for students."
+              />
+            </label>
 
-          <label>
-            Venue
-            <select
-              required
-              name="venue"
-              value={form.venue}
-              onChange={handle_change}
-            >
-              <option value="">Choose a venue</option>
-              {venue_options.map((venue) => (
-                <option key={venue}>{venue}</option>
-              ))}
-            </select>
-          </label>
+            <label>
+              Event date
+              <input
+                required
+                type="date"
+                name="date"
+                value={form.date}
+                onChange={handle_change}
+              />
+            </label>
 
-          <label>
-            Timeslot
-            <select
-              required
-              name="timeslot"
-              value={form.timeslot}
-              onChange={handle_change}
-            >
-              <option value="">Choose a timeslot</option>
-              {timeslot_options.map((timeslot) => (
-                <option key={timeslot}>{timeslot}</option>
-              ))}
-            </select>
-          </label>
+            <label>
+              Venue
+              <select
+                required
+                name="venue"
+                value={form.venue}
+                onChange={handle_change}
+              >
+                <option value="">Choose a venue</option>
+                {venue_options.map((venue) => (
+                  <option key={venue}>{venue}</option>
+                ))}
+              </select>
+            </label>
 
-          <label>
-            Event visibility
-            <select
-              name="visibility"
-              value={form.visibility}
-              onChange={handle_change}
-            >
-              <option>Public</option>
-              <option>Members only</option>
-            </select>
-          </label>
+            <label>
+              Timeslot
+              <select
+                required
+                name="timeslot"
+                value={form.timeslot}
+                onChange={handle_change}
+              >
+                <option value="">Choose a timeslot</option>
+                {timeslot_options.map((timeslot) => (
+                  <option key={timeslot}>{timeslot}</option>
+                ))}
+              </select>
+            </label>
 
-          <label>
-            Promotional poster
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                set_poster_name(event.target.files[0]?.name || '')
-              }}
-            />
-          </label>
+            <label>
+              Event visibility
+              <select
+                name="visibility"
+                value={form.visibility}
+                onChange={handle_change}
+              >
+                <option>Public</option>
+                <option>Members only</option>
+              </select>
+            </label>
 
-          {poster_name && (
-            <p>Selected poster: {poster_name}</p>
-          )}
+            <label>
+              Promotional poster
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  set_poster_name(event.target.files[0]?.name || '')
+                }}
+              />
+            </label>
 
-          <button type="submit" disabled={submitting}>
-            {submitting ? 'Creating event…' : 'Book venue and create event'}
-          </button>
-        </form>
+            {poster_name && <p>Selected poster: {poster_name}</p>}
+
+            <button type="submit" disabled={submitting}>
+              {submitting ? 'Creating event…' : 'Book venue and create event'}
+            </button>
+          </form>
+        )}
 
         {message && (
           <p

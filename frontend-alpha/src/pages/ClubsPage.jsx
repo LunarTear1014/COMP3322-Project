@@ -233,6 +233,8 @@ function ClubsPage({ onMembershipsChange }) {
   }
 
   async function toggle_membership(club) {
+    if (club.is_member && club.role === 'president') return
+
     set_updating_club_id(club.id)
     clear_message()
     try {
@@ -561,25 +563,27 @@ function ClubsPage({ onMembershipsChange }) {
                 Your role: {club.role}
               </p>
             )}
-            <button
-              type="button"
-              disabled={
-                updating_club_id !== null ||
-                updating_member !== null ||
-                (!club.is_member && club.request_status === 'pending')
-              }
-              onClick={() => toggle_membership(club)}
-            >
-              {updating_club_id === club.id
-                ? 'Updating…'
-                : club.is_member
-                  ? 'Leave club'
-                  : club.request_status === 'pending'
-                    ? 'Request pending'
-                    : club.request_status === 'rejected'
-                      ? 'Request to join again'
-                      : 'Request to join'}
-            </button>
+            {!(club.is_member && club.role === 'president') && (
+              <button
+                type="button"
+                disabled={
+                  updating_club_id !== null ||
+                  updating_member !== null ||
+                  (!club.is_member && club.request_status === 'pending')
+                }
+                onClick={() => toggle_membership(club)}
+              >
+                {updating_club_id === club.id
+                  ? 'Updating…'
+                  : club.is_member
+                    ? 'Leave club'
+                    : club.request_status === 'pending'
+                      ? 'Request pending'
+                      : club.request_status === 'rejected'
+                        ? 'Request to join again'
+                        : 'Request to join'}
+              </button>
+            )}
             {!club.is_member && club.request_status === 'pending' && (
               <p className="membership-role" role="status">
                 Your request is waiting for committee or president approval.

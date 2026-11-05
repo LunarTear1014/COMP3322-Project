@@ -143,7 +143,7 @@ needed for local development.
 | ------ | ----------------------------- | ------------------------------------------ |
 | `GET`  | `/api/health`                 | Confirm API-to-MySQL connectivity          |
 | `GET`  | `/api/events`                 | Browse saved events                        |
-| `POST` | `/api/events`                 | Create an event and venue booking together |
+| `POST` | `/api/events`                 | Create an event and venue booking together (committee or president of the club) |
 | `GET`  | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date         |
 | `GET`  | `/api/clubs`                  | Browse clubs and your membership roles     |
 | `POST` | `/api/clubs`                  | Create a club (creator becomes president)   |
@@ -184,6 +184,10 @@ creates a regular membership, while a rejected user can request again.
 
 The API validates requests and returns `422` for invalid input and `409` when a
 venue time slot is already booked.
+Only signed-in committee members and presidents can book venues and create
+events for clubs where they hold those roles. A user with those roles in
+multiple clubs can book for any of them; regular members can still join events
+but cannot make venue bookings.
 
 ## Verify the end-to-end flow
 

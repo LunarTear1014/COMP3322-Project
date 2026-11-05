@@ -81,6 +81,12 @@ router.delete("/api/events/:event_id/participation", async (req, res) => {
 
 // POST /api/events: book the venue and create the event in one transaction.
 router.post("/api/events", async (req, res) => {
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({
+      message: "Sign in as a committee member or president to book a venue.",
+    });
+  }
+
   const message = validate_event_input(req.body);
   if (message) {
     return invalid_request(res, message);
@@ -99,6 +105,7 @@ router.post("/api/events", async (req, res) => {
     timeslot,
     visibility,
     bounds,
+    user_id: req.session.user_id,
   });
 
   if (result.ok) {
@@ -106,6 +113,9 @@ router.post("/api/events", async (req, res) => {
   }
   if (result.reason === "conflict") {
     return res.status(409).json({ message: result.message });
+  }
+  if (result.reason === "forbidden") {
+    return res.status(403).json({ message: result.message });
   }
   if (result.reason === "database") {
     return database_error(res, result.error);

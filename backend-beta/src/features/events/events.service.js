@@ -156,6 +156,7 @@ async function create_event({
   timeslot,
   visibility,
   bounds,
+  user_id,
 }) {
   let connection;
   try {
@@ -163,12 +164,26 @@ async function create_event({
     await connection.beginTransaction();
 
     const [[club_row]] = await connection.query(
-      "SELECT id FROM clubs WHERE name = ?",
+      "SELECT id FROM clubs WHERE name = ? FOR UPDATE",
       [club],
     );
     if (!club_row) {
       await connection.rollback();
       return { ok: false, reason: "unknown_club", message: "Unknown club" };
+    }
+
+    const [[membership]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id = ? AND club_id = ? FOR UPDATE",
+      [user_id, club_row.id],
+    );
+    if (!["committee", "president"].includes(membership?.role)) {
+      await connection.rollback();
+      return {
+        ok: false,
+        reason: "forbidden",
+        message:
+          "Only committee members or the president can book a venue for this club.",
+      };
     }
 
     const [[venue_row]] = await connection.query(
