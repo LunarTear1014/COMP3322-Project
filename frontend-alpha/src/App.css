@@ -201,6 +201,11 @@ label {
   font-weight: 700;
 }
 
+.membership-role {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
 @media (max-width: 850px) {
   header {
     flex-wrap: wrap;

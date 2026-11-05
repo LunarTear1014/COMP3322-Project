@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router'
 import '../App.css'
 
-function EventsPage({ student_clubs }) {
+function EventsPage({ student_clubs, membership_error }) {
   const [search_term, set_search_term] = useState('')
   const [selected_event, set_selected_event] = useState(null)
-  const [joined_events, set_joined_events] = useState([])
+  const [participation_message, set_participation_message] = useState('')
+  const [updating_event_id, set_updating_event_id] = useState(null)
   const [event_status_filter, set_event_status_filter] = useState('Upcoming')
   const [events, set_events] = useState([])
   const [load_state, set_load_state] = useState('loading') // loading | ready | error
@@ -36,23 +37,64 @@ function EventsPage({ student_clubs }) {
     if (event.visibility === 'Public') {
       return true
     } else if (event.visibility === 'Members only') {
-      return student_clubs.includes(event.club)
+      return !membership_error && student_clubs.includes(event.club)
     }
     return false
   }
 
-  function toggle_join_event(event) {
-    if (!can_join_event(event)) {
-      alert('You cannot join this event because it is for members only.')
+  async function toggle_join_event(event) {
+    const joining = !event.is_joined
+    if (joining && !can_join_event(event)) {
+      set_participation_message(
+        'Join the organizing club before joining this members-only event.'
+      )
       return
     }
-    set_joined_events((prev_joined_events) => {
-      if (prev_joined_events.includes(event.id)) {
-        return prev_joined_events.filter((id) => id !== event.id)
-      } else {
-        return [...prev_joined_events, event.id]
+
+    set_updating_event_id(event.id)
+    set_participation_message('')
+    try {
+      const response = await fetch(
+        `/api/events/${event.id}/participation`,
+        { method: joining ? 'POST' : 'DELETE' }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || 'Could not update event participation.')
       }
-    })
+
+      const update_participation = (current_event) =>
+        current_event?.id === event.id
+          ? {
+              ...current_event,
+              is_joined: joining,
+              joined_count: current_event.joined_count + (joining ? 1 : -1),
+            }
+          : current_event
+      set_events((current_events) =>
+        current_events.map(update_participation)
+      )
+      set_selected_event(update_participation)
+
+      const events_response = await fetch('/api/events')
+      if (!events_response.ok) {
+        set_participation_message(
+          'Your signup was saved, but event details could not be refreshed.'
+        )
+        return
+      }
+      const updated_events = await events_response.json()
+      set_events(updated_events)
+      set_selected_event(
+        updated_events.find((updated_event) => updated_event.id === event.id)
+      )
+    } catch (error) {
+      set_participation_message(
+        error.message || 'Could not reach the server.'
+      )
+    } finally {
+      set_updating_event_id(null)
+    }
   }
 
   return (
@@ -62,11 +104,19 @@ function EventsPage({ student_clubs }) {
         <nav>
         <NavLink to="/events">Events</NavLink>
         <NavLink to="/profile">Profile</NavLink>
-        <NavLink to="/venues">Venues</NavLink>        </nav>
+        <NavLink to="/venues">Venues</NavLink>
+        <NavLink to="/clubs">Clubs</NavLink>
+        </nav>
       </header>
       <section>
         <p> Event Search </p>
-        <input 
+        {membership_error && (
+          <p className="message">
+            Could not load your memberships. Membership-only event access
+            cannot be checked.
+          </p>
+        )}
+        <input
           placeholder ="Search events for each club" 
           value={search_term}
           onChange={(e) => set_search_term(e.target.value)}
@@ -98,7 +148,8 @@ function EventsPage({ student_clubs }) {
             <h4>{event.title}</h4>
             <p>{event.date}, {event.timeslot}</p>
             <p>{event.venue}</p>
-            <button onClick={() => set_selected_event(event)}>View event</button>  
+              {event.is_joined && <p className="badge">Joined</p>}
+            <button onClick={() => set_selected_event(event)}>View event</button>
           </article>
         ))}
         {load_state === 'loading' && <p>Loading events…</p>}
@@ -116,14 +167,31 @@ function EventsPage({ student_clubs }) {
           <p>Visibility: {selected_event.visibility}</p>
           <p>Status: {selected_event.status}</p>
           <p>Joined Count: {selected_event.joined_count}</p>
-          <button onClick={() => toggle_join_event(selected_event)} disabled = {!can_join_event(selected_event)}>
-            {!can_join_event(selected_event) ? 'Members only' : joined_events.includes(selected_event.id) ? 'Leave Event' : 'Join Event'}
+          <button
+            onClick={() => toggle_join_event(selected_event)}
+            disabled={
+              updating_event_id === selected_event.id ||
+              (!selected_event.is_joined && !can_join_event(selected_event))
+            }
+          >
+            {updating_event_id === selected_event.id
+              ? 'Updating…'
+              : selected_event.is_joined
+                ? 'Leave Event'
+                : can_join_event(selected_event)
+                  ? 'Join Event'
+                  : 'Members only'}
           </button> 
-        {!can_join_event(selected_event) && (
+        {!selected_event.is_joined && !can_join_event(selected_event) && (
           <p className="message">
-            You cannot join this event because it is for members only.
+            {membership_error
+              ? 'Could not verify your club memberships.'
+              : 'You cannot join this event because it is for members only.'}
           </p>
-        )}          
+        )}
+        {participation_message && (
+          <p className="message">{participation_message}</p>
+        )}
         <button onClick={() => set_selected_event(null)}>Close details</button>  
         </section>  
       )}

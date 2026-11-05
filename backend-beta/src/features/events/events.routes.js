@@ -2,9 +2,22 @@ import { Router } from "express";
 import { invalid_request, database_error } from "../../shared/http.js";
 import { timeslot_bounds } from "../../shared/timeslots.js";
 import { validate_event_input } from "./events.validation.js";
-import { list_events, create_event } from "./events.service.js";
+import {
+  join_event,
+  leave_event,
+  list_events,
+  create_event,
+} from "./events.service.js";
 
 const router = Router();
+
+function parse_event_id(value) {
+  if (!/^[1-9]\d*$/.test(value)) {
+    return null;
+  }
+  const event_id = Number(value);
+  return Number.isSafeInteger(event_id) ? event_id : null;
+}
 
 // GET /api/events
 router.get("/api/events", async (_req, res) => {
@@ -12,6 +25,57 @@ router.get("/api/events", async (_req, res) => {
     res.json(await list_events());
   } catch (error) {
     database_error(res, error);
+  }
+});
+
+router.post("/api/events/:event_id/participation", async (req, res) => {
+  const event_id = parse_event_id(req.params.event_id);
+  if (event_id === null) {
+    return invalid_request(res, "Event ID must be a positive integer.");
+  }
+
+  try {
+    const result = await join_event(event_id);
+    if (result.ok) {
+      return res.status(201).json({ message: "You joined the event." });
+    }
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Event not found." });
+    }
+    if (result.reason === "membership_required") {
+      return res.status(403).json({
+        message: "Join the organizing club before joining this event.",
+      });
+    }
+    if (result.reason === "already_joined") {
+      return res.status(409).json({ message: "You already joined this event." });
+    }
+    if (result.reason === "unavailable") {
+      return res.status(409).json({ message: "This event is not available." });
+    }
+    return database_error(res, result.error);
+  } catch (error) {
+    return database_error(res, error);
+  }
+});
+
+router.delete("/api/events/:event_id/participation", async (req, res) => {
+  const event_id = parse_event_id(req.params.event_id);
+  if (event_id === null) {
+    return invalid_request(res, "Event ID must be a positive integer.");
+  }
+
+  try {
+    const result = await leave_event(event_id);
+    if (result.ok) {
+      return res.status(204).end();
+    }
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Event not found." });
+    }
+    return res.status(409).json({ message: "You have not joined this event." });
+  } catch (error) {
+    return database_error(res, error);
   }
 });
 

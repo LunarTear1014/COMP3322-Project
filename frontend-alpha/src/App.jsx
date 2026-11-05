@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   BrowserRouter,
   Navigate,
@@ -10,6 +10,7 @@ import EventsPage from './pages/EventsPage'
 import ProfilePage from './pages/ProfilePage'
 import VenuePage from './pages/VenuePage'
 import BookingPage from './pages/BookingPage'
+import ClubsPage from './pages/ClubsPage'
 import './App.css'
 
 function PlaceholderPage({ title }) {
@@ -29,21 +30,39 @@ function PlaceholderPage({ title }) {
 }
 
 function App() {
-  const [student_clubs, set_student_clubs] = useState([
-    'Photography Society',
-  ])
+  const [membership_state, set_membership_state] = useState({
+    memberships: [],
+    error: false,
+  })
 
-  function toggle_club_membership(club) {
-    set_student_clubs((current_clubs) => {
-      if (current_clubs.includes(club)) {
-        return current_clubs.filter(
-          (current_club) => current_club !== club
-        )
+  const update_memberships = useCallback((memberships) => {
+    set_membership_state({ memberships, error: false })
+  }, [])
+
+  useEffect(() => {
+    let active = true
+
+    async function load_memberships() {
+      try {
+        const response = await fetch('/api/memberships')
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json()
+        if (active) set_membership_state({ memberships: data, error: false })
+      } catch {
+        if (active) set_membership_state({ memberships: [], error: true })
       }
+    }
 
-      return [...current_clubs, club]
-    })
-  }
+    load_memberships()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const student_clubs = membership_state.memberships.map(
+    (membership) => membership.name
+  )
+
   return (
     <BrowserRouter>
       <Routes>
@@ -51,16 +70,19 @@ function App() {
 
         <Route
           path="/events"
-          element={<EventsPage student_clubs={student_clubs} />}
+          element={
+            <EventsPage
+              student_clubs={student_clubs}
+              membership_error={membership_state.error}
+            />
+          }
         />
 
+        <Route path="/profile" element={<ProfilePage />} />
         <Route
-          path="/profile"
+          path="/clubs"
           element={
-            <ProfilePage
-              student_clubs={student_clubs}
-              onToggleClub={toggle_club_membership}
-            />
+            <ClubsPage onMembershipsChange={update_memberships} />
           }
         />
         <Route

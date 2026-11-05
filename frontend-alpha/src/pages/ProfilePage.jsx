@@ -2,13 +2,7 @@ import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router'
 import '../App.css'
 
-const all_clubs = [
-  'Photography Society',
-  'Film Society',
-  'Debate Club',
-]
-
-function ProfilePage({ student_clubs, onToggleClub }) {
+function ProfilePage() {
   const [profile, set_profile] = useState({
     name: 'Charlie Chan',
     email: 'charlie@example.com',
@@ -59,6 +53,7 @@ function ProfilePage({ student_clubs, onToggleClub }) {
           <NavLink to="/events">Events</NavLink>
           <NavLink to="/profile">Profile</NavLink>
           <NavLink to="/venues">Venues</NavLink>
+          <NavLink to="/clubs">Clubs</NavLink>
         </nav>
       </header>
 
@@ -95,25 +90,6 @@ function ProfilePage({ student_clubs, onToggleClub }) {
           </p>
         )}
 
-        <section>
-        <p>Club memberships</p>
-        <h2>Join campus clubs</h2>
-
-        {all_clubs.map((club) => (
-            <div className="row" key={club}>
-            <span>{club}</span>
-
-            <button
-                type="button"
-                onClick={() => onToggleClub(club)}
-            >
-                {student_clubs.includes(club)
-                ? 'Leave club'
-                : 'Join club'}
-            </button>
-            </div>
-        ))}
-        </section>
       </section>
     </main>
   )

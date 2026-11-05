@@ -1,6 +1,8 @@
 import pool from "../../config/db.js";
 import { today } from "../../shared/timeslots.js";
 
+const demo_user_id = Number(process.env.DEMO_USER_ID || 1);
+
 function display_visibility(visibility) {
   return visibility === "members_only" ? "Members only" : "Public";
 }
@@ -24,6 +26,7 @@ function event_response(row) {
     description: row.description,
     visibility: display_visibility(row.visibility),
     joined_count: Number(row.joined_count),
+    is_joined: Boolean(row.is_joined),
     status: row.date >= today() ? "Upcoming" : "Past",
   };
 }
@@ -40,18 +43,103 @@ async function list_events() {
         e.visibility,
         c.name AS club,
         v.name AS venue,
-        COUNT(CASE WHEN p.status = 'joined' THEN 1 END) AS joined_count
+        (SELECT COUNT(*)
+         FROM participations p
+         WHERE p.event_id = e.id AND p.status = 'joined') AS joined_count,
+        EXISTS(
+          SELECT 1
+          FROM participations mine
+          WHERE mine.event_id = e.id AND mine.user_id = ? AND mine.status = 'joined'
+        ) AS is_joined
       FROM events e
       JOIN clubs c ON c.id = e.club_id
       JOIN bookings b ON b.id = e.booking_id
       JOIN venues v ON v.id = b.venue_id
-      LEFT JOIN participations p ON p.event_id = e.id
       WHERE e.status = 'published'
-      GROUP BY e.id, e.title, e.description, e.start_time, e.end_time,
-        e.visibility, c.name, v.name
       ORDER BY e.start_time ASC
-    `);
+    `, [demo_user_id]);
   return rows.map(event_response);
+}
+
+async function join_event(event_id) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [[event]] = await connection.query(
+      "SELECT id, club_id, visibility, status FROM events WHERE id = ? FOR UPDATE",
+      [event_id],
+    );
+    if (!event) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+    if (event.status !== "published") {
+      await connection.rollback();
+      return { ok: false, reason: "unavailable" };
+    }
+
+    if (event.visibility === "members_only") {
+      const [[membership]] = await connection.query(
+        "SELECT user_id FROM memberships WHERE user_id = ? AND club_id = ?",
+        [demo_user_id, event.club_id],
+      );
+      if (!membership) {
+        await connection.rollback();
+        return { ok: false, reason: "membership_required" };
+      }
+    }
+
+    const [[participation]] = await connection.query(
+      "SELECT status FROM participations WHERE user_id = ? AND event_id = ? FOR UPDATE",
+      [demo_user_id, event_id],
+    );
+    if (participation?.status === "joined") {
+      await connection.rollback();
+      return { ok: false, reason: "already_joined" };
+    }
+    if (participation) {
+      await connection.query(
+        `UPDATE participations
+         SET status = 'joined', joined_at = CURRENT_TIMESTAMP, left_at = NULL
+         WHERE user_id = ? AND event_id = ?`,
+        [demo_user_id, event_id],
+      );
+    } else {
+      await connection.query(
+        "INSERT INTO participations (user_id, event_id) VALUES (?, ?)",
+        [demo_user_id, event_id],
+      );
+    }
+
+    await connection.commit();
+    return { ok: true };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    return { ok: false, reason: "database", error };
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+async function leave_event(event_id) {
+  const [result] = await pool.query(
+    `UPDATE participations
+     SET status = 'left', left_at = CURRENT_TIMESTAMP
+     WHERE user_id = ? AND event_id = ? AND status = 'joined'`,
+    [demo_user_id, event_id],
+  );
+  if (result.affectedRows > 0) {
+    return { ok: true };
+  }
+
+  const [[event]] = await pool.query("SELECT id FROM events WHERE id = ?", [
+    event_id,
+  ]);
+  return event
+    ? { ok: false, reason: "not_joined" }
+    : { ok: false, reason: "not_found" };
 }
 
 // Book the venue and create the event in one transaction. Returns
@@ -154,4 +242,4 @@ async function create_event({
   }
 }
 
-export { list_events, create_event };
+export { join_event, leave_event, list_events, create_event };

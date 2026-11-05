@@ -74,6 +74,7 @@ function BookingPage() {
           <NavLink to="/events">Events</NavLink>
           <NavLink to="/profile">Profile</NavLink>
           <NavLink to="/venues">Venues</NavLink>
+          <NavLink to="/clubs">Clubs</NavLink>
         </nav>
       </header>
 
