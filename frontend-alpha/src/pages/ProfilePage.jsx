@@ -19,7 +19,7 @@ function ProfilePage({ student_clubs, onToggleClub }) {
   useEffect(() => {
     async function load_profile() {
       try {
-        const response = await fetch('/api/profile')
+        const response = await fetch('/api/user/me')
         if (response.ok) set_profile(await response.json())
       } catch {
         // keep the default values if the server isn't reachable
@@ -38,7 +38,7 @@ function ProfilePage({ student_clubs, onToggleClub }) {
   async function handle_submit(event) {
     event.preventDefault()
     try {
-      const response = await fetch('/api/profile', {
+      const response = await fetch('/api/user/me', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profile),
