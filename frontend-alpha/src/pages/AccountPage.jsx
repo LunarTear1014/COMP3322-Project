@@ -28,8 +28,24 @@ function AccountPage() {
     confirmation: '',
   })
   const [message, set_message] = useState('')
+  const [message_type, set_message_type] = useState('')
   const [loading, set_loading] = useState(true)
   const [submitting, set_submitting] = useState(false)
+
+  function show_error(text) {
+    set_message(text)
+    set_message_type('error')
+  }
+
+  function show_success(text) {
+    set_message(text)
+    set_message_type('success')
+  }
+
+  function clear_message() {
+    set_message('')
+    set_message_type('')
+  }
 
   useEffect(() => {
     let active = true
@@ -49,7 +65,7 @@ function AccountPage() {
         }
       })
       .catch((error) => {
-        if (active) set_message(error.message || 'Could not reach the server.')
+        if (active) show_error(error.message || 'Could not reach the server.')
       })
       .finally(() => {
         if (active) set_loading(false)
@@ -69,9 +85,9 @@ function AccountPage() {
 
   async function handle_submit(event) {
     event.preventDefault()
-    set_message('')
+    clear_message()
     if (mode === 'register' && form.password !== form.confirm_password) {
-      set_message('Passwords do not match.')
+      show_error('Passwords do not match.')
       return
     }
 
@@ -87,7 +103,7 @@ function AccountPage() {
       )
       const data = await response.json()
       if (!response.ok) {
-        set_message(data.message || 'Could not sign in.')
+        show_error(data.message || 'Could not sign in.')
         return
       }
       set_user(data)
@@ -97,7 +113,7 @@ function AccountPage() {
       })
       set_form(empty_registration)
     } catch {
-      set_message('Could not reach the server.')
+      show_error('Could not reach the server.')
     } finally {
       set_submitting(false)
     }
@@ -105,7 +121,7 @@ function AccountPage() {
 
   async function handle_update_details(event) {
     event.preventDefault()
-    set_message('')
+    clear_message()
     set_submitting(true)
     try {
       const response = await fetch('/api/auth/me', {
@@ -115,7 +131,7 @@ function AccountPage() {
       })
       const data = response.status === 204 ? null : await response.json()
       if (!response.ok) {
-        set_message(data.message || 'Could not update your account.')
+        show_error(data.message || 'Could not update your account.')
         return
       }
       set_user(data)
@@ -123,9 +139,9 @@ function AccountPage() {
         name: data.name,
         email: data.email,
       })
-      set_message('Account details updated.')
+      show_success('Account details updated.')
     } catch {
-      set_message('Could not reach the server.')
+      show_error('Could not reach the server.')
     } finally {
       set_submitting(false)
     }
@@ -133,9 +149,9 @@ function AccountPage() {
 
   async function handle_change_password(event) {
     event.preventDefault()
-    set_message('')
+    clear_message()
     if (password_form.new_password !== password_form.confirm_password) {
-      set_message('New passwords do not match.')
+      show_error('New passwords do not match.')
       return
     }
 
@@ -154,7 +170,7 @@ function AccountPage() {
       })
       const data = await response.json()
       if (!response.ok) {
-        set_message(data.message || 'Could not change your password.')
+        show_error(data.message || 'Could not change your password.')
         return
       }
       set_user(data)
@@ -163,9 +179,9 @@ function AccountPage() {
         new_password: '',
         confirm_password: '',
       })
-      set_message('Password changed.')
+      show_success('Password changed.')
     } catch {
-      set_message('Could not reach the server.')
+      show_error('Could not reach the server.')
     } finally {
       set_submitting(false)
     }
@@ -173,9 +189,9 @@ function AccountPage() {
 
   async function handle_delete_account(event) {
     event.preventDefault()
-    set_message('')
+    clear_message()
     if (delete_form.confirmation !== 'DELETE') {
-      set_message('Type DELETE to confirm account deletion.')
+      show_error('Type DELETE to confirm account deletion.')
       return
     }
 
@@ -190,7 +206,7 @@ function AccountPage() {
       })
       if (!response.ok) {
         const data = await response.json()
-        set_message(data.message || 'Could not delete your account.')
+        show_error(data.message || 'Could not delete your account.')
         return
       }
       set_user(null)
@@ -203,16 +219,16 @@ function AccountPage() {
         confirm_password: '',
       })
       set_delete_form({ current_password: '', confirmation: '' })
-      set_message('Your account and associated memberships and event signups were deleted.')
+      show_success('Your account and associated memberships and event signups were deleted.')
     } catch {
-      set_message('Could not reach the server.')
+      show_error('Could not reach the server.')
     } finally {
       set_submitting(false)
     }
   }
 
   async function handle_logout() {
-    set_message('')
+    clear_message()
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST' })
       if (!response.ok) throw new Error('Could not log out.')
@@ -227,14 +243,14 @@ function AccountPage() {
       })
       set_delete_form({ current_password: '', confirmation: '' })
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server.')
     }
   }
 
   function change_mode(next_mode) {
     set_mode(next_mode)
     set_form(empty_registration)
-    set_message('')
+    clear_message()
   }
 
   return (
@@ -489,7 +505,15 @@ function AccountPage() {
             </p>
           </>
         )}
-        {message && <p className="message">{message}</p>}
+        {message && (
+          <p
+            className={`message ${message_type === 'error' ? 'error-message' : ''}`}
+            role={message_type === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {message}
+          </p>
+        )}
       </section>
     </main>
   )

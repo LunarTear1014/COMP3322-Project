@@ -29,6 +29,7 @@ function ClubsPage({ onMembershipsChange }) {
   const [memberships, set_memberships] = useState([])
   const [logged_in, set_logged_in] = useState(false)
   const [load_state, set_load_state] = useState('loading')
+  const [load_error, set_load_error] = useState('')
   const [updating_club_id, set_updating_club_id] = useState(null)
   const [updating_member, set_updating_member] = useState(null)
   const [committee_members, set_committee_members] = useState({})
@@ -39,6 +40,22 @@ function ClubsPage({ onMembershipsChange }) {
   const [transfer_forms, set_transfer_forms] = useState({})
   const [delete_confirmations, set_delete_confirmations] = useState({})
   const [message, set_message] = useState('')
+  const [message_type, set_message_type] = useState('')
+
+  function show_error(text) {
+    set_message(text)
+    set_message_type('error')
+  }
+
+  function show_success(text) {
+    set_message(text)
+    set_message_type('success')
+  }
+
+  function clear_message() {
+    set_message('')
+    set_message_type('')
+  }
 
   useEffect(() => {
     let active = true
@@ -56,9 +73,13 @@ function ClubsPage({ onMembershipsChange }) {
         set_memberships(next_memberships)
         set_logged_in(Boolean(account))
         onMembershipsChange(next_memberships)
+        set_load_error('')
         set_load_state('ready')
-      } catch {
-        if (active) set_load_state('error')
+      } catch (error) {
+        if (active) {
+          set_load_error(error.message || 'Could not load clubs. Please try again.')
+          set_load_state('error')
+        }
       }
     }
 
@@ -81,6 +102,18 @@ function ClubsPage({ onMembershipsChange }) {
     onMembershipsChange(next_memberships)
   }
 
+  async function retry_load_clubs() {
+    set_load_state('loading')
+    set_load_error('')
+    try {
+      await reload_clubs_and_memberships()
+      set_load_state('ready')
+    } catch (error) {
+      set_load_error(error.message || 'Could not load clubs. Please try again.')
+      set_load_state('error')
+    }
+  }
+
   async function load_club_members(club_id) {
     if (
       Object.hasOwn(committee_members, club_id) ||
@@ -101,7 +134,9 @@ function ClubsPage({ onMembershipsChange }) {
     } catch (error) {
       set_roster_errors((current) => ({
         ...current,
-        [club_id]: error.message || 'Could not reach the server.',
+        [club_id]:
+          error.message ||
+          'Could not load club members. Check your connection and try again.',
       }))
     } finally {
       set_roster_loading((current) => ({ ...current, [club_id]: false }))
@@ -110,7 +145,7 @@ function ClubsPage({ onMembershipsChange }) {
 
   async function toggle_membership(club) {
     set_updating_club_id(club.id)
-    set_message('')
+    clear_message()
     try {
       const response = await fetch(
         `/api/clubs/${club.id}/membership`,
@@ -126,13 +161,13 @@ function ClubsPage({ onMembershipsChange }) {
         delete next[club.id]
         return next
       })
-      set_message(
+      show_success(
         club.is_member
           ? `You left ${club.name}.`
           : `You joined ${club.name}.`,
       )
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server. Please try again.')
     } finally {
       set_updating_club_id(null)
     }
@@ -141,7 +176,7 @@ function ClubsPage({ onMembershipsChange }) {
   async function promote_member(club, member) {
     const key = `${club.id}:${member.user_id}`
     set_updating_member(key)
-    set_message('')
+    clear_message()
     try {
       const response = await fetch(
         `/api/clubs/${club.id}/members/${member.user_id}/committee`,
@@ -160,9 +195,9 @@ function ClubsPage({ onMembershipsChange }) {
         ...current,
         [club.id]: roster,
       }))
-      set_message(`${member.name} is now on the ${club.name} committee.`)
+      show_success(`${member.name} is now on the ${club.name} committee.`)
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server. Please try again.')
     } finally {
       set_updating_member(null)
     }
@@ -171,7 +206,7 @@ function ClubsPage({ onMembershipsChange }) {
   async function demote_member(club, member) {
     const key = `${club.id}:${member.user_id}`
     set_updating_member(key)
-    set_message('')
+    clear_message()
     try {
       const response = await fetch(
         `/api/clubs/${club.id}/members/${member.user_id}/committee`,
@@ -190,9 +225,9 @@ function ClubsPage({ onMembershipsChange }) {
         ...current,
         [club.id]: roster,
       }))
-      set_message(`${member.name} is now a regular member of ${club.name}.`)
+      show_success(`${member.name} is now a regular member of ${club.name}.`)
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server. Please try again.')
     } finally {
       set_updating_member(null)
     }
@@ -200,7 +235,7 @@ function ClubsPage({ onMembershipsChange }) {
 
   async function leave_committee(club) {
     set_updating_club_id(club.id)
-    set_message('')
+    clear_message()
     try {
       const response = await fetch(`/api/clubs/${club.id}/committee`, {
         method: 'DELETE',
@@ -215,9 +250,9 @@ function ClubsPage({ onMembershipsChange }) {
         delete next[club.id]
         return next
       })
-      set_message(`You left the ${club.name} committee and remain a member.`)
+      show_success(`You left the ${club.name} committee and remain a member.`)
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server. Please try again.')
     } finally {
       set_updating_club_id(null)
     }
@@ -225,7 +260,7 @@ function ClubsPage({ onMembershipsChange }) {
 
   async function create_new_club(event) {
     event.preventDefault()
-    set_message('')
+    clear_message()
     try {
       const response = await fetch('/api/clubs', {
         method: 'POST',
@@ -238,16 +273,16 @@ function ClubsPage({ onMembershipsChange }) {
       }
       set_new_club({ name: '', description: '' })
       await reload_clubs_and_memberships()
-      set_message(`${data.name} was created. You are its president.`)
+      show_success(`${data.name} was created. You are its president.`)
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server. Please try again.')
     }
   }
 
   async function transfer_presidency(club) {
     const form = transfer_forms[club.id] || {}
     set_updating_club_id(club.id)
-    set_message('')
+    clear_message()
     try {
       const response = await fetch(`/api/clubs/${club.id}/presidency`, {
         method: 'POST',
@@ -267,9 +302,9 @@ function ClubsPage({ onMembershipsChange }) {
         delete next[club.id]
         return next
       })
-      set_message(`Presidency of ${club.name} was transferred.`)
+      show_success(`Presidency of ${club.name} was transferred.`)
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server. Please try again.')
     } finally {
       set_updating_club_id(null)
     }
@@ -277,7 +312,7 @@ function ClubsPage({ onMembershipsChange }) {
 
   async function delete_club(club) {
     set_updating_club_id(club.id)
-    set_message('')
+    clear_message()
     try {
       const response = await fetch(`/api/clubs/${club.id}`, {
         method: 'DELETE',
@@ -296,9 +331,9 @@ function ClubsPage({ onMembershipsChange }) {
         return next
       })
       await reload_clubs_and_memberships()
-      set_message(`${club.name} and its events and bookings were deleted.`)
+      show_success(`${club.name} and its events and bookings were deleted.`)
     } catch (error) {
-      set_message(error.message || 'Could not reach the server.')
+      show_error(error.message || 'Could not reach the server. Please try again.')
     } finally {
       set_updating_club_id(null)
     }
@@ -316,12 +351,27 @@ function ClubsPage({ onMembershipsChange }) {
         </nav>
       </header>
 
+      {message && (
+        <p
+          className={`message ${message_type === 'error' ? 'error-message' : ''}`}
+          role={message_type === 'error' ? 'alert' : 'status'}
+          aria-live="polite"
+        >
+          {message}
+        </p>
+      )}
+
       <section>
         <p>Campus clubs</p>
         <h2>Find a club to join</h2>
-        {logged_in && (
-          <details className="club-roster">
+        <details className="club-roster">
             <summary>Create a new club</summary>
+            {!logged_in && (
+              <p className="field-hint">
+                You need to sign in before creating a club.{' '}
+                <NavLink to="/account">Sign in or create an account</NavLink>.
+              </p>
+            )}
             <form onSubmit={create_new_club}>
               <label>
                 Club name
@@ -354,11 +404,15 @@ function ClubsPage({ onMembershipsChange }) {
                 Create club
               </button>
             </form>
-          </details>
-        )}
+        </details>
         {load_state === 'loading' && <p>Loading clubs…</p>}
         {load_state === 'error' && (
-          <p className="message">Could not load clubs. Please try again.</p>
+          <div className="message error-message" role="alert">
+            <p>{load_error}</p>
+            <button type="button" onClick={retry_load_clubs}>
+              Try again
+            </button>
+          </div>
         )}
         {load_state === 'ready' && clubs.length === 0 && (
           <p>No clubs are available.</p>
@@ -626,7 +680,6 @@ function ClubsPage({ onMembershipsChange }) {
         ))}
       </section>
 
-      {message && <p className="message">{message}</p>}
     </main>
   )
 }

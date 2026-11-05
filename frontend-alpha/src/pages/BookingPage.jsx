@@ -28,7 +28,9 @@ function BookingPage() {
   })
 
   const [poster_name, set_poster_name] = useState('')
-  const [success_message, set_success_message] = useState('')
+  const [message, set_message] = useState('')
+  const [message_type, set_message_type] = useState('')
+  const [submitting, set_submitting] = useState(false)
 
   function handle_change(event) {
     set_form({
@@ -39,12 +41,16 @@ function BookingPage() {
 
   async function handle_submit(event) {
     event.preventDefault()
+    set_message('')
+    set_message_type('')
 
     if (!form.venue || !form.timeslot) {
-      set_success_message('Please select a venue and timeslot.')
+      set_message('Please select a venue and timeslot.')
+      set_message_type('error')
       return
     }
 
+    set_submitting(true)
     try {
       const response = await fetch('/api/events', {
         method: 'POST',
@@ -54,14 +60,19 @@ function BookingPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        set_success_message(data.message)   // e.g. "Lok Yew Hall is already booked on ..."
+        set_message(data.message || 'Could not create the event. Please check the details and try again.')
+        set_message_type('error')
         return
       }
-      set_success_message(
+      set_message(
         `${data.title} has been created and the venue booking is confirmed.`
       )
+      set_message_type('success')
     } catch {
-      set_success_message('Could not reach the server.')
+      set_message('Could not reach the server. Please try again.')
+      set_message_type('error')
+    } finally {
+      set_submitting(false)
     }
   }
 
@@ -182,14 +193,18 @@ function BookingPage() {
             <p>Selected poster: {poster_name}</p>
           )}
 
-          <button type="submit">
-            Book venue and create event
+          <button type="submit" disabled={submitting}>
+            {submitting ? 'Creating event…' : 'Book venue and create event'}
           </button>
         </form>
 
-        {success_message && (
-          <p className="message">
-            {success_message}
+        {message && (
+          <p
+            className={`message ${message_type === 'error' ? 'error-message' : ''}`}
+            role={message_type === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {message}
           </p>
         )}
       </section>

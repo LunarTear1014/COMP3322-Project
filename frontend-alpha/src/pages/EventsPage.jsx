@@ -6,6 +6,7 @@ function EventsPage({ student_clubs, membership_error }) {
   const [search_term, set_search_term] = useState('')
   const [selected_event, set_selected_event] = useState(null)
   const [participation_message, set_participation_message] = useState('')
+  const [participation_message_type, set_participation_message_type] = useState('')
   const [updating_event_id, set_updating_event_id] = useState(null)
   const [event_status_filter, set_event_status_filter] = useState('Upcoming')
   const [events, set_events] = useState([])
@@ -48,11 +49,13 @@ function EventsPage({ student_clubs, membership_error }) {
       set_participation_message(
         'Join the organizing club before joining this members-only event.'
       )
+      set_participation_message_type('error')
       return
     }
 
     set_updating_event_id(event.id)
     set_participation_message('')
+    set_participation_message_type('')
     try {
       const response = await fetch(
         `/api/events/${event.id}/participation`,
@@ -81,6 +84,7 @@ function EventsPage({ student_clubs, membership_error }) {
         set_participation_message(
           'Your signup was saved, but event details could not be refreshed.'
         )
+        set_participation_message_type('warning')
         return
       }
       const updated_events = await events_response.json()
@@ -92,6 +96,7 @@ function EventsPage({ student_clubs, membership_error }) {
       set_participation_message(
         error.message || 'Could not reach the server.'
       )
+      set_participation_message_type('error')
     } finally {
       set_updating_event_id(null)
     }
@@ -111,7 +116,7 @@ function EventsPage({ student_clubs, membership_error }) {
       <section>
         <p> Event Search </p>
         {membership_error && (
-          <p className="message">
+          <p className="message error-message" role="alert">
             Could not load your memberships. Membership-only event access
             cannot be checked.
           </p>
@@ -153,7 +158,11 @@ function EventsPage({ student_clubs, membership_error }) {
           </article>
         ))}
         {load_state === 'loading' && <p>Loading events…</p>}
-        {load_state === 'error' && <p className="message">Could not reach the server.</p>}
+        {load_state === 'error' && (
+          <p className="message error-message" role="alert">
+            Could not load events. Check your connection and try again.
+          </p>
+        )}
         {load_state === 'ready' && visible_events.length === 0 && <p>No events found</p>}
       </section>  
       {selected_event && (
@@ -183,14 +192,20 @@ function EventsPage({ student_clubs, membership_error }) {
                   : 'Members only'}
           </button> 
         {!selected_event.is_joined && !can_join_event(selected_event) && (
-          <p className="message">
+          <p className="message error-message" role="alert">
             {membership_error
               ? 'Could not verify your club memberships.'
               : 'You cannot join this event because it is for members only.'}
           </p>
         )}
         {participation_message && (
-          <p className="message">{participation_message}</p>
+          <p
+            className={`message ${participation_message_type === 'error' ? 'error-message' : ''}`}
+            role={participation_message_type === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {participation_message}
+          </p>
         )}
         <button onClick={() => set_selected_event(null)}>Close details</button>  
         </section>  

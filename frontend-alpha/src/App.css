@@ -201,6 +201,18 @@ label {
   font-weight: 700;
 }
 
+.error-message {
+  color: #b42318;
+}
+
+.error-message button {
+  background: #b42318;
+}
+
+.error-message button:hover {
+  background: #8f1d14;
+}
+
 .membership-role {
   color: var(--muted);
   text-transform: capitalize;

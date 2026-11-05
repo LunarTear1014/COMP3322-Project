@@ -50,7 +50,7 @@ router.get("/api/memberships", async (req, res) => {
 
 router.post("/api/clubs", async (req, res) => {
   if (!Number.isSafeInteger(req.session?.user_id)) {
-    return res.status(401).json({ message: "Log in to create a club." });
+    return res.status(401).json({ message: "Please sign in to create a club." });
   }
   const { name, description = "" } = req.body ?? {};
   if (
@@ -302,7 +302,9 @@ router.post("/api/clubs/:club_id/presidency", async (req, res) => {
     if (result.reason === "cannot_transfer_to_self") {
       return res.status(400).json({ message: "Choose another committee member." });
     }
-    return res.status(422).json({ message: "The club name confirmation did not match." });
+    return res.status(422).json({
+      message: "The club name you entered is incorrect. Please type the exact club name.",
+    });
   } catch (error) {
     return database_error(res, error);
   }
@@ -338,7 +340,9 @@ router.delete("/api/clubs/:club_id", async (req, res) => {
     if (result.reason === "forbidden") {
       return res.status(403).json({ message: "Only the club president can delete the club." });
     }
-    return res.status(422).json({ message: "The club name confirmation did not match." });
+    return res.status(422).json({
+      message: "The club name you entered is incorrect. Please type the exact club name.",
+    });
   } catch (error) {
     return database_error(res, error);
   }

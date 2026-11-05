@@ -29,7 +29,7 @@ function VenuePage() {
   )
 
   if (load_state === 'error') {
-    return <main><p className="message">Could not reach the server.</p></main>
+    return <main><p className="message error-message" role="alert">Could not load venue availability. Check your connection and try again.</p></main>
   }
   if (!selected_venue) {
     return <main><p>Loading venues…</p></main>
