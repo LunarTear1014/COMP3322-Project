@@ -152,8 +152,6 @@ needed for local development.
 | `POST` | `/api/auth/login`             | Log in with email and password             |
 | `GET`  | `/api/auth/me`                | Return the currently logged-in account     |
 | `POST` | `/api/auth/logout`            | Log out                                    |
-| `GET`  | `/api/user/me`                | Load the current user's profile             |
-| `PUT`  | `/api/user/me`                | Update the current user's profile           |
 
 Passwords are stored as salted scrypt hashes. Login state uses a local
 in-memory session and is cleared when the API restarts; account records remain

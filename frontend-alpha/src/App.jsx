@@ -7,7 +7,6 @@ import {
   Routes,
 } from 'react-router'
 import EventsPage from './pages/EventsPage'
-import ProfilePage from './pages/ProfilePage'
 import VenuePage from './pages/VenuePage'
 import BookingPage from './pages/BookingPage'
 import ClubsPage from './pages/ClubsPage'
@@ -79,7 +78,6 @@ function App() {
           }
         />
 
-        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route
           path="/clubs"
