@@ -1,9 +1,10 @@
-# COMP3322 Project — Local setup
+# COMP3322 Project
 
-The active ClubSpace application is split into three parts:
+The ClubSpace workspace contains the beta frontend, the original frontend, and the backend:
 
 ```text
-frontend-alpha/  React + Vite single-page application
+frontend-beta/   Latest React + Vite application
+frontend-alpha/  Original React + Vite application
 backend-beta/    Express API and MySQL schema/demo data
 ```
 
@@ -12,6 +13,112 @@ The local request flow is:
 ```text
 React frontend (port 5173) → Vite /api proxy → Express API (port 3000) → MySQL
 ```
+
+## Deploy to the Group 19 server
+
+Open **http://c3322-pg19.cs.hku.hk** over HKUVPN after deployment.
+Compose builds the beta frontend and Express backend on the Ubuntu server and
+runs them with MySQL. Only HTTP on port 80 is published. The MySQL data lives
+in the Compose `db_data` volume.
+
+1. Connect to HKUVPN, then paste this block on your Mac. It uploads the
+   archive and opens an SSH session on the Group 19 server.
+
+   ```bash
+   workspace='/Volumes/Crucial P510 Gen 5 2TB NVMe 2280 M.2/Development/ClubSpace'
+   scp -i "$workspace/.ssh/id_rsa" -o IdentitiesOnly=yes \
+     -o "UserKnownHostsFile=$workspace/.ssh/known_hosts" \
+     "$workspace/clubspace-pg19-server.tar.gz" ubuntu@c3322-pg19.cs.hku.hk:~/ &&
+   ssh -i "$workspace/.ssh/id_rsa" -o IdentitiesOnly=yes \
+     -o "UserKnownHostsFile=$workspace/.ssh/known_hosts" ubuntu@c3322-pg19.cs.hku.hk
+   ```
+
+2. Paste this block into the SSH session. It unpacks the archive, generates
+   the deployment credentials, starts Compose, and provisions a regular
+   member and a committee account. Later runs reuse the existing `.env`
+   and starter accounts.
+
+   ```bash
+   (
+     set -eu
+     umask 022
+     tar -xzf "$HOME/clubspace-pg19-server.tar.gz" -C "$HOME"
+     cd "$HOME/clubspace-pg19"
+     if [ ! -e .env ]; then
+       db_root_password=$(openssl rand -hex 24)
+       db_app_password=$(openssl rand -hex 24)
+       app_session_secret=$(openssl rand -hex 32)
+       (
+         umask 077
+         set -C
+         printf 'MYSQL_ROOT_PASSWORD=%s\nMYSQL_PASSWORD=%s\nSESSION_SECRET=%s\n' \
+           "$db_root_password" "$db_app_password" "$app_session_secret" > .env
+       )
+     fi
+     docker compose up -d --build
+     curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
+       --connect-timeout 2 --max-time 5 http://127.0.0.1/api/health
+     printf '\n'
+     if [ ! -e .starter-accounts-ready ]; then
+       docker compose exec -T backend node src/ops/provision-starter-accounts.js
+       touch .starter-accounts-ready
+     fi
+     docker compose ps
+   )
+   ```
+
+   When the block finishes, open the HTTP URL in a browser.
+
+### Starter accounts
+
+Both accounts belong to Photography Society. Use the initial password shared
+with the group.
+
+| Account | Club role |
+| --- | --- |
+| `member@clubspace.test` | Regular member |
+| `committee@clubspace.test` | Committee member with Organizer access |
+
+### Give another account organizer access
+
+The first boot creates the tables and starter clubs and venues. Register an
+account on the website, then paste this block in the SSH session and enter
+the account's email when prompted. Sign out and back in to see Organizer.
+
+```bash
+(
+  set -eu
+  cd "$HOME/clubspace-pg19"
+  printf 'Registered organizer email: '
+  IFS= read -r organizer_email
+  docker compose exec -T -e ORGANIZER_EMAIL="$organizer_email" \
+    backend node --input-type=module - <<'NODE'
+import pool from './src/config/db.js';
+
+try {
+  const email = process.env.ORGANIZER_EMAIL.trim().toLowerCase();
+  const [[target]] = await pool.execute(
+    "SELECT u.id AS user_id, c.id AS club_id FROM users u CROSS JOIN clubs c WHERE u.email = ? AND c.name = 'Photography Society'",
+    [email],
+  );
+  if (!target) throw new Error('Register this email on the website first.');
+  await pool.execute(
+    "INSERT INTO memberships (user_id, club_id, role) VALUES (?, ?, 'committee') ON DUPLICATE KEY UPDATE role = IF(role = 'president', 'president', 'committee')",
+    [target.user_id, target.club_id],
+  );
+  console.log('Organizer access is ready for Photography Society.');
+} finally {
+  await pool.end();
+}
+NODE
+)
+```
+
+Use `docker compose up -d --build` again for code updates. Keep the
+`db_data` volume and back it up before schema changes. The initialization
+scripts run only for an empty database.
+
+## Local development
 
 ## Prerequisites
 
@@ -126,16 +233,19 @@ Expected response:
 ### Terminal 2 — frontend
 
 ```bash
-cd frontend-alpha
-npm install
+cd frontend-beta
+npm ci
 npm run dev
 ```
 
 Open the URL printed by Vite, normally `http://localhost:5173`.
 
-`frontend-alpha/vite.config.js` proxies browser requests beginning with `/api`
-to the API at `http://localhost:3000`, so no API URL or browser CORS setup is
-needed for local development.
+The beta frontend proxies `/api` to `http://localhost:3000` for development and
+build preview. Set `CLUBSPACE_API_TARGET` before starting Vite if the backend runs
+elsewhere. The beta's live client uses the API provided by `backend-beta`.
+Creating an event books the venue and publishes immediately on this provider.
+See the [beta integration notes](frontend-beta/INTEGRATION.md) for fixture
+preview and the planned v1 workflows.
 
 ## API routes
 

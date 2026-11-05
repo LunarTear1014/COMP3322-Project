@@ -7,12 +7,10 @@ async function list_venues_with_availability(date) {
   const next_date = day_end.toISOString().slice(0, 10);
 
   const [venues] = await pool.query(
-    "SELECT id, name, location, capacity FROM venues ORDER BY id",
+    "SELECT id, name, location, capacity, description FROM venues ORDER BY id",
   );
   const [bookings] = await pool.query(
-    `SELECT venue_id,
-      TIME_FORMAT(start_time, '%H:%i') AS start_time,
-      TIME_FORMAT(end_time, '%H:%i') AS end_time
+    `SELECT venue_id, start_time, end_time
      FROM bookings
      WHERE status = 'confirmed' AND start_time < ? AND end_time > ?`,
     [`${next_date} 00:00:00`, `${date} 00:00:00`],
@@ -25,8 +23,8 @@ async function list_venues_with_availability(date) {
       const available = !bookings.some(
         (booking) =>
           booking.venue_id === venue.id &&
-          `${date} ${booking.start_time}:00` < slot.end &&
-          `${date} ${booking.end_time}:00` > slot.start,
+          booking.start_time < slot.end &&
+          booking.end_time > slot.start,
       );
       return { time, available };
     }),

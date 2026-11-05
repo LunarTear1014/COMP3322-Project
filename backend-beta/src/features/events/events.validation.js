@@ -32,13 +32,20 @@ function validate_event_input({ club, title, description, date, venue, timeslot,
   return null;
 }
 
-function validate_event_edit_input({ title, description, date, venue, timeslot, visibility }) {
+function validate_event_details({ title, description }) {
   if (typeof title !== "string" || title.trim() === "") {
     return "Event title is required";
   }
   if (typeof description !== "string" || description.trim() === "") {
     return "Event description is required";
   }
+  return null;
+}
+
+function validate_event_edit_input(input) {
+  const message = validate_event_details(input);
+  if (message) return message;
+  const { date, venue, timeslot, visibility } = input;
   if (typeof date !== "string" || !DATE_FORMAT.test(date)) {
     return "Date must look like 2026-10-06";
   }
@@ -57,4 +64,4 @@ function validate_event_edit_input({ title, description, date, venue, timeslot, 
   return null;
 }
 
-export { validate_event_input, validate_event_edit_input };
+export { validate_event_input, validate_event_edit_input, validate_event_details };

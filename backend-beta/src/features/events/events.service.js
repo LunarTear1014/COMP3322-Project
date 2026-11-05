@@ -27,13 +27,30 @@ function event_response(row) {
     capacity: Number(row.capacity),
     is_full: Number(row.joined_count) >= Number(row.capacity),
     is_joined: Boolean(row.is_joined),
-    participation_status: row.participation_status,
+    participation_status: row.participation_status === "left" ? null : row.participation_status,
+    registration_status: row.participation_status,
+    waitlisted_count: Number(row.waitlisted_count),
+    event_status: row.event_status,
+    booking_status: row.booking_status,
+    club_id: row.club_id,
+    venue_id: row.venue_id,
     can_cancel: Boolean(row.can_cancel),
     status: row.date >= today() ? "Upcoming" : "Past",
   };
 }
 
-async function list_events(user_id = null) {
+async function list_events(user_id = null, { event_id = null, managed = false } = {}) {
+  const organizer = "manager.role IN ('committee', 'president')";
+  let visibility = "e.status = 'published'";
+  const parameters = [user_id, user_id, user_id];
+  if (managed) {
+    visibility = organizer;
+  } else if (event_id !== null) {
+    visibility = `e.id = ? AND (e.status = 'published' OR ${organizer} OR EXISTS (
+      SELECT 1 FROM participations p WHERE p.event_id = e.id AND p.user_id = ?
+    ))`;
+    parameters.push(event_id, user_id);
+  }
   const [rows] = await pool.query(`
       SELECT
         e.id,
@@ -44,11 +61,17 @@ async function list_events(user_id = null) {
         TIME_FORMAT(e.end_time, '%H:%i') AS end_time,
         e.visibility,
         e.capacity,
+        e.status AS event_status,
+        b.status AS booking_status,
+        c.id AS club_id,
+        v.id AS venue_id,
         c.name AS club,
         v.name AS venue,
         (SELECT COUNT(*)
          FROM participations p
          WHERE p.event_id = e.id AND p.status = 'joined') AS joined_count,
+        (SELECT COUNT(*) FROM participations p
+         WHERE p.event_id = e.id AND p.status = 'waitlisted') AS waitlisted_count,
         EXISTS(
           SELECT 1
           FROM participations mine
@@ -57,21 +80,16 @@ async function list_events(user_id = null) {
         (SELECT mine.status
          FROM participations mine
          WHERE mine.event_id = e.id AND mine.user_id = ?
-           AND mine.status IN ('joined', 'waitlisted')
          LIMIT 1) AS participation_status,
-        EXISTS(
-          SELECT 1
-          FROM memberships manager
-          WHERE manager.club_id = e.club_id AND manager.user_id = ?
-            AND manager.role IN ('committee', 'president')
-        ) AS can_cancel
+        COALESCE(${organizer}, 0) AS can_cancel
       FROM events e
       JOIN clubs c ON c.id = e.club_id
       JOIN bookings b ON b.id = e.booking_id
       JOIN venues v ON v.id = b.venue_id
-      WHERE e.status = 'published'
-      ORDER BY e.start_time ASC
-    `, [user_id, user_id, user_id]);
+      LEFT JOIN memberships manager ON manager.club_id = e.club_id AND manager.user_id = ?
+      WHERE ${visibility}
+      ORDER BY e.start_time ASC, e.id ASC
+    `, parameters);
   return rows.map(event_response);
 }
 
@@ -148,7 +166,7 @@ async function list_event_participants(event_id, user_id) {
   return { ok: true, participants };
 }
 
-async function join_event(event_id, user_id) {
+async function join_event(event_id, user_id, allow_waitlist = true) {
   if (!Number.isSafeInteger(user_id)) {
     return { ok: false, reason: "unauthenticated" };
   }
@@ -201,6 +219,10 @@ async function join_event(event_id, user_id) {
       [event_id],
     );
     if (Number(signup_count.joined_count) >= Number(event.capacity)) {
+      if (!allow_waitlist) {
+        await connection.rollback();
+        return { ok: false, reason: "full" };
+      }
       if (participation) {
         await connection.query(
           `UPDATE participations
@@ -401,52 +423,59 @@ async function edit_event(
       return { ok: false, reason: "unavailable" };
     }
 
-    const [[venue_row]] = await connection.query(
-      "SELECT id, capacity FROM venues WHERE name = ?",
-      [venue],
-    );
-    if (!venue_row) {
-      await connection.rollback();
-      return { ok: false, reason: "unknown_venue" };
-    }
+    if (!bounds) {
+      await connection.query(
+        "UPDATE events SET title = ?, description = ? WHERE id = ?",
+        [title.trim(), description.trim(), event_id],
+      );
+    } else {
+      const [[venue_row]] = await connection.query(
+        "SELECT id, capacity FROM venues WHERE name = ?",
+        [venue],
+      );
+      if (!venue_row) {
+        await connection.rollback();
+        return { ok: false, reason: "unknown_venue" };
+      }
 
-    const [conflicts] = await connection.query(
-      `SELECT id FROM bookings
-       WHERE venue_id = ? AND status = 'confirmed' AND id <> ?
-         AND start_time < ? AND end_time > ?
-       FOR UPDATE`,
-      [venue_row.id, event.booking_id, bounds.end, bounds.start],
-    );
-    if (conflicts.length > 0) {
-      await connection.rollback();
-      return {
-        ok: false,
-        reason: "conflict",
-        message: `${venue} is already booked for the selected date and timeslot.`,
-      };
-    }
+      const [conflicts] = await connection.query(
+        `SELECT id FROM bookings
+         WHERE venue_id = ? AND status = 'confirmed' AND id <> ?
+           AND start_time < ? AND end_time > ?
+         FOR UPDATE`,
+        [venue_row.id, event.booking_id, bounds.end, bounds.start],
+      );
+      if (conflicts.length > 0) {
+        await connection.rollback();
+        return {
+          ok: false,
+          reason: "conflict",
+          message: `${venue} is already booked for the selected date and timeslot.`,
+        };
+      }
 
-    await connection.query(
-      `UPDATE bookings
-       SET venue_id = ?, start_time = ?, end_time = ?
-       WHERE id = ?`,
-      [venue_row.id, bounds.start, bounds.end, event.booking_id],
-    );
-    await connection.query(
-      `UPDATE events
-       SET title = ?, description = ?, start_time = ?, end_time = ?,
-           visibility = ?, capacity = ?
-       WHERE id = ?`,
-      [
-        title.trim(),
-        description.trim(),
-        bounds.start,
-        bounds.end,
-        database_visibility(visibility),
-        venue_row.capacity,
-        event_id,
-      ],
-    );
+      await connection.query(
+        `UPDATE bookings
+         SET venue_id = ?, start_time = ?, end_time = ?
+         WHERE id = ?`,
+        [venue_row.id, bounds.start, bounds.end, event.booking_id],
+      );
+      await connection.query(
+        `UPDATE events
+         SET title = ?, description = ?, start_time = ?, end_time = ?,
+             visibility = ?, capacity = ?
+         WHERE id = ?`,
+        [
+          title.trim(),
+          description.trim(),
+          bounds.start,
+          bounds.end,
+          database_visibility(visibility),
+          venue_row.capacity,
+          event_id,
+        ],
+      );
+    }
     await connection.query(
       `INSERT INTO notifications (user_id, event_id, event_title, message)
        SELECT p.user_id, e.id, e.title,
@@ -469,7 +498,8 @@ async function edit_event(
 
 async function list_notifications(user_id) {
   const [rows] = await pool.query(
-    `SELECT id, event_id, event_title, message, created_at, read_at
+    `SELECT id, event_id, event_title, message, created_at, read_at,
+       UNIX_TIMESTAMP(created_at) AS created_epoch
      FROM notifications
      WHERE user_id = ?
      ORDER BY created_at DESC, id DESC

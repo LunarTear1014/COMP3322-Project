@@ -2,8 +2,14 @@
 .env
 .env.*
 !.env.example
+/.first-member-password
+/.first-member.pending
+/.starter-accounts-ready
 
 # Runtime files
 node_modules/
 *.log
 .DS_Store
+
+# Server-generated TLS certificate and key
+/certs/

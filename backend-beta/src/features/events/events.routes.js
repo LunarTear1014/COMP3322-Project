@@ -4,6 +4,7 @@ import { timeslot_bounds } from "../../shared/timeslots.js";
 import {
   validate_event_input,
   validate_event_edit_input,
+  validate_event_details,
 } from "./events.validation.js";
 import {
   join_event,
@@ -38,8 +39,10 @@ function require_signed_in(req, res, message) {
 
 // GET /api/events
 router.get("/api/events", async (req, res) => {
+  const managed = req.query.managed === "true";
+  if (managed && !require_signed_in(req, res, "Sign in to manage events.")) return;
   try {
-    res.json(await list_events(req.session?.user_id));
+    res.json(await list_events(req.session?.user_id, { managed }));
   } catch (error) {
     database_error(res, error);
   }
@@ -51,6 +54,18 @@ router.get("/api/events/mine", async (req, res) => {
   }
   try {
     return res.json(await list_my_participations(req.session.user_id));
+  } catch (error) {
+    return database_error(res, error);
+  }
+});
+
+router.get("/api/events/:event_id", async (req, res) => {
+  const event_id = parse_event_id(req.params.event_id);
+  if (event_id === null) return invalid_request(res, "Event ID must be a positive integer.");
+  try {
+    const [event] = await list_events(req.session?.user_id, { event_id });
+    if (!event) return res.status(404).json({ message: "Event not found." });
+    return res.json(event);
   } catch (error) {
     return database_error(res, error);
   }
@@ -159,12 +174,14 @@ router.patch("/api/events/:event_id", async (req, res) => {
     return;
   }
 
-  const message = validate_event_edit_input(req.body ?? {});
+  const input = req.body ?? {};
+  const details_only = Object.keys(input).every((key) => key === "title" || key === "description");
+  const message = details_only ? validate_event_details(input) : validate_event_edit_input(input);
   if (message) {
     return invalid_request(res, message);
   }
 
-  const { title, description, date, venue, timeslot, visibility } = req.body;
+  const { title, description, date, venue, timeslot, visibility } = input;
   const result = await edit_event(
     event_id,
     {
@@ -173,7 +190,7 @@ router.patch("/api/events/:event_id", async (req, res) => {
       date,
       venue,
       visibility,
-      bounds: timeslot_bounds(date, timeslot),
+      bounds: details_only ? null : timeslot_bounds(date, timeslot),
     },
     req.session.user_id,
   );
@@ -208,7 +225,11 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
   }
 
   try {
-    const result = await join_event(event_id, req.session?.user_id);
+    const allow_waitlist = req.body?.allow_waitlist;
+    if (allow_waitlist !== undefined && typeof allow_waitlist !== "boolean") {
+      return invalid_request(res, "allow_waitlist must be a boolean.");
+    }
+    const result = await join_event(event_id, req.session.user_id, allow_waitlist);
     if (result.ok) {
       return res.status(result.status === "waitlisted" ? 202 : 201).json({
         status: result.status,
@@ -236,6 +257,9 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
       return res.status(409).json({
         message: "You are already on this event's waitlist.",
       });
+    }
+    if (result.reason === "full") {
+      return res.status(409).json({ message: "This event is full. Refresh to join its waitlist." });
     }
     return database_error(res, result.error);
   } catch (error) {
