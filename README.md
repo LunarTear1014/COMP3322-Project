@@ -92,12 +92,6 @@ brew services start mysql
    ```
 
    `.env` is ignored by Git and must never be committed.
-   If you already have the old seeded accounts, run
-   [`backend-beta/db/migrations/001_hash_seed_passwords.sql`](backend-beta/db/migrations/001_hash_seed_passwords.sql)
-   once to replace their placeholder passwords with development-only hashes.
-   If you already created the database, also apply
-   [`backend-beta/db/migrations/002_club_president_role.sql`](backend-beta/db/migrations/002_club_president_role.sql)
-   once to enable club presidents.
 
 ## Run locally
 
