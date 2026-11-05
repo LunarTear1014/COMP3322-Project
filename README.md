@@ -148,6 +148,12 @@ needed for local development.
 | `GET`  | `/api/events`                 | Browse saved events                        |
 | `POST` | `/api/events`                 | Create an event and venue booking together |
 | `GET`  | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date         |
+| `GET`  | `/api/clubs`                  | Browse clubs and your membership roles     |
+| `GET`  | `/api/memberships`            | List your club memberships                 |
+| `POST` | `/api/clubs/:club_id/membership` | Join a club                              |
+| `DELETE` | `/api/clubs/:club_id/membership` | Leave a club                            |
+| `GET`  | `/api/clubs/:club_id/members` | List other members (committee only)        |
+| `POST` | `/api/clubs/:club_id/members/:user_id/committee` | Promote a member to committee (committee only) |
 | `POST` | `/api/auth/register`          | Create an account with name, email, student ID, and password |
 | `POST` | `/api/auth/login`             | Log in with email and password             |
 | `GET`  | `/api/auth/me`                | Return the currently logged-in account     |
@@ -155,7 +161,8 @@ needed for local development.
 
 Passwords are stored as salted scrypt hashes. Login state uses a local
 in-memory session and is cleared when the API restarts; account records remain
-in MySQL.
+in MySQL. Only logged-in committee members can view their club's roster or
+promote another club member to committee.
 
 The API validates requests and returns `422` for invalid input and `409` when a
 venue time slot is already booked.

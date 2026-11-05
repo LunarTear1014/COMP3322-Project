@@ -77,4 +77,93 @@ async function leave_club(club_id, user_id = demo_user_id) {
     : { ok: false, reason: "not_found" };
 }
 
-export { join_club, leave_club, list_clubs, list_memberships };
+async function list_club_members(club_id, user_id) {
+  const [[club]] = await pool.query("SELECT id FROM clubs WHERE id = ?", [
+    club_id,
+  ]);
+  if (!club) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const [[membership]] = await pool.query(
+    "SELECT role FROM memberships WHERE user_id = ? AND club_id = ?",
+    [user_id, club_id],
+  );
+  if (membership?.role !== "committee") {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  const [members] = await pool.query(
+    `SELECT u.id AS user_id, u.name, m.role
+     FROM memberships m
+     JOIN users u ON u.id = m.user_id
+     WHERE m.club_id = ? AND m.user_id <> ?
+     ORDER BY u.name`,
+    [club_id, user_id],
+  );
+  return { ok: true, members };
+}
+
+async function promote_club_member(club_id, member_user_id, user_id) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [[club]] = await connection.query(
+      "SELECT id FROM clubs WHERE id = ? FOR UPDATE",
+      [club_id],
+    );
+    if (!club) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    const [[membership]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id = ? AND club_id = ? FOR UPDATE",
+      [user_id, club_id],
+    );
+    if (membership?.role !== "committee") {
+      await connection.rollback();
+      return { ok: false, reason: "forbidden" };
+    }
+    if (member_user_id === user_id) {
+      await connection.rollback();
+      return { ok: false, reason: "cannot_promote_self" };
+    }
+
+    const [[target]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id = ? AND club_id = ? FOR UPDATE",
+      [member_user_id, club_id],
+    );
+    if (!target) {
+      await connection.rollback();
+      return { ok: false, reason: "not_a_member" };
+    }
+    if (target.role === "committee") {
+      await connection.rollback();
+      return { ok: false, reason: "already_committee" };
+    }
+
+    await connection.query(
+      "UPDATE memberships SET role = 'committee' WHERE user_id = ? AND club_id = ?",
+      [member_user_id, club_id],
+    );
+    await connection.commit();
+    return { ok: true };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    throw error;
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+export {
+  join_club,
+  leave_club,
+  list_clubs,
+  list_memberships,
+  list_club_members,
+  promote_club_member,
+};
