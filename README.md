@@ -121,7 +121,7 @@ http://localhost:3000/api/health
 Expected response:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
 ### Terminal 2 — frontend
@@ -140,14 +140,14 @@ needed for local development.
 
 ## Alpha API routes
 
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/health` | Confirm API-to-MySQL connectivity |
-| `GET` | `/api/events` | Browse saved events |
-| `POST` | `/api/events` | Create an event and venue booking together |
-| `GET` | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date |
-| `GET` | `/api/profile` | Load the Alpha demo profile |
-| `PUT` | `/api/profile` | Update the Alpha demo profile |
+| Method | Route                         | Purpose                                    |
+| ------ | ----------------------------- | ------------------------------------------ |
+| `GET`  | `/api/health`                 | Confirm API-to-MySQL connectivity          |
+| `GET`  | `/api/events`                 | Browse saved events                        |
+| `POST` | `/api/events`                 | Create an event and venue booking together |
+| `GET`  | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date         |
+| `GET`  | `/api/user/me`                | Load the demo user's profile               |
+| `PUT`  | `/api/user/me`                | Update the demo user's profile             |
 
 The API validates requests and returns `422` for invalid input and `409` when a
 venue time slot is already booked.

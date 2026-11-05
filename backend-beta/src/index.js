@@ -3,14 +3,14 @@ import pool from "./config/db.js";
 import health_routes from "./features/health/health.routes.js";
 import events_routes from "./features/events/events.routes.js";
 import venues_routes from "./features/venues/venues.routes.js";
-import profile_routes from "./features/profile/profile.routes.js";
+import users_routes from "./features/users/users.routes.js";
 
 const app = express();
 app.use(express.json());
 app.use(health_routes);
 app.use(events_routes);
 app.use(venues_routes);
-app.use(profile_routes);
+app.use(users_routes);
 
 const port = Number(process.env.PORT || 3000);
 
