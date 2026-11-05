@@ -1,12 +1,10 @@
-# COMP3322 Project — Alpha local setup
+# COMP3322 Project — Local setup
 
-This repository contains the Alpha ClubSpace prototype. The active application
-is split into three parts:
+The active ClubSpace application is split into three parts:
 
 ```text
 frontend-alpha/  React + Vite single-page application
-backend-alpha/   Express API
-src/db/          MySQL schema and repeatable demo data
+backend-beta/    Express API and MySQL schema/demo data
 ```
 
 The local request flow is:
@@ -63,13 +61,13 @@ brew services start mysql
    FLUSH PRIVILEGES;
    ```
 
-3. Run [`src/db/schema.sql`](src/db/schema.sql), then
-   [`src/db/seed.sql`](src/db/seed.sql), against the `clubspace` database. In a
+3. Run [`backend-beta/db/schema.sql`](backend-beta/db/schema.sql), then
+   [`backend-beta/db/seed.sql`](backend-beta/db/seed.sql), against the `clubspace` database. In a
    GUI client, open each file and execute all queries. With the MySQL CLI:
 
    ```bash
-   mysql -u clubspace_app -p clubspace < src/db/schema.sql
-   mysql -u clubspace_app -p clubspace < src/db/seed.sql
+   mysql -u clubspace_app -p clubspace < backend-beta/db/schema.sql
+   mysql -u clubspace_app -p clubspace < backend-beta/db/seed.sql
    ```
 
    > `schema.sql` drops and recreates the project tables. Use it only when you
@@ -78,6 +76,7 @@ brew services start mysql
 4. Create the untracked local backend configuration:
 
    ```bash
+   cd backend-beta
    cp .env.example .env
    ```
 
@@ -89,10 +88,13 @@ brew services start mysql
    DB_NAME=clubspace
    DB_USER=clubspace_app
    DB_PASSWORD=choose-a-local-password
-   DEMO_USER_ID=1
+   SESSION_SECRET=choose-a-random-local-secret
    ```
 
    `.env` is ignored by Git and must never be committed.
+   If you already have the old seeded accounts, run
+   [`backend-beta/db/migrations/001_hash_seed_passwords.sql`](backend-beta/db/migrations/001_hash_seed_passwords.sql)
+   once to replace their placeholder passwords with development-only hashes.
 
 ## Run locally
 
@@ -101,7 +103,7 @@ Open two terminals from the repository root.
 ### Terminal 1 — API
 
 ```bash
-cd backend-alpha
+cd backend-beta
 npm install
 npm run dev
 ```
@@ -138,7 +140,7 @@ Open the URL printed by Vite, normally `http://localhost:5173`.
 to the API at `http://localhost:3000`, so no API URL or browser CORS setup is
 needed for local development.
 
-## Alpha API routes
+## API routes
 
 | Method | Route                         | Purpose                                    |
 | ------ | ----------------------------- | ------------------------------------------ |
@@ -146,13 +148,21 @@ needed for local development.
 | `GET`  | `/api/events`                 | Browse saved events                        |
 | `POST` | `/api/events`                 | Create an event and venue booking together |
 | `GET`  | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date         |
-| `GET`  | `/api/user/me`                | Load the demo user's profile               |
-| `PUT`  | `/api/user/me`                | Update the demo user's profile             |
+| `POST` | `/api/auth/register`          | Create an account with name, email, student ID, and password |
+| `POST` | `/api/auth/login`             | Log in with email and password             |
+| `GET`  | `/api/auth/me`                | Return the currently logged-in account     |
+| `POST` | `/api/auth/logout`            | Log out                                    |
+| `GET`  | `/api/user/me`                | Load the current user's profile             |
+| `PUT`  | `/api/user/me`                | Update the current user's profile           |
+
+Passwords are stored as salted scrypt hashes. Login state uses a local
+in-memory session and is cleared when the API restarts; account records remain
+in MySQL.
 
 The API validates requests and returns `422` for invalid input and `409` when a
 venue time slot is already booked.
 
-## Verify the end-to-end Alpha flow
+## Verify the end-to-end flow
 
 1. Start MySQL, the API, and the frontend.
 2. In the frontend, choose an available venue and time slot.

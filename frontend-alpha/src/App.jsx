@@ -11,6 +11,7 @@ import ProfilePage from './pages/ProfilePage'
 import VenuePage from './pages/VenuePage'
 import BookingPage from './pages/BookingPage'
 import ClubsPage from './pages/ClubsPage'
+import AccountPage from './pages/AccountPage'
 import './App.css'
 
 function PlaceholderPage({ title }) {
@@ -79,6 +80,7 @@ function App() {
         />
 
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/account" element={<AccountPage />} />
         <Route
           path="/clubs"
           element={

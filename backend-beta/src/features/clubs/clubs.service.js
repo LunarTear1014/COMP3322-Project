@@ -2,7 +2,7 @@ import pool from "../../config/db.js";
 
 const demo_user_id = Number(process.env.DEMO_USER_ID || 1);
 
-async function list_clubs() {
+async function list_clubs(user_id = demo_user_id) {
   const [rows] = await pool.query(
     `SELECT c.id, c.name, c.description,
       m.user_id IS NOT NULL AS is_member, m.role
@@ -10,7 +10,7 @@ async function list_clubs() {
      LEFT JOIN memberships m
        ON m.club_id = c.id AND m.user_id = ?
      ORDER BY c.name`,
-    [demo_user_id],
+    [user_id],
   );
   return rows.map((club) => ({
     ...club,
@@ -18,19 +18,19 @@ async function list_clubs() {
   }));
 }
 
-async function list_memberships() {
+async function list_memberships(user_id = demo_user_id) {
   const [rows] = await pool.query(
     `SELECT c.id AS club_id, c.name, c.description, m.role, m.joined_at
      FROM memberships m
      JOIN clubs c ON c.id = m.club_id
      WHERE m.user_id = ?
      ORDER BY c.name`,
-    [demo_user_id],
+    [user_id],
   );
   return rows;
 }
 
-async function join_club(club_id) {
+async function join_club(club_id, user_id = demo_user_id) {
   const [[club]] = await pool.query(
     "SELECT id, name FROM clubs WHERE id = ?",
     [club_id],
@@ -42,7 +42,7 @@ async function join_club(club_id) {
   try {
     await pool.query(
       "INSERT INTO memberships (user_id, club_id) VALUES (?, ?)",
-      [demo_user_id, club_id],
+      [user_id, club_id],
     );
     return {
       ok: true,
@@ -60,10 +60,10 @@ async function join_club(club_id) {
   }
 }
 
-async function leave_club(club_id) {
+async function leave_club(club_id, user_id = demo_user_id) {
   const [result] = await pool.query(
     "DELETE FROM memberships WHERE user_id = ? AND club_id = ?",
-    [demo_user_id, club_id],
+    [user_id, club_id],
   );
   if (result.affectedRows > 0) {
     return { ok: true };

@@ -206,6 +206,37 @@ label {
   text-transform: capitalize;
 }
 
+.auth-panel {
+  max-width: 520px;
+  margin: 32px auto;
+}
+
+.auth-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.text-button {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--brand-dark);
+}
+
+.text-button:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
 @media (max-width: 850px) {
   header {
     flex-wrap: wrap;

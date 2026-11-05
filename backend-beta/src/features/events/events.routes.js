@@ -20,9 +20,9 @@ function parse_event_id(value) {
 }
 
 // GET /api/events
-router.get("/api/events", async (_req, res) => {
+router.get("/api/events", async (req, res) => {
   try {
-    res.json(await list_events());
+    res.json(await list_events(req.session?.user_id));
   } catch (error) {
     database_error(res, error);
   }
@@ -35,7 +35,7 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
   }
 
   try {
-    const result = await join_event(event_id);
+    const result = await join_event(event_id, req.session?.user_id);
     if (result.ok) {
       return res.status(201).json({ message: "You joined the event." });
     }
@@ -66,7 +66,7 @@ router.delete("/api/events/:event_id/participation", async (req, res) => {
   }
 
   try {
-    const result = await leave_event(event_id);
+    const result = await leave_event(event_id, req.session?.user_id);
     if (result.ok) {
       return res.status(204).end();
     }

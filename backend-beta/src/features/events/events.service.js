@@ -31,7 +31,7 @@ function event_response(row) {
   };
 }
 
-async function list_events() {
+async function list_events(user_id = demo_user_id) {
   const [rows] = await pool.query(`
       SELECT
         e.id,
@@ -57,11 +57,11 @@ async function list_events() {
       JOIN venues v ON v.id = b.venue_id
       WHERE e.status = 'published'
       ORDER BY e.start_time ASC
-    `, [demo_user_id]);
+    `, [user_id]);
   return rows.map(event_response);
 }
 
-async function join_event(event_id) {
+async function join_event(event_id, user_id = demo_user_id) {
   let connection;
   try {
     connection = await pool.getConnection();
@@ -83,7 +83,7 @@ async function join_event(event_id) {
     if (event.visibility === "members_only") {
       const [[membership]] = await connection.query(
         "SELECT user_id FROM memberships WHERE user_id = ? AND club_id = ?",
-        [demo_user_id, event.club_id],
+        [user_id, event.club_id],
       );
       if (!membership) {
         await connection.rollback();
@@ -93,7 +93,7 @@ async function join_event(event_id) {
 
     const [[participation]] = await connection.query(
       "SELECT status FROM participations WHERE user_id = ? AND event_id = ? FOR UPDATE",
-      [demo_user_id, event_id],
+      [user_id, event_id],
     );
     if (participation?.status === "joined") {
       await connection.rollback();
@@ -104,12 +104,12 @@ async function join_event(event_id) {
         `UPDATE participations
          SET status = 'joined', joined_at = CURRENT_TIMESTAMP, left_at = NULL
          WHERE user_id = ? AND event_id = ?`,
-        [demo_user_id, event_id],
+        [user_id, event_id],
       );
     } else {
       await connection.query(
         "INSERT INTO participations (user_id, event_id) VALUES (?, ?)",
-        [demo_user_id, event_id],
+        [user_id, event_id],
       );
     }
 
@@ -123,12 +123,12 @@ async function join_event(event_id) {
   }
 }
 
-async function leave_event(event_id) {
+async function leave_event(event_id, user_id = demo_user_id) {
   const [result] = await pool.query(
     `UPDATE participations
      SET status = 'left', left_at = CURRENT_TIMESTAMP
      WHERE user_id = ? AND event_id = ? AND status = 'joined'`,
-    [demo_user_id, event_id],
+    [user_id, event_id],
   );
   if (result.affectedRows > 0) {
     return { ok: true };

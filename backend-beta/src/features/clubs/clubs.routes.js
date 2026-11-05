@@ -17,17 +17,17 @@ function parse_club_id(value) {
   return Number.isSafeInteger(club_id) ? club_id : null;
 }
 
-router.get("/api/clubs", async (_req, res) => {
+router.get("/api/clubs", async (req, res) => {
   try {
-    res.json(await list_clubs());
+    res.json(await list_clubs(req.session?.user_id));
   } catch (error) {
     database_error(res, error);
   }
 });
 
-router.get("/api/memberships", async (_req, res) => {
+router.get("/api/memberships", async (req, res) => {
   try {
-    res.json(await list_memberships());
+    res.json(await list_memberships(req.session?.user_id));
   } catch (error) {
     database_error(res, error);
   }
@@ -40,7 +40,7 @@ router.post("/api/clubs/:club_id/membership", async (req, res) => {
   }
 
   try {
-    const result = await join_club(club_id);
+    const result = await join_club(club_id, req.session?.user_id);
     if (result.ok) {
       return res.status(201).json(result.membership);
     }
@@ -60,7 +60,7 @@ router.delete("/api/clubs/:club_id/membership", async (req, res) => {
   }
 
   try {
-    const result = await leave_club(club_id);
+    const result = await leave_club(club_id, req.session?.user_id);
     if (result.ok) {
       return res.status(204).end();
     }
