@@ -84,7 +84,7 @@ CREATE TABLE `venues` (
 CREATE TABLE `memberships` (
     `user_id` INT NOT NULL,
     `club_id` INT NOT NULL,
-    `role` ENUM('member', 'committee') NOT NULL DEFAULT 'member',
+    `role` ENUM('member', 'committee', 'president') NOT NULL DEFAULT 'member',
     `joined_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (`user_id`, `club_id`),

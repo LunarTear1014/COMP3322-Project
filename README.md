@@ -95,6 +95,9 @@ brew services start mysql
    If you already have the old seeded accounts, run
    [`backend-beta/db/migrations/001_hash_seed_passwords.sql`](backend-beta/db/migrations/001_hash_seed_passwords.sql)
    once to replace their placeholder passwords with development-only hashes.
+   If you already created the database, also apply
+   [`backend-beta/db/migrations/002_club_president_role.sql`](backend-beta/db/migrations/002_club_president_role.sql)
+   once to enable club presidents.
 
 ## Run locally
 
@@ -149,23 +152,29 @@ needed for local development.
 | `POST` | `/api/events`                 | Create an event and venue booking together |
 | `GET`  | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date         |
 | `GET`  | `/api/clubs`                  | Browse clubs and your membership roles     |
+| `POST` | `/api/clubs`                  | Create a club (creator becomes president)   |
 | `GET`  | `/api/memberships`            | List your club memberships                 |
 | `POST` | `/api/clubs/:club_id/membership` | Join a club                              |
 | `DELETE` | `/api/clubs/:club_id/membership` | Leave a club                            |
 | `DELETE` | `/api/clubs/:club_id/committee` | Leave the committee but remain a member |
 | `GET`  | `/api/clubs/:club_id/members` | List club members (committee only)          |
-| `POST` | `/api/clubs/:club_id/members/:user_id/committee` | Promote a member to committee (committee only) |
+| `POST` | `/api/clubs/:club_id/members/:user_id/committee` | Promote a member to committee (committee or president) |
+| `DELETE` | `/api/clubs/:club_id/members/:user_id/committee` | President demotes committee member to regular member |
+| `POST` | `/api/clubs/:club_id/presidency` | Transfer presidency to an existing committee member (requires typing the club name) |
+| `DELETE` | `/api/clubs/:club_id`       | Delete a club and its events/bookings (president only; requires typing the club name) |
 | `POST` | `/api/auth/register`          | Create an account with name, email, student ID, and password |
 | `POST` | `/api/auth/login`             | Log in with email and password             |
 | `GET`  | `/api/auth/me`                | Return the currently logged-in account     |
-| `PUT`  | `/api/auth/me`                | Update name/email and optionally password (requires current password) |
+| `PUT`  | `/api/auth/me`                | Update name/email; password changes require current password |
 | `DELETE` | `/api/auth/me`              | Delete the account and its memberships and event signups (requires password) |
 | `POST` | `/api/auth/logout`            | Log out                                    |
 
 Passwords are stored as salted scrypt hashes. Login state uses a local
 in-memory session and is cleared when the API restarts; account records remain
-in MySQL. Only logged-in committee members can view their club's roster or
-promote another club member to committee. Registration and password changes
+in MySQL. Logged-in committee members and presidents can view their club's
+roster or promote members to committee. Club creators become president;
+presidents can transfer the role to a committee member or delete their club.
+Both destructive actions require typing the exact club name. Registration and password changes
 require matching confirmation fields. Changing a password and deleting an
 account require the current password; editing a name or email does not.
 Deleting an account also removes its memberships and event signups through the
