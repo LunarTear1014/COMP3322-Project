@@ -14,6 +14,9 @@ function EventsPage({
   const [updating_event_id, set_updating_event_id] = useState(null)
   const [event_status_filter, set_event_status_filter] = useState('Upcoming')
   const [events, set_events] = useState([])
+  const [notifications, set_notifications] = useState([])
+  const [notification_error, set_notification_error] = useState('')
+  const [cancelling_event_id, set_cancelling_event_id] = useState(null)
   const [load_state, set_load_state] = useState('loading') // loading | ready | error
   const [account_state, set_account_state] = useState('loading')
 
@@ -29,7 +32,7 @@ function EventsPage({
           set_events(next_events)
           set_selected_event((current) =>
             current
-              ? next_events.find((event) => event.id === current.id) || current
+              ? next_events.find((event) => event.id === current.id) || null
               : null,
           )
           set_load_state('ready')
@@ -66,6 +69,40 @@ function EventsPage({
       window.clearInterval(account_interval)
     }
   }, [])
+
+  useEffect(() => {
+    if (account_state !== 'signed_in') {
+      return undefined
+    }
+
+    let active = true
+    async function refresh_notifications() {
+      try {
+        const response = await fetch('/api/notifications')
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.message || 'Could not load notifications.')
+        }
+        if (active) {
+          set_notifications(data)
+          set_notification_error('')
+        }
+      } catch (error) {
+        if (active) {
+          set_notification_error(
+            error.message || 'Could not load notifications.',
+          )
+        }
+      }
+    }
+
+    refresh_notifications()
+    const interval = window.setInterval(refresh_notifications, 15000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [account_state])
   
   const visible_events = events.filter((event) => {
     const searchable_text = `${event.title} ${event.club} ${event.venue} ${event.description}`.toLowerCase()
@@ -82,6 +119,73 @@ function EventsPage({
       return !membership_error && student_clubs.includes(event.club)
     }
     return false
+  }
+
+  async function mark_notification_as_read(notification) {
+    try {
+      const response = await fetch(
+        `/api/notifications/${notification.id}/read`,
+        { method: 'PATCH' },
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || 'Could not update notification.')
+      }
+      set_notifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? { ...item, read_at: new Date().toISOString() }
+            : item,
+        ),
+      )
+    } catch (error) {
+      set_notification_error(error.message || 'Could not update notification.')
+    }
+  }
+
+  async function cancel_event(event) {
+    if (
+      !window.confirm(
+        `Cancel "${event.title}"? All signed-up users will be notified and the venue booking will be released.`,
+      )
+    ) {
+      return
+    }
+
+    set_cancelling_event_id(event.id)
+    set_participation_message('')
+    try {
+      const response = await fetch(`/api/events/${event.id}`, {
+        method: 'DELETE',
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not cancel event.')
+      }
+      set_selected_event(null)
+      set_participation_message(data.message)
+      set_participation_message_type('success')
+
+      const [events_response, notifications_response] = await Promise.all([
+        fetch('/api/events'),
+        fetch('/api/notifications'),
+      ])
+      if (!events_response.ok || !notifications_response.ok) {
+        throw new Error(
+          'The event was cancelled, but the page could not refresh all details.',
+        )
+      }
+      set_events(await events_response.json())
+      set_notifications(await notifications_response.json())
+      set_notification_error('')
+    } catch (error) {
+      set_participation_message(
+        error.message || 'Could not reach the server.',
+      )
+      set_participation_message_type('error')
+    } finally {
+      set_cancelling_event_id(null)
+    }
   }
 
   async function toggle_join_event(event) {
@@ -202,6 +306,42 @@ function EventsPage({
           onChange={(e) => set_search_term(e.target.value)}
         /> 
       </section>  
+      {account_state === 'signed_in' && (
+        <section className="panel notifications-panel" aria-label="Notifications">
+          <h2>Notifications</h2>
+          {notification_error && (
+            <p className="message error-message" role="alert">
+              {notification_error}
+            </p>
+          )}
+          {notifications.length === 0 && !notification_error && (
+            <p>No notifications.</p>
+          )}
+          {notifications.map((notification) => (
+            <div
+              className={`notification ${notification.read_at ? '' : 'unread'}`}
+              key={notification.id}
+            >
+              <div>
+                <strong>{notification.event_title}</strong>
+                <p>{notification.message}</p>
+                <small>
+                  {new Date(notification.created_at).toLocaleString()}
+                </small>
+              </div>
+              {!notification.read_at && (
+                <button
+                  type="button"
+                  className="notification-read-button"
+                  onClick={() => mark_notification_as_read(notification)}
+                >
+                  Mark as read
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
       <section>
         <p> {event_status_filter} Events </p>
         <div className="list">
@@ -258,6 +398,18 @@ function EventsPage({
           <p>Capacity: {selected_event.capacity}</p>
           {selected_event.is_full && (
             <p className="badge full-badge" role="status">Event full</p>
+          )}
+          {selected_event.can_cancel && (
+            <button
+              type="button"
+              className="cancel-button"
+              disabled={cancelling_event_id === selected_event.id}
+              onClick={() => cancel_event(selected_event)}
+            >
+              {cancelling_event_id === selected_event.id
+                ? 'Cancelling…'
+                : 'Cancel event'}
+            </button>
           )}
           {selected_event.participation_status === 'waitlisted' && (
             <p className="message" role="status">

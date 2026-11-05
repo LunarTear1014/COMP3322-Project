@@ -255,6 +255,46 @@ label {
   background: #4b5563;
 }
 
+.notifications-panel h2 {
+  margin-top: 0;
+}
+
+.notification {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.notification.unread {
+  border-left: 4px solid var(--brand);
+  padding-left: 12px;
+}
+
+.notification p {
+  margin: 6px 0;
+}
+
+.notification small {
+  color: var(--muted);
+}
+
+.notification-read-button,
+.cancel-button {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.cancel-button {
+  background: #b42318;
+}
+
+.cancel-button:hover {
+  background: #8f1d14;
+}
+
 .auth-panel {
   max-width: 520px;
   margin: 32px auto;

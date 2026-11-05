@@ -7,6 +7,9 @@ import {
   leave_event,
   list_events,
   create_event,
+  cancel_event,
+  list_notifications,
+  mark_notification_read,
 } from "./events.service.js";
 
 const router = Router();
@@ -19,12 +22,86 @@ function parse_event_id(value) {
   return Number.isSafeInteger(event_id) ? event_id : null;
 }
 
+function require_signed_in(req, res, message) {
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    res.status(401).json({ message });
+    return false;
+  }
+  return true;
+}
+
 // GET /api/events
 router.get("/api/events", async (req, res) => {
   try {
     res.json(await list_events(req.session?.user_id));
   } catch (error) {
     database_error(res, error);
+  }
+});
+
+router.get("/api/notifications", async (req, res) => {
+  if (!require_signed_in(req, res, "Sign in to view your notifications.")) {
+    return;
+  }
+  try {
+    res.json(await list_notifications(req.session.user_id));
+  } catch (error) {
+    database_error(res, error);
+  }
+});
+
+router.patch("/api/notifications/:notification_id/read", async (req, res) => {
+  const notification_id = parse_event_id(req.params.notification_id);
+  if (notification_id === null) {
+    return invalid_request(res, "Notification ID must be a positive integer.");
+  }
+  if (!require_signed_in(req, res, "Sign in to update notifications.")) {
+    return;
+  }
+  try {
+    const updated = await mark_notification_read(
+      notification_id,
+      req.session.user_id,
+    );
+    if (!updated) {
+      return res.status(404).json({ message: "Notification not found." });
+    }
+    return res.status(204).end();
+  } catch (error) {
+    return database_error(res, error);
+  }
+});
+
+router.delete("/api/events/:event_id", async (req, res) => {
+  const event_id = parse_event_id(req.params.event_id);
+  if (event_id === null) {
+    return invalid_request(res, "Event ID must be a positive integer.");
+  }
+  if (!require_signed_in(req, res, "Sign in to cancel an event.")) {
+    return;
+  }
+
+  try {
+    const result = await cancel_event(event_id, req.session.user_id);
+    if (result.ok) {
+      return res.json({
+        message: `${result.event_title} was cancelled. Signed-up users have been notified.`,
+      });
+    }
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Event not found." });
+    }
+    if (result.reason === "forbidden") {
+      return res.status(403).json({
+        message: "Only this club's committee members or president can cancel its events.",
+      });
+    }
+    if (result.reason === "already_cancelled") {
+      return res.status(409).json({ message: "This event is already cancelled." });
+    }
+    return database_error(res, result.error);
+  } catch (error) {
+    return database_error(res, error);
   }
 });
 

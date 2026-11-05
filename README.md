@@ -144,6 +144,9 @@ needed for local development.
 | `GET`  | `/api/health`                 | Confirm API-to-MySQL connectivity          |
 | `GET`  | `/api/events`                 | Browse saved events                        |
 | `POST` | `/api/events`                 | Create an event and venue booking together (committee or president of the club) |
+| `DELETE` | `/api/events/:event_id` | Cancel an event (organizing club committee or president; notifies signups) |
+| `GET` | `/api/notifications` | List signed-in user's notifications |
+| `PATCH` | `/api/notifications/:notification_id/read` | Mark a notification as read |
 | `GET`  | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date         |
 | `GET`  | `/api/clubs`                  | Browse clubs and your membership roles     |
 | `POST` | `/api/clubs`                  | Create a club (creator becomes president)   |
@@ -193,6 +196,10 @@ events show an `Event full` label and allow users to join the waitlist. When a
 joined participant leaves, the earliest waitlisted participant is promoted
 automatically. Waitlist order is based on signup time, and users can leave the
 waitlist at any time. Joining an event or its waitlist requires signing in.
+Organizing club committee members and presidents can cancel their events.
+Cancellation releases the venue booking and creates persistent in-app
+notifications for all current participants and waitlisted users. Signed-in
+users can see and mark notifications as read on the Events page.
 
 ## Verify the end-to-end flow
 

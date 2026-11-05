@@ -1,6 +1,7 @@
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Drop tables in reverse dependency order
+DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `participations`;
 DROP TABLE IF EXISTS `events`;
 DROP TABLE IF EXISTS `bookings`;
@@ -270,6 +271,35 @@ CREATE TABLE `participations` (
 
     INDEX `idx_participations_user_status`
         (`user_id`, `status`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- ================================================================
+-- NOTIFICATIONS
+-- ================================================================
+
+CREATE TABLE `notifications` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `user_id` INT NOT NULL,
+    `event_id` INT NULL,
+    `event_title` VARCHAR(255) NOT NULL,
+    `message` VARCHAR(1000) NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `read_at` TIMESTAMP NULL DEFAULT NULL,
+
+    PRIMARY KEY (`id`),
+    INDEX `idx_notifications_user_created` (`user_id`, `created_at`),
+
+    CONSTRAINT `fk_notifications_user`
+        FOREIGN KEY (`user_id`)
+        REFERENCES `users` (`id`)
+        ON DELETE CASCADE,
+
+    CONSTRAINT `fk_notifications_event`
+        FOREIGN KEY (`event_id`)
+        REFERENCES `events` (`id`)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

@@ -28,6 +28,7 @@ function event_response(row) {
     is_full: Number(row.joined_count) >= Number(row.capacity),
     is_joined: Boolean(row.is_joined),
     participation_status: row.participation_status,
+    can_cancel: Boolean(row.can_cancel),
     status: row.date >= today() ? "Upcoming" : "Past",
   };
 }
@@ -57,14 +58,20 @@ async function list_events(user_id = null) {
          FROM participations mine
          WHERE mine.event_id = e.id AND mine.user_id = ?
            AND mine.status IN ('joined', 'waitlisted')
-         LIMIT 1) AS participation_status
+         LIMIT 1) AS participation_status,
+        EXISTS(
+          SELECT 1
+          FROM memberships manager
+          WHERE manager.club_id = e.club_id AND manager.user_id = ?
+            AND manager.role IN ('committee', 'president')
+        ) AS can_cancel
       FROM events e
       JOIN clubs c ON c.id = e.club_id
       JOIN bookings b ON b.id = e.booking_id
       JOIN venues v ON v.id = b.venue_id
       WHERE e.status = 'published'
       ORDER BY e.start_time ASC
-    `, [user_id, user_id]);
+    `, [user_id, user_id, user_id]);
   return rows.map(event_response);
 }
 
@@ -229,6 +236,92 @@ async function leave_event(event_id, user_id) {
   }
 }
 
+async function cancel_event(event_id, user_id) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [[event]] = await connection.query(
+      `SELECT id, booking_id, club_id, title, start_time, status
+       FROM events WHERE id = ? FOR UPDATE`,
+      [event_id],
+    );
+    if (!event) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    const [[membership]] = await connection.query(
+      `SELECT role FROM memberships
+       WHERE user_id = ? AND club_id = ? FOR UPDATE`,
+      [user_id, event.club_id],
+    );
+    if (!["committee", "president"].includes(membership?.role)) {
+      await connection.rollback();
+      return { ok: false, reason: "forbidden" };
+    }
+    if (event.status === "cancelled") {
+      await connection.rollback();
+      return { ok: false, reason: "already_cancelled" };
+    }
+
+    await connection.query(
+      `INSERT INTO notifications (user_id, event_id, event_title, message)
+       SELECT p.user_id, e.id, e.title,
+         CONCAT('"', e.title, '" was cancelled by its organising club.')
+       FROM participations p
+       JOIN events e ON e.id = p.event_id
+       WHERE e.id = ? AND p.status IN ('joined', 'waitlisted')`,
+      [event_id],
+    );
+    await connection.query(
+      "UPDATE events SET status = 'cancelled' WHERE id = ?",
+      [event_id],
+    );
+    await connection.query(
+      "UPDATE bookings SET status = 'cancelled' WHERE id = ?",
+      [event.booking_id],
+    );
+
+    await connection.commit();
+    return { ok: true, event_title: event.title };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    return { ok: false, reason: "database", error };
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+async function list_notifications(user_id) {
+  const [rows] = await pool.query(
+    `SELECT id, event_id, event_title, message, created_at, read_at
+     FROM notifications
+     WHERE user_id = ?
+     ORDER BY created_at DESC, id DESC
+     LIMIT 50`,
+    [user_id],
+  );
+  return rows;
+}
+
+async function mark_notification_read(notification_id, user_id) {
+  const [result] = await pool.query(
+    `UPDATE notifications
+     SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+     WHERE id = ? AND user_id = ?`,
+    [notification_id, user_id],
+  );
+  if (result.affectedRows > 0) return true;
+
+  const [[notification]] = await pool.query(
+    "SELECT id FROM notifications WHERE id = ? AND user_id = ?",
+    [notification_id, user_id],
+  );
+  return Boolean(notification);
+}
+
 // Book the venue and create the event in one transaction. Returns
 // { ok: true, event },
 // { ok: false, reason: "unknown_club" | "unknown_venue" | "conflict", message }, or
@@ -344,4 +437,12 @@ async function create_event({
   }
 }
 
-export { join_event, leave_event, list_events, create_event };
+export {
+  join_event,
+  leave_event,
+  list_events,
+  create_event,
+  cancel_event,
+  list_notifications,
+  mark_notification_read,
+};
