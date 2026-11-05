@@ -75,6 +75,36 @@ async function list_events(user_id = null) {
   return rows.map(event_response);
 }
 
+async function list_event_participants(event_id, user_id) {
+  const [[event]] = await pool.query(
+    "SELECT id, club_id FROM events WHERE id = ?",
+    [event_id],
+  );
+  if (!event) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const [[membership]] = await pool.query(
+    `SELECT role FROM memberships
+     WHERE user_id = ? AND club_id = ?`,
+    [user_id, event.club_id],
+  );
+  if (!["committee", "president"].includes(membership?.role)) {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  const [participants] = await pool.query(
+    `SELECT u.id AS user_id, u.name, p.status, p.joined_at
+     FROM participations p
+     JOIN users u ON u.id = p.user_id
+     WHERE p.event_id = ? AND p.status IN ('joined', 'waitlisted')
+     ORDER BY CASE p.status WHEN 'joined' THEN 0 ELSE 1 END,
+       p.joined_at ASC, u.name ASC`,
+    [event_id],
+  );
+  return { ok: true, participants };
+}
+
 async function join_event(event_id, user_id) {
   if (!Number.isSafeInteger(user_id)) {
     return { ok: false, reason: "unauthenticated" };
@@ -294,6 +324,106 @@ async function cancel_event(event_id, user_id) {
   }
 }
 
+async function edit_event(
+  event_id,
+  { title, description, date, venue, visibility, bounds },
+  user_id,
+) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [[event]] = await connection.query(
+      `SELECT e.id, e.booking_id, e.club_id, e.status
+       FROM events e WHERE e.id = ? FOR UPDATE`,
+      [event_id],
+    );
+    if (!event) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    const [[membership]] = await connection.query(
+      `SELECT role FROM memberships
+       WHERE user_id = ? AND club_id = ? FOR UPDATE`,
+      [user_id, event.club_id],
+    );
+    if (!["committee", "president"].includes(membership?.role)) {
+      await connection.rollback();
+      return { ok: false, reason: "forbidden" };
+    }
+    if (event.status !== "published") {
+      await connection.rollback();
+      return { ok: false, reason: "unavailable" };
+    }
+
+    const [[venue_row]] = await connection.query(
+      "SELECT id, capacity FROM venues WHERE name = ?",
+      [venue],
+    );
+    if (!venue_row) {
+      await connection.rollback();
+      return { ok: false, reason: "unknown_venue" };
+    }
+
+    const [conflicts] = await connection.query(
+      `SELECT id FROM bookings
+       WHERE venue_id = ? AND status = 'confirmed' AND id <> ?
+         AND start_time < ? AND end_time > ?
+       FOR UPDATE`,
+      [venue_row.id, event.booking_id, bounds.end, bounds.start],
+    );
+    if (conflicts.length > 0) {
+      await connection.rollback();
+      return {
+        ok: false,
+        reason: "conflict",
+        message: `${venue} is already booked for the selected date and timeslot.`,
+      };
+    }
+
+    await connection.query(
+      `UPDATE bookings
+       SET venue_id = ?, start_time = ?, end_time = ?
+       WHERE id = ?`,
+      [venue_row.id, bounds.start, bounds.end, event.booking_id],
+    );
+    await connection.query(
+      `UPDATE events
+       SET title = ?, description = ?, start_time = ?, end_time = ?,
+           visibility = ?, capacity = ?
+       WHERE id = ?`,
+      [
+        title.trim(),
+        description.trim(),
+        bounds.start,
+        bounds.end,
+        database_visibility(visibility),
+        venue_row.capacity,
+        event_id,
+      ],
+    );
+    await connection.query(
+      `INSERT INTO notifications (user_id, event_id, event_title, message)
+       SELECT p.user_id, e.id, e.title,
+         CONCAT('"', e.title, '" has been updated. Please review the new details.')
+       FROM participations p
+       JOIN events e ON e.id = p.event_id
+       WHERE e.id = ? AND p.status IN ('joined', 'waitlisted')`,
+      [event_id],
+    );
+
+    await connection.commit();
+    return { ok: true };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    return { ok: false, reason: "database", error };
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
 async function list_notifications(user_id) {
   const [rows] = await pool.query(
     `SELECT id, event_id, event_title, message, created_at, read_at
@@ -441,7 +571,9 @@ export {
   join_event,
   leave_event,
   list_events,
+  list_event_participants,
   create_event,
+  edit_event,
   cancel_event,
   list_notifications,
   mark_notification_read,

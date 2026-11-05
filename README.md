@@ -143,7 +143,9 @@ needed for local development.
 | ------ | ----------------------------- | ------------------------------------------ |
 | `GET`  | `/api/health`                 | Confirm API-to-MySQL connectivity          |
 | `GET`  | `/api/events`                 | Browse saved events                        |
+| `GET`  | `/api/events/:event_id/participants` | List joined and waitlisted participants (organizing club committee or president) |
 | `POST` | `/api/events`                 | Create an event and venue booking together (committee or president of the club) |
+| `PATCH` | `/api/events/:event_id` | Edit an event and its booking (organizing club committee or president; notifies signups) |
 | `DELETE` | `/api/events/:event_id` | Cancel an event (organizing club committee or president; notifies signups) |
 | `GET` | `/api/notifications` | List signed-in user's notifications |
 | `PATCH` | `/api/notifications/:notification_id/read` | Mark a notification as read |
@@ -200,6 +202,11 @@ Organizing club committee members and presidents can cancel their events.
 Cancellation releases the venue booking and creates persistent in-app
 notifications for all current participants and waitlisted users. Signed-in
 users can see and mark notifications as read on the Events page.
+Organizing club committee members and presidents can also edit event details.
+Edits update the event and venue booking together, reject conflicting venue
+times, update the event capacity to match the selected venue, and notify
+participants and waitlisted users. They can view event participants, including
+waitlisted users, from the event details.
 
 ## Verify the end-to-end flow
 

@@ -227,6 +227,16 @@ label {
   margin-top: 16px;
 }
 
+.event-participants {
+  margin: 16px 0;
+}
+
+.event-participants summary {
+  color: var(--brand-dark);
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .club-roster summary {
   color: var(--brand-dark);
   font-weight: 700;

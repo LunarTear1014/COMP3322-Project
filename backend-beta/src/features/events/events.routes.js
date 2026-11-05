@@ -1,12 +1,17 @@
 import { Router } from "express";
 import { invalid_request, database_error } from "../../shared/http.js";
 import { timeslot_bounds } from "../../shared/timeslots.js";
-import { validate_event_input } from "./events.validation.js";
+import {
+  validate_event_input,
+  validate_event_edit_input,
+} from "./events.validation.js";
 import {
   join_event,
   leave_event,
   list_events,
+  list_event_participants,
   create_event,
+  edit_event,
   cancel_event,
   list_notifications,
   mark_notification_read,
@@ -36,6 +41,34 @@ router.get("/api/events", async (req, res) => {
     res.json(await list_events(req.session?.user_id));
   } catch (error) {
     database_error(res, error);
+  }
+});
+
+router.get("/api/events/:event_id/participants", async (req, res) => {
+  const event_id = parse_event_id(req.params.event_id);
+  if (event_id === null) {
+    return invalid_request(res, "Event ID must be a positive integer.");
+  }
+  if (!require_signed_in(req, res, "Sign in to view event participants.")) {
+    return;
+  }
+
+  try {
+    const result = await list_event_participants(
+      event_id,
+      req.session.user_id,
+    );
+    if (result.ok) {
+      return res.json(result.participants);
+    }
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Event not found." });
+    }
+    return res.status(403).json({
+      message: "Only this club's committee members or president can view participants.",
+    });
+  } catch (error) {
+    return database_error(res, error);
   }
 });
 
@@ -103,6 +136,54 @@ router.delete("/api/events/:event_id", async (req, res) => {
   } catch (error) {
     return database_error(res, error);
   }
+});
+
+router.patch("/api/events/:event_id", async (req, res) => {
+  const event_id = parse_event_id(req.params.event_id);
+  if (event_id === null) {
+    return invalid_request(res, "Event ID must be a positive integer.");
+  }
+  if (!require_signed_in(req, res, "Sign in to edit an event.")) {
+    return;
+  }
+
+  const message = validate_event_edit_input(req.body ?? {});
+  if (message) {
+    return invalid_request(res, message);
+  }
+
+  const { title, description, date, venue, timeslot, visibility } = req.body;
+  const result = await edit_event(
+    event_id,
+    {
+      title,
+      description,
+      date,
+      venue,
+      visibility,
+      bounds: timeslot_bounds(date, timeslot),
+    },
+    req.session.user_id,
+  );
+
+  if (result.ok) {
+    return res.json({ message: "Event details updated. Participants have been notified." });
+  }
+  if (result.reason === "not_found") {
+    return res.status(404).json({ message: "Event not found." });
+  }
+  if (result.reason === "forbidden") {
+    return res.status(403).json({
+      message: "Only this club's committee members or president can edit its events.",
+    });
+  }
+  if (result.reason === "unavailable") {
+    return res.status(409).json({ message: "Cancelled events cannot be edited." });
+  }
+  if (result.reason === "conflict" || result.reason === "unknown_venue") {
+    return res.status(409).json({ message: result.message || "Unknown venue." });
+  }
+  return database_error(res, result.error);
 });
 
 router.post("/api/events/:event_id/participation", async (req, res) => {

@@ -17,6 +17,14 @@ function EventsPage({
   const [notifications, set_notifications] = useState([])
   const [notification_error, set_notification_error] = useState('')
   const [cancelling_event_id, set_cancelling_event_id] = useState(null)
+  const [editing_event_id, set_editing_event_id] = useState(null)
+  const [edit_form, set_edit_form] = useState(null)
+  const [edit_venues, set_edit_venues] = useState([])
+  const [edit_venues_error, set_edit_venues_error] = useState('')
+  const [saving_event_edit, set_saving_event_edit] = useState(false)
+  const [participants_by_event, set_participants_by_event] = useState({})
+  const [participants_loading, set_participants_loading] = useState(false)
+  const [participants_error, set_participants_error] = useState('')
   const [load_state, set_load_state] = useState('loading') // loading | ready | error
   const [account_state, set_account_state] = useState('loading')
 
@@ -103,6 +111,36 @@ function EventsPage({
       window.clearInterval(interval)
     }
   }, [account_state])
+
+  useEffect(() => {
+    if (!editing_event_id || !edit_form?.date) return undefined
+
+    let active = true
+    async function load_edit_venues() {
+      try {
+        const response = await fetch(
+          `/api/venues?date=${encodeURIComponent(edit_form.date)}`,
+        )
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error(data.message || 'Could not load venues.')
+        }
+        if (active) {
+          set_edit_venues(data)
+          set_edit_venues_error('')
+        }
+      } catch (error) {
+        if (active) {
+          set_edit_venues_error(error.message || 'Could not load venues.')
+        }
+      }
+    }
+
+    load_edit_venues()
+    return () => {
+      active = false
+    }
+  }, [editing_event_id, edit_form?.date])
   
   const visible_events = events.filter((event) => {
     const searchable_text = `${event.title} ${event.club} ${event.venue} ${event.description}`.toLowerCase()
@@ -140,6 +178,28 @@ function EventsPage({
       )
     } catch (error) {
       set_notification_error(error.message || 'Could not update notification.')
+    }
+  }
+
+  async function load_event_participants(event_id) {
+    set_participants_loading(true)
+    set_participants_error('')
+    try {
+      const response = await fetch(`/api/events/${event_id}/participants`)
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not load event participants.')
+      }
+      set_participants_by_event((current) => ({
+        ...current,
+        [event_id]: data,
+      }))
+    } catch (error) {
+      set_participants_error(
+        error.message || 'Could not load event participants.',
+      )
+    } finally {
+      set_participants_loading(false)
     }
   }
 
@@ -185,6 +245,69 @@ function EventsPage({
       set_participation_message_type('error')
     } finally {
       set_cancelling_event_id(null)
+    }
+  }
+
+  function start_editing_event(event) {
+    set_editing_event_id(event.id)
+    set_edit_form({
+      title: event.title,
+      description: event.description || '',
+      date: event.date,
+      venue: event.venue,
+      timeslot: event.timeslot,
+      visibility: event.visibility,
+    })
+    set_edit_venues([])
+    set_edit_venues_error('')
+    set_participation_message('')
+  }
+
+  async function save_event_edit(event) {
+    set_saving_event_edit(true)
+    set_participation_message('')
+    try {
+      const response = await fetch(`/api/events/${event.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(edit_form),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not update event.')
+      }
+
+      set_editing_event_id(null)
+      set_edit_form(null)
+      set_participation_message(data.message)
+      set_participation_message_type('success')
+      const [events_response, notifications_response] = await Promise.all([
+        fetch('/api/events'),
+        fetch('/api/notifications'),
+      ])
+      if (!events_response.ok || !notifications_response.ok) {
+        throw new Error(
+          'Event updated, but refreshed event details or notifications could not be loaded.',
+        )
+      }
+      const [updated_events, updated_notifications] = await Promise.all([
+        events_response.json(),
+        notifications_response.json(),
+      ])
+      set_events(updated_events)
+      set_selected_event(
+        updated_events.find((updated_event) => updated_event.id === event.id) ||
+          null,
+      )
+      set_notifications(updated_notifications)
+      set_notification_error('')
+    } catch (error) {
+      set_participation_message(
+        error.message || 'Could not reach the server.',
+      )
+      set_participation_message_type('error')
+    } finally {
+      set_saving_event_edit(false)
     }
   }
 
@@ -396,20 +519,202 @@ function EventsPage({
           <p>Status: {selected_event.status}</p>
           <p>Joined Count: {selected_event.joined_count}</p>
           <p>Capacity: {selected_event.capacity}</p>
+          {selected_event.can_cancel && (
+            <details
+              className="event-participants"
+              onToggle={(toggle_event) => {
+                if (toggle_event.currentTarget.open) {
+                  load_event_participants(selected_event.id)
+                }
+              }}
+            >
+              <summary>View participants</summary>
+              {participants_loading && <p>Loading participants…</p>}
+              {participants_error && (
+                <div className="message error-message" role="alert">
+                  <p>{participants_error}</p>
+                  <button
+                    type="button"
+                    onClick={() => load_event_participants(selected_event.id)}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+              {participants_by_event[selected_event.id]?.length === 0 && (
+                <p>No one has signed up for this event.</p>
+              )}
+              {(participants_by_event[selected_event.id] || []).map(
+                (participant) => (
+                  <div
+                    className="row"
+                    key={`${selected_event.id}:${participant.user_id}`}
+                  >
+                    <span>
+                      {participant.name}
+                      <span className="membership-role">
+                        {' · '}
+                        {participant.status === 'waitlisted'
+                          ? 'Waitlisted'
+                          : 'Joined'}
+                        {' · '}
+                        {new Date(participant.joined_at).toLocaleString()}
+                      </span>
+                    </span>
+                  </div>
+                ),
+              )}
+            </details>
+          )}
           {selected_event.is_full && (
             <p className="badge full-badge" role="status">Event full</p>
           )}
           {selected_event.can_cancel && (
-            <button
-              type="button"
-              className="cancel-button"
-              disabled={cancelling_event_id === selected_event.id}
-              onClick={() => cancel_event(selected_event)}
+            <>
+              {editing_event_id !== selected_event.id && (
+                <button
+                  type="button"
+                  onClick={() => start_editing_event(selected_event)}
+                >
+                  Edit event
+                </button>
+              )}
+              <button
+                type="button"
+                className="cancel-button"
+                disabled={cancelling_event_id === selected_event.id}
+                onClick={() => cancel_event(selected_event)}
+              >
+                {cancelling_event_id === selected_event.id
+                  ? 'Cancelling…'
+                  : 'Cancel event'}
+              </button>
+            </>
+          )}
+          {editing_event_id === selected_event.id && edit_form && (
+            <form
+              className="event-edit-form"
+              onSubmit={(submit_event) => {
+                submit_event.preventDefault()
+                save_event_edit(selected_event)
+              }}
             >
-              {cancelling_event_id === selected_event.id
-                ? 'Cancelling…'
-                : 'Cancel event'}
-            </button>
+              <h3>Edit event</h3>
+              <label>
+                Event title
+                <input
+                  required
+                  maxLength={255}
+                  value={edit_form.title}
+                  onChange={(change_event) =>
+                    set_edit_form((current) => ({
+                      ...current,
+                      title: change_event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Description
+                <textarea
+                  required
+                  value={edit_form.description}
+                  onChange={(change_event) =>
+                    set_edit_form((current) => ({
+                      ...current,
+                      description: change_event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Date
+                <input
+                  required
+                  type="date"
+                  value={edit_form.date}
+                  onChange={(change_event) =>
+                    set_edit_form((current) => ({
+                      ...current,
+                      date: change_event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Venue
+                <select
+                  required
+                  value={edit_form.venue}
+                  onChange={(change_event) =>
+                    set_edit_form((current) => ({
+                      ...current,
+                      venue: change_event.target.value,
+                    }))
+                  }
+                >
+                  {edit_venues.map((venue) => (
+                    <option key={venue.id} value={venue.name}>
+                      {venue.name} ({venue.capacity} seats)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {edit_venues_error && (
+                <p className="message error-message" role="alert">
+                  {edit_venues_error}
+                </p>
+              )}
+              <label>
+                Timeslot
+                <select
+                  required
+                  value={edit_form.timeslot}
+                  onChange={(change_event) =>
+                    set_edit_form((current) => ({
+                      ...current,
+                      timeslot: change_event.target.value,
+                    }))
+                  }
+                >
+                  {['10:00 - 12:00', '13:00 - 15:00', '16:00 - 18:00'].map(
+                    (timeslot) => (
+                      <option key={timeslot}>{timeslot}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label>
+                Visibility
+                <select
+                  value={edit_form.visibility}
+                  onChange={(change_event) =>
+                    set_edit_form((current) => ({
+                      ...current,
+                      visibility: change_event.target.value,
+                    }))
+                  }
+                >
+                  <option>Public</option>
+                  <option>Members only</option>
+                </select>
+              </label>
+              <button type="submit" disabled={saving_event_edit}>
+                {saving_event_edit ? 'Saving…' : 'Save event changes'}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={saving_event_edit}
+                onClick={() => {
+                  set_editing_event_id(null)
+                  set_edit_form(null)
+                  set_edit_venues_error('')
+                }}
+              >
+                Cancel editing
+              </button>
+            </form>
           )}
           {selected_event.participation_status === 'waitlisted' && (
             <p className="message" role="status">
