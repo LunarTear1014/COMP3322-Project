@@ -3,6 +3,12 @@
 ### Requirement: Authoritative eligibility
 The system SHALL persist participation only for published confirmed events before deadline/start and enforce current members-only membership.
 
+Members-only event registrations require committee approval before a place or waitlist position is allocated. Public event registrations remain automatic.
+
+#### Scenario: Committee reviews members-only request
+- **WHEN** a club member requests a members-only event
+- **THEN** the request remains pending until committee acceptance or rejection; acceptance uses current capacity and waitlist rules
+
 #### Scenario: Deadline boundary
 - **WHEN** registration occurs at exactly registration_closes_at
 - **THEN** 409 REGISTRATION_CLOSED is returned

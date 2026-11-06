@@ -3,5 +3,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --chown=node:node src ./src
+COPY --chown=node:node db/migrations ./db/migrations
 USER node
 CMD ["node", "src/index.js"]

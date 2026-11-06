@@ -7,6 +7,7 @@ import {
   update_user_account,
 } from "./users.repository.js";
 import { hash_password, verify_password } from "./passwords.js";
+const dummy_hash = "3555d60561c0bcf4bb4e1f114023015f:36e8974b28b5baa5f6cd4648c4538418d9e333e77a0a8a83b1ee6098b557c5ffd9e70e0406fe9634d6972c1aa371711ca08c611592672e6ed939ccaafd4e81f7";
 
 async function register_user({ name, email, student_id, password }) {
   const password_hash = await hash_password(password);
@@ -21,13 +22,15 @@ async function register_user({ name, email, student_id, password }) {
   }
   return {
     ok: true,
-    user: { id: result.user_id, name, email, student_id },
+    user: { id: result.user_id, name, email, student_id, platform_role: "student" },
   };
 }
 
 async function login_user(email, password) {
   const user = await find_user_by_email(email);
-  if (!user || !(await verify_password(password, user.password_hash))) {
+  const valid_hash = /^[a-f0-9]{32}:[a-f0-9]{128}$/.test(user?.password_hash || "");
+  const matched = await verify_password(password, valid_hash ? user.password_hash : dummy_hash);
+  if (!user || !valid_hash || !matched) {
     return null;
   }
   return {
@@ -35,6 +38,7 @@ async function login_user(email, password) {
     name: user.name,
     email: user.email,
     student_id: user.student_id,
+    platform_role: user.platform_role,
   };
 }
 

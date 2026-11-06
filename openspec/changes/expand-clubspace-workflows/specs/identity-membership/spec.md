@@ -38,11 +38,15 @@ The system SHALL derive committee permissions from current membership in the tar
 - **THEN** the request returns403
 
 ### Requirement: Persistent membership lifecycle
-The system SHALL persist idempotent membership join/leave, prohibit public role appointment and serialize eligibility-sensitive membership writes with registrations.
+The system SHALL persist club membership requests for committee approval or rejection, preserve idempotent leave, prohibit public role appointment and serialize eligibility-sensitive membership writes with registrations.
 
 #### Scenario: Repeated join
 - **WHEN** a committee member joins the same club again
 - **THEN** the original committee role is returned without downgrade
+
+#### Scenario: Club membership request
+- **WHEN** a nonmember requests to join a club
+- **THEN** membership remains pending until the club committee accepts it
 
 #### Scenario: Member leave with protected registration
 - **WHEN** a member with upcoming members-only active participation leaves that club

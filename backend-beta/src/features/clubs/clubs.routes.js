@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { database_error, invalid_request } from "../../shared/http.js";
+import { clubReport, parseReportRange } from "./reports.service.js";
 import {
   join_club,
   leave_club,
@@ -17,6 +18,19 @@ import {
 } from "./clubs.service.js";
 
 const router = Router();
+
+router.get("/api/clubs/:club_id/reports", async (req, res) => {
+  if (!Number.isSafeInteger(req.session?.user_id)) return res.status(401).json({ message: "Sign in to view reports." });
+  const clubId = parse_club_id(req.params.club_id);
+  const range = parseReportRange(req.query.from, req.query.to);
+  if (!clubId || !range) return res.status(422).json({ message: "Provide a valid club ID and UTC range of at most 93 days." });
+  try {
+    const result = await clubReport(clubId, req.session.user_id, range);
+    if (result.reason === "not_found") return res.status(404).json({ message: "Club not found." });
+    if (result.reason === "forbidden") return res.status(403).json({ message: "Only this club's committee can view reports." });
+    return res.json(result.data);
+  } catch (error) { return database_error(res, error); }
+});
 
 function parse_club_id(value) {
   if (!/^[1-9]\d*$/.test(value)) {
@@ -212,6 +226,7 @@ router.delete("/api/clubs/:club_id/membership", async (req, res) => {
   if (club_id === null) {
     return invalid_request(res, "Club ID must be a positive integer.");
   }
+  if (!Number.isSafeInteger(req.session?.user_id)) return res.status(401).json({ message: "Sign in to leave a club." });
 
   try {
     const result = await leave_club(club_id, req.session?.user_id);
@@ -226,6 +241,8 @@ router.delete("/api/clubs/:club_id/membership", async (req, res) => {
         message: "Transfer the presidency or delete the club before leaving.",
       });
     }
+    if (result.reason === "committee_protected") return res.status(409).json({ message: "Leave the committee before leaving the club." });
+    if (result.reason === "active_registration") return res.status(409).json({ message: "Withdraw from future members-only events before leaving the club." });
     return res.status(409).json({ message: "You have not joined this club." });
   } catch (error) {
     return database_error(res, error);

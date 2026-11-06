@@ -1,4 +1,5 @@
 import pool from "../../config/db.js";
+import { audit } from "../events/audit.js";
 
 async function list_clubs(user_id = null) {
   const [rows] = await pool.query(
@@ -27,7 +28,7 @@ async function list_clubs(user_id = null) {
 
 async function list_memberships(user_id = null) {
   const [rows] = await pool.query(
-    `SELECT c.id AS club_id, c.name, c.description, m.role, m.joined_at
+    `SELECT c.id AS club_id, c.name, c.description, m.role, m.joined_at, UNIX_TIMESTAMP(m.joined_at) AS joined_epoch
      FROM memberships m
      JOIN clubs c ON c.id = m.club_id
      WHERE m.user_id = ?
@@ -41,6 +42,7 @@ async function join_club(club_id, user_id) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
     const [[club]] = await connection.query(
       "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
@@ -75,6 +77,7 @@ async function join_club(club_id, user_id) {
       "INSERT INTO club_join_requests (user_id, club_id) VALUES (?, ?)",
       [user_id, club_id],
     );
+    await audit(connection,user_id,'membership',club_id,'membership.requested',{user_id,request_id:result.insertId});
     await connection.commit();
     return { ok: true, request_id: result.insertId, club_name: club.name };
   } catch (error) {
@@ -114,6 +117,7 @@ async function review_join_request(club_id, request_id, user_id, decision) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
     const [[club]] = await connection.query(
       "SELECT id FROM clubs WHERE id = ? FOR UPDATE",
@@ -156,6 +160,7 @@ async function review_join_request(club_id, request_id, user_id, decision) {
        WHERE id = ?`,
       [decision === "accept" ? "accepted" : "rejected", user_id, request_id],
     );
+    await audit(connection,user_id,'membership',club_id,`membership.${decision === 'accept' ? 'accepted' : 'rejected'}`,{user_id:request.user_id,request_id});
     await connection.commit();
     return { ok: true, decision };
   } catch (error) {
@@ -166,29 +171,35 @@ async function review_join_request(club_id, request_id, user_id, decision) {
   }
 }
 
-async function leave_club(club_id, user_id = demo_user_id) {
-  const [[membership]] = await pool.query(
-    "SELECT role FROM memberships WHERE user_id = ? AND club_id = ?",
-    [user_id, club_id],
-  );
-  if (membership?.role === "president") {
-    return { ok: false, reason: "president_must_transfer" };
-  }
-
-  const [result] = await pool.query(
-    "DELETE FROM memberships WHERE user_id = ? AND club_id = ?",
-    [user_id, club_id],
-  );
-  if (result.affectedRows > 0) {
+async function leave_club(club_id, user_id) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
+    await connection.beginTransaction();
+    const [[club]] = await connection.query("SELECT id FROM clubs WHERE id=? FOR UPDATE", [club_id]);
+    if (!club) { await connection.rollback(); return { ok: false, reason: "not_found" }; }
+    const [[membership]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id=? AND club_id=? FOR UPDATE", [user_id, club_id]);
+    if (!membership) { await connection.rollback(); return { ok: false, reason: "not_a_member" }; }
+    if (["committee", "president"].includes(membership.role)) {
+      await connection.rollback();
+      return { ok: false, reason: membership.role === "president" ? "president_must_transfer" : "committee_protected" };
+    }
+    const [[active]] = await connection.query(`SELECT p.event_id FROM participations p
+      JOIN events e ON e.id=p.event_id WHERE p.user_id=? AND e.club_id=? AND e.visibility='members_only'
+      AND e.status='published' AND e.start_time > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR)
+      AND p.status IN ('joined','waitlisted') LIMIT 1`, [user_id, club_id]);
+    if (active) { await connection.rollback(); return { ok: false, reason: "active_registration" }; }
+    await connection.query(`UPDATE event_join_requests SET status='withdrawn' WHERE user_id=? AND status='pending'
+      AND event_id IN (SELECT id FROM events WHERE club_id=?)`, [user_id,club_id]);
+    await connection.query("DELETE FROM memberships WHERE user_id=? AND club_id=?", [user_id, club_id]);
+    await audit(connection, user_id, "membership", club_id, "membership.left", { user_id });
+    await connection.commit();
     return { ok: true };
-  }
-
-  const [[club]] = await pool.query("SELECT id FROM clubs WHERE id = ?", [
-    club_id,
-  ]);
-  return club
-    ? { ok: false, reason: "not_a_member" }
-    : { ok: false, reason: "not_found" };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
 }
 
 async function list_club_members(club_id, user_id) {
@@ -249,6 +260,7 @@ async function promote_club_member(club_id, member_user_id, user_id) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
 
     const [[club]] = await connection.query(
@@ -304,6 +316,7 @@ async function demote_club_member(club_id, member_user_id, user_id) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
 
     const [[club]] = await connection.query(
@@ -359,6 +372,7 @@ async function create_club({ name, description }, user_id) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
     const [result] = await connection.query(
       "INSERT INTO clubs (name, description) VALUES (?, ?)",
@@ -394,6 +408,7 @@ async function transfer_presidency(club_id, target_user_id, user_id, confirmatio
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
     const [[club]] = await connection.query(
       "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
@@ -450,6 +465,7 @@ async function delete_club(club_id, user_id, confirmation) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
     const [[club]] = await connection.query(
       "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",

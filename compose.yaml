@@ -24,6 +24,7 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       SESSION_COOKIE_SECURE: "false"
+      APP_ORIGIN: ${APP_ORIGIN:-http://c3322-pg19.cs.hku.hk}
     depends_on:
       db:
         condition: service_healthy
@@ -32,6 +33,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+    restart: unless-stopped
+
+  worker:
+    build: ./backend-beta
+    command: ["node", "src/worker.js"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: clubspace
+      DB_USER: clubspace_app
+      DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "src/jobs/worker-health.js"]
+      interval: 30s
+      timeout: 10s
+      start_period: 45s
+      retries: 3
     restart: unless-stopped
 
   db:

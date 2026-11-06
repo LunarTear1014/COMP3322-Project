@@ -6,13 +6,69 @@ const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch; setCsrf(null) })
 test('main backend adapter exposes every page of club and venue options', async () => {
   const rows = Array.from({length: 101}, (_, index) => ({id: index + 1, name: `Option ${index + 1}`}))
-  globalThis.fetch = async () => new Response(JSON.stringify(rows), {status: 200})
+  globalThis.fetch = async () => new Response(JSON.stringify({ data: rows.slice(100), meta: { page: 2, page_size: 100, total: 101 } }), {status: 200})
   for (const path of ['/clubs', '/venues']) {
     const result = await requestMainBackend(`${path}?page=2&page_size=100`)
     assert.equal(result.meta.total, 101)
     assert.equal(result.data.length, 1)
     assert.equal(result.data[0].id, 101)
   }
+})
+test('main backend obtains a CSRF token and never replays a rejected mutation', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    if (url.endsWith('/auth/csrf')) return new Response(JSON.stringify({ data: { csrf_token: 'test-token' } }), { status: 200 })
+    return new Response(JSON.stringify({ code: 'CSRF_INVALID', message: 'Expired' }), { status: 403 })
+  }
+  await assert.rejects(requestMainBackend('/bookings/7/decision', { method: 'POST', body: { expected_version: 1, decision: 'approve' } }), error => error.code === 'CSRF_INVALID')
+  assert.equal(calls.length, 2)
+  assert.equal(calls[1].options.headers['X-CSRF-Token'], 'test-token')
+  assert.equal(calls[1].options.credentials, 'same-origin')
+})
+test('main backend displays authoritative v1 unread counts and pagination', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    return new Response(JSON.stringify({ data: [{ id: 12, title: 'Event', body: 'Updated' }], meta: { page: 3, page_size: 20, total: 61, unread_count: 57 } }), { status: 200 })
+  }
+  const result = await requestMainBackend('/notifications?page=3&page_size=20')
+  assert.equal(calls[0].url, '/api/v1/notifications?page=3&page_size=20')
+  assert.equal(result.meta.unread_count, 57)
+  assert.equal(result.meta.total, 61)
+})
+test('main backend uses v1 event and booking contracts', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    if (url.endsWith('/auth/csrf')) return new Response(JSON.stringify({ data: { csrf_token: 'token' } }), { status: 200 })
+    return new Response(JSON.stringify({ data: { id: 4, state: 'draft' } }), { status: 200 })
+  }
+  const body = { club_id: 1, venue_id: 2, capacity: 3, visibility: 'public' }
+  const result = await requestMainBackend('/events', { method: 'POST', body })
+  assert.equal(result.data.state, 'draft')
+  assert.equal(calls[1].url, '/api/v1/events')
+  assert.deepEqual(JSON.parse(calls[1].options.body), body)
+  await requestMainBackend('/bookings/7/decision', { method: 'POST', body: { expected_version: 1, decision: 'approve' } })
+  assert.equal(calls[2].url, '/api/v1/bookings/7/decision')
+})
+test('main backend uses the rotated login token for profile changes and clears it on logout', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    if (url.endsWith('/auth/login')) return new Response(JSON.stringify({ data: { csrf_token: 'rotated', user: {}, memberships: [] } }))
+    if (url.endsWith('/auth/logout')) return new Response(null, { status: 204 })
+    if (url.endsWith('/auth/csrf')) return new Response(JSON.stringify({ data: { csrf_token: 'anonymous' } }))
+    return new Response(JSON.stringify({ data: { name: 'New name' } }))
+  }
+  await requestMainBackend('/auth/login', { method: 'POST', body: { email: 'member@example.test', password: 'password' } })
+  await requestMainBackend('/profile', { method: 'PATCH', body: { name: 'New name' } })
+  assert.equal(calls.at(-1).url, '/api/v1/profile')
+  assert.equal(calls.at(-1).options.headers['X-CSRF-Token'], 'rotated')
+  await requestMainBackend('/auth/logout', { method: 'POST' })
+  await requestMainBackend('/auth/register', { method: 'POST', body: {} })
+  assert.equal(calls.at(-2).url, '/api/v1/auth/csrf')
+  assert.equal(calls.at(-1).options.headers['X-CSRF-Token'], 'anonymous')
 })
 test('Hong Kong week and half-open interval boundaries', () => {
   assert.equal(weekStart('2026-11-11'), '2026-11-09')

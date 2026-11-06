@@ -2,7 +2,7 @@ import pool from "../../config/db.js";
 
 async function find_user_by_id(user_id) {
   const [[user]] = await pool.query(
-    "SELECT id, name, email, student_id FROM users WHERE id = ?",
+    "SELECT id, name, email, student_id, platform_role FROM users WHERE id = ?",
     [user_id],
   );
   return user;
@@ -18,7 +18,7 @@ async function find_user_by_id_for_auth(user_id) {
 
 async function find_user_by_email(email) {
   const [[user]] = await pool.query(
-    "SELECT id, name, email, student_id, password_hash FROM users WHERE email = ?",
+    "SELECT id, name, email, student_id, password_hash, platform_role FROM users WHERE email = ?",
     [email],
   );
   return user;
@@ -63,6 +63,19 @@ async function update_user_account(
   }
 }
 
+async function update_user_profile(user_id, { name, email }) {
+  try {
+    const [result] = await pool.query(
+      "UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email) WHERE id = ?",
+      [name ?? null, email ?? null, user_id],
+    );
+    return { ok: result.affectedRows > 0 };
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") return { ok: false, reason: "duplicate_email" };
+    throw error;
+  }
+}
+
 async function delete_user(user_id) {
   const [result] = await pool.query("DELETE FROM users WHERE id = ?", [
     user_id,
@@ -77,4 +90,5 @@ export {
   find_user_by_email,
   find_user_by_id,
   update_user_account,
+  update_user_profile,
 };

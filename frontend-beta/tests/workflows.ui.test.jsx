@@ -60,6 +60,33 @@ afterEach(() => {
 
 describe('frontend preview workflows', () => {
 
+  it('keeps the navigation unread count in sync with inbox updates and marking read', async () => {
+    window.history.replaceState({}, '', '/notifications')
+    const visibility = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
+    let unread = 0
+    const fallback = previewFetch()
+    vi.stubGlobal('fetch', vi.fn(async (input, options = {}) => {
+      const url = new URL(input, 'http://localhost')
+      if (url.pathname === '/api/v1/notifications/42/read') {
+        unread = 0
+        return new Response(JSON.stringify({ data: { id: 42, read_at: '2026-11-06T00:00:00Z' } }), { status: 200 })
+      }
+      if (url.pathname === '/api/v1/notifications') {
+        const data = unread ? [{ id: 42, title: 'New event', body: 'A new notification', created_at: '2026-11-06T00:00:00Z', read_at: null }] : []
+        return new Response(JSON.stringify({ data, meta: { page: 1, page_size: 20, total: data.length, unread_count: unread } }), { status: 200 })
+      }
+      return fallback(input, options)
+    }))
+    render(<App />)
+    expect(await screen.findByRole('link', { name: 'Notifications, 0 unread' })).toBeTruthy()
+    unread = 1
+    fireEvent.focus(window)
+    expect(await screen.findByRole('link', { name: 'Notifications, 1 unread' })).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark as read' }))
+    expect(await screen.findByRole('link', { name: 'Notifications, 0 unread' })).toBeTruthy()
+    visibility.mockRestore()
+  })
+
   it('opens an event from discovery and reports a failed registration', async () => {
     window.history.replaceState({}, '', '/events')
     vi.stubGlobal('fetch', previewFetch())
@@ -79,6 +106,52 @@ describe('frontend preview workflows', () => {
     expect(await screen.findByRole('link', { name: 'Campus photo walk' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Request a venue and create a draft' }).getAttribute('href')).toBe('/bookings/new')
     expect(screen.getByRole('link', { name: 'Photography Society' }).getAttribute('href')).toBe('/organizer/clubs/1/reports')
+  })
+
+  it('lets a committee member review a club membership request', async () => {
+    window.history.replaceState({}, '', '/organizer')
+    let pending = true
+    const fallback = previewFetch()
+    vi.stubGlobal('fetch', vi.fn(async (input, options = {}) => {
+      const url = new URL(input, 'http://localhost')
+      if (url.pathname === '/api/v1/clubs/1/join-requests') return new Response(JSON.stringify({ data: pending ? [{ id: 7, name: 'Casey Student' }] : [] }), { status: 200 })
+      if (url.pathname === '/api/v1/clubs/1/join-requests/7/decision') {
+        expect(JSON.parse(options.body)).toEqual({ decision:'accept' })
+        pending = false
+        return new Response(JSON.stringify({ data: { status:'accepted' } }), { status: 200 })
+      }
+      return fallback(input, options)
+    }))
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve Casey Student' }))
+    expect(await screen.findByText('Membership approved.')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByText('Casey Student')).toBeNull())
+  })
+
+  it('lets a committee member review a members-only event request', async () => {
+    window.history.replaceState({}, '', '/organizer/events/1')
+    let pending = true
+    const fallback = previewFetch()
+    vi.stubGlobal('fetch', vi.fn(async (input, options = {}) => {
+      const url = new URL(input, 'http://localhost')
+      if (url.pathname === '/api/v1/events/1/join-requests') return new Response(JSON.stringify({ data: pending ? [{ user_id: 8, name:'Taylor Student', email:'taylor@example.test' }] : [], meta:{page:1,page_size:20,total:pending?1:0} }), { status: 200 })
+      if (url.pathname === '/api/v1/events/1/join-requests/8/decision') {
+        expect(JSON.parse(options.body)).toEqual({ decision:'reject' })
+        pending = false
+        return new Response(JSON.stringify({ data:{ status:'rejected' } }), { status:200 })
+      }
+      const response = await fallback(input, options)
+      if (url.pathname === '/api/v1/events/1') {
+        const result = await response.json()
+        result.data.visibility = 'members_only'
+        return new Response(JSON.stringify(result), {status:200})
+      }
+      return response
+    }))
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject Taylor Student' }))
+    expect(await screen.findByText('Request rejected.')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByText(/taylor@example.test/)).toBeNull())
   })
 
   it('copies event details into a new request without copying the booking time', async () => {
@@ -103,7 +176,7 @@ describe('frontend preview workflows', () => {
 
     expect(await screen.findByRole('heading', { name: 'Club memberships' })).toBeTruthy()
     const club = (await screen.findByRole('heading', { name: 'Film Society' })).closest('article')
-    expect(within(club).getByRole('button', { name: 'Join club' })).toBeTruthy()
+    expect(within(club).getByRole('button', { name: 'Request to join' })).toBeTruthy()
   })
 
   it('shows a recoverable error if the profile refresh fails after a conflict', async () => {

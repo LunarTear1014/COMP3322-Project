@@ -1,5 +1,8 @@
 import pool from "../../config/db.js";
 import { today } from "../../shared/timeslots.js";
+import { enqueueEventJob } from "../../jobs/notifications.js";
+import { recordParticipation, recordCancellation } from "./history.js";
+import { audit } from "./audit.js";
 
 function display_visibility(visibility) {
   return visibility === "members_only" ? "Members only" : "Public";
@@ -31,7 +34,12 @@ function event_response(row) {
     registration_status: row.participation_status,
     waitlisted_count: Number(row.waitlisted_count),
     event_status: row.event_status,
+    version: row.version,
     booking_status: row.booking_status,
+    booking_id: row.booking_id,
+    booking_version: row.booking_version,
+    decision_reason: row.decision_reason,
+    registration_closes_at: row.registration_closes_at,
     club_id: row.club_id,
     venue_id: row.venue_id,
     can_cancel: Boolean(row.can_cancel),
@@ -48,8 +56,8 @@ async function list_events(user_id = null, { event_id = null, managed = false } 
   } else if (event_id !== null) {
     visibility = `e.id = ? AND (e.status = 'published' OR ${organizer} OR EXISTS (
       SELECT 1 FROM participations p WHERE p.event_id = e.id AND p.user_id = ?
-    ))`;
-    parameters.push(event_id, user_id);
+    ) OR EXISTS (SELECT 1 FROM users admin WHERE admin.id = ? AND admin.platform_role = 'venue_admin'))`;
+    parameters.push(event_id, user_id, user_id);
   }
   const [rows] = await pool.query(`
       SELECT
@@ -62,7 +70,12 @@ async function list_events(user_id = null, { event_id = null, managed = false } 
         e.visibility,
         e.capacity,
         e.status AS event_status,
+        e.version,
+        DATE_FORMAT(e.registration_closes_at, '%Y-%m-%d %H:%i:%s') AS registration_closes_at,
         b.status AS booking_status,
+        b.id AS booking_id,
+        b.version AS booking_version,
+        CASE WHEN ${organizer} THEN b.decision_reason ELSE NULL END AS decision_reason,
         c.id AS club_id,
         v.id AS venue_id,
         c.name AS club,
@@ -166,7 +179,30 @@ async function list_event_participants(event_id, user_id) {
   return { ok: true, participants };
 }
 
-async function join_event(event_id, user_id, allow_waitlist = true) {
+async function promote_locked(connection, event, actor_id, available) {
+  const promoted = [];
+  while (promoted.length < available) {
+    const [[next]] = await connection.query(`SELECT user_id FROM participations
+      WHERE event_id=? AND status='waitlisted' ORDER BY COALESCE(queued_at,joined_at),user_id LIMIT 1 FOR UPDATE`, [event.id]);
+    if (!next) break;
+    if (event.visibility === "members_only") {
+      const [[eligible]] = await connection.query("SELECT user_id FROM memberships WHERE user_id=? AND club_id=?", [next.user_id, event.club_id]);
+      if (!eligible) {
+        await connection.query("UPDATE participations SET status='left',left_at=CURRENT_TIMESTAMP(6) WHERE user_id=? AND event_id=?", [next.user_id, event.id]);
+        await recordParticipation(connection, { eventId: event.id, userId: next.user_id, actorId: actor_id, action: "left", fromStatus: "waitlisted", toStatus: "left", reason: "membership_ineligible" });
+        continue;
+      }
+    }
+    await connection.query("UPDATE participations SET status='joined',confirmed_at=CURRENT_TIMESTAMP(6),left_at=NULL WHERE user_id=? AND event_id=?", [next.user_id, event.id]);
+    await recordParticipation(connection, { eventId: event.id, userId: next.user_id, actorId: actor_id, action: "promoted", fromStatus: "waitlisted", toStatus: "joined" });
+    await enqueueEventJob(connection, { type: "registration_changed", eventId: event.id, recipients: [next.user_id], title: event.title, action: "promoted" });
+    if (event.within_day) await enqueueEventJob(connection, { type: "event_reminder", eventId: event.id, recipients: [next.user_id], title: event.title });
+    promoted.push(next.user_id);
+  }
+  return promoted;
+}
+
+async function join_event(event_id, user_id, allow_waitlist = true, reviewer_id = null) {
   if (!Number.isSafeInteger(user_id)) {
     return { ok: false, reason: "unauthenticated" };
   }
@@ -174,17 +210,27 @@ async function join_event(event_id, user_id, allow_waitlist = true) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
 
+    const [[locator]] = await connection.query("SELECT club_id FROM events WHERE id=?", [event_id]);
+    if (!locator) { await connection.rollback(); return { ok: false, reason: "not_found" }; }
+    await connection.query("SELECT id FROM clubs WHERE id=? FOR UPDATE", [locator.club_id]);
+
     const [[event]] = await connection.query(
-      "SELECT id, club_id, visibility, status, capacity FROM events WHERE id = ? FOR UPDATE",
+      `SELECT e.id, e.club_id, e.visibility, e.status, e.capacity, e.title,
+         e.start_time <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR) AS started,
+         e.start_time <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 32 HOUR) AS within_day,
+         COALESCE(e.registration_closes_at,e.start_time) > DATE_ADD(UTC_TIMESTAMP(),INTERVAL 8 HOUR) AS registration_open,
+         (SELECT b.status FROM bookings b WHERE b.id = e.booking_id) AS booking_status
+       FROM events e WHERE e.id = ? FOR UPDATE`,
       [event_id],
     );
-    if (!event) {
+    if (!event || event.club_id !== locator.club_id) {
       await connection.rollback();
       return { ok: false, reason: "not_found" };
     }
-    if (event.status !== "published") {
+    if (event.status !== "published" || event.booking_status !== "confirmed" || event.started || !event.registration_open) {
       await connection.rollback();
       return { ok: false, reason: "unavailable" };
     }
@@ -200,17 +246,34 @@ async function join_event(event_id, user_id, allow_waitlist = true) {
       }
     }
 
+    if (reviewer_id !== null) {
+      const [[reviewer]] = await connection.query("SELECT role FROM memberships WHERE user_id=? AND club_id=?",[reviewer_id,event.club_id]);
+      if (!["committee","president"].includes(reviewer?.role)) { await connection.rollback(); return {ok:false,reason:"forbidden"}; }
+      const [[pending]] = await connection.query("SELECT allow_waitlist FROM event_join_requests WHERE event_id=? AND user_id=? AND status='pending' FOR UPDATE",[event_id,user_id]);
+      if (!pending || event.visibility !== 'members_only') { await connection.rollback(); return {ok:false,reason:"request_not_found"}; }
+      allow_waitlist = Boolean(pending.allow_waitlist);
+      await connection.query("UPDATE event_join_requests SET status='accepted',reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6) WHERE event_id=? AND user_id=?",[reviewer_id,event_id,user_id]);
+    }
+
     const [[participation]] = await connection.query(
       "SELECT status FROM participations WHERE user_id = ? AND event_id = ? FOR UPDATE",
       [user_id, event_id],
     );
     if (participation?.status === "joined") {
       await connection.rollback();
-      return { ok: false, reason: "already_joined" };
+      return reviewer_id !== null ? {ok:false,reason:'request_not_found'} : { ok: true, status: "joined", unchanged: true };
     }
     if (participation?.status === "waitlisted") {
       await connection.rollback();
-      return { ok: false, reason: "already_waitlisted" };
+      return reviewer_id !== null ? {ok:false,reason:'request_not_found'} : { ok: true, status: "waitlisted", unchanged: true };
+    }
+    if (event.visibility === 'members_only' && reviewer_id === null) {
+      const [[pending]] = await connection.query("SELECT status FROM event_join_requests WHERE event_id=? AND user_id=? FOR UPDATE",[event_id,user_id]);
+      if (pending?.status === 'pending') { await connection.rollback(); return {ok:true,status:'pending',unchanged:true}; }
+      await connection.query(`INSERT INTO event_join_requests (event_id,user_id,status,allow_waitlist,requested_at)
+        VALUES (?,?,'pending',?,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE status='pending',allow_waitlist=VALUES(allow_waitlist),requested_at=VALUES(requested_at),reviewed_by=NULL,reviewed_at=NULL`,[event_id,user_id,allow_waitlist]);
+      await connection.commit();
+      return {ok:true,status:'pending'};
     }
     const [[signup_count]] = await connection.query(
       `SELECT COUNT(*) AS joined_count
@@ -218,41 +281,54 @@ async function join_event(event_id, user_id, allow_waitlist = true) {
        WHERE event_id = ? AND status = 'joined'`,
       [event_id],
     );
-    if (Number(signup_count.joined_count) >= Number(event.capacity)) {
+    const promoted = await promote_locked(connection, event, user_id,
+      Math.max(0, Number(event.capacity) - Number(signup_count.joined_count)));
+    if (Number(signup_count.joined_count) + promoted.length >= Number(event.capacity)) {
       if (!allow_waitlist) {
-        await connection.rollback();
+        if (reviewer_id !== null) await connection.rollback(); else await connection.commit();
         return { ok: false, reason: "full" };
       }
+      const [[waiting]] = await connection.query("SELECT COUNT(*) AS count FROM participations WHERE event_id=? AND status='waitlisted'", [event_id]);
+      if (Number(waiting.count) >= 500) { if (reviewer_id !== null) await connection.rollback(); else await connection.commit(); return { ok: false, reason: "waitlist_full" }; }
       if (participation) {
         await connection.query(
           `UPDATE participations
-           SET status = 'waitlisted', joined_at = CURRENT_TIMESTAMP(6), left_at = NULL
+           SET status = 'waitlisted', joined_at = CURRENT_TIMESTAMP(6), last_registered_at=CURRENT_TIMESTAMP(6),
+             queued_at=CURRENT_TIMESTAMP(6), confirmed_at=NULL, left_at = NULL
            WHERE user_id = ? AND event_id = ?`,
           [user_id, event_id],
         );
       } else {
         await connection.query(
-          "INSERT INTO participations (user_id, event_id, status) VALUES (?, ?, 'waitlisted')",
+          "INSERT INTO participations (user_id, event_id, status,last_registered_at,queued_at) VALUES (?, ?, 'waitlisted',CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6))",
           [user_id, event_id],
         );
       }
+      await recordParticipation(connection, { eventId: event_id, userId: user_id, actorId: user_id, action: "waitlisted", fromStatus: participation?.status, toStatus: "waitlisted" });
+      await enqueueEventJob(connection, { type: "registration_changed", eventId: event_id, recipients: [user_id], title: event.title, action: "waitlisted" });
       await connection.commit();
       return { ok: true, status: "waitlisted" };
     }
     if (participation) {
       await connection.query(
         `UPDATE participations
-         SET status = 'joined', joined_at = CURRENT_TIMESTAMP(6), left_at = NULL
+         SET status = 'joined', joined_at = CURRENT_TIMESTAMP(6),last_registered_at=CURRENT_TIMESTAMP(6),
+           queued_at=NULL,confirmed_at=CURRENT_TIMESTAMP(6),left_at = NULL
          WHERE user_id = ? AND event_id = ?`,
         [user_id, event_id],
       );
     } else {
       await connection.query(
-        "INSERT INTO participations (user_id, event_id) VALUES (?, ?)",
+        "INSERT INTO participations (user_id,event_id,last_registered_at,confirmed_at) VALUES (?,?,CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6))",
         [user_id, event_id],
       );
     }
 
+    await recordParticipation(connection, { eventId: event_id, userId: user_id, actorId: user_id, action: "joined", fromStatus: participation?.status, toStatus: "joined" });
+    await enqueueEventJob(connection, { type: "registration_changed", eventId: event_id, recipients: [user_id], title: event.title, action: "joined" });
+    if (event.within_day) {
+      await enqueueEventJob(connection, { type: "event_reminder", eventId: event_id, recipients: [user_id], title: event.title });
+    }
     await connection.commit();
     return { ok: true, status: "joined" };
   } catch (error) {
@@ -263,6 +339,26 @@ async function join_event(event_id, user_id, allow_waitlist = true) {
   }
 }
 
+async function reject_event_request(event_id, user_id, reviewer_id) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    await connection.beginTransaction();
+    const [[locator]] = await connection.query('SELECT club_id FROM events WHERE id=?',[event_id]);
+    if (!locator) { await connection.rollback(); return {ok:false,reason:'not_found'}; }
+    await connection.query('SELECT id FROM clubs WHERE id=? FOR UPDATE',[locator.club_id]);
+    const [[event]] = await connection.query('SELECT id,club_id,title FROM events WHERE id=? FOR UPDATE',[event_id]);
+    const [[reviewer]] = await connection.query('SELECT role FROM memberships WHERE user_id=? AND club_id=?',[reviewer_id,locator.club_id]);
+    if (!['committee','president'].includes(reviewer?.role)) { await connection.rollback(); return {ok:false,reason:'forbidden'}; }
+    const [result] = await connection.query("UPDATE event_join_requests SET status='rejected',reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6) WHERE event_id=? AND user_id=? AND status='pending'",[reviewer_id,event_id,user_id]);
+    if (!result.affectedRows) { await connection.rollback(); return {ok:false,reason:'request_not_found'}; }
+    await enqueueEventJob(connection,{type:'registration_changed',eventId:event_id,recipients:[user_id],title:event.title,action:'rejected'});
+    await connection.commit();
+    return {ok:true,status:'rejected'};
+  } catch (error) { await connection.rollback(); throw error; }
+  finally { connection.release(); }
+}
+
 async function leave_event(event_id, user_id) {
   if (!Number.isSafeInteger(user_id)) {
     return { ok: false, reason: "unauthenticated" };
@@ -271,27 +367,46 @@ async function leave_event(event_id, user_id) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
+    const [[locator]] = await connection.query("SELECT club_id FROM events WHERE id=?", [event_id]);
+    if (!locator) { await connection.rollback(); return { ok: false, reason: "not_found" }; }
+    await connection.query("SELECT id FROM clubs WHERE id=? FOR UPDATE", [locator.club_id]);
     const [[event]] = await connection.query(
-      "SELECT id FROM events WHERE id = ? FOR UPDATE",
+      `SELECT id, club_id, title, visibility, status, start_time <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR) AS started,
+         COALESCE(registration_closes_at,start_time) > DATE_ADD(UTC_TIMESTAMP(),INTERVAL 8 HOUR) AS registration_open,
+         start_time <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 32 HOUR) AS within_day
+       FROM events WHERE id = ? FOR UPDATE`,
       [event_id],
     );
-    if (!event) {
+    if (!event || event.club_id !== locator.club_id) {
       await connection.rollback();
       return { ok: false, reason: "not_found" };
     }
 
+    if (event.status === "cancelled") {
+      await connection.rollback();
+      return { ok: true, cancelled: true };
+    }
     const [[participation]] = await connection.query(
       `SELECT status FROM participations
        WHERE user_id = ? AND event_id = ? FOR UPDATE`,
       [user_id, event_id],
     );
+    if (!participation || !['joined','waitlisted'].includes(participation.status)) {
+      const [pending] = await connection.query("UPDATE event_join_requests SET status='withdrawn' WHERE event_id=? AND user_id=? AND status='pending'",[event_id,user_id]);
+      if (pending.affectedRows) { await connection.commit(); return {ok:true,status:'left'}; }
+    }
     if (
       !participation ||
       !["joined", "waitlisted"].includes(participation.status)
     ) {
       await connection.rollback();
-      return { ok: false, reason: "not_joined" };
+      return { ok: true, unchanged: true };
+    }
+    if (event.started) {
+      await connection.rollback();
+      return { ok: false, reason: "started" };
     }
 
     await connection.query(
@@ -301,24 +416,12 @@ async function leave_event(event_id, user_id) {
       [user_id, event_id],
     );
 
+    await recordParticipation(connection, { eventId: event_id, userId: user_id, actorId: user_id, action: "left", fromStatus: participation.status, toStatus: "left" });
+    await enqueueEventJob(connection, { type: "registration_changed", eventId: event_id, recipients: [user_id], title: event.title, action: "left" });
+
     let promoted_user_id = null;
-    if (participation.status === "joined") {
-      const [[next_waitlisted]] = await connection.query(
-        `SELECT user_id FROM participations
-         WHERE event_id = ? AND status = 'waitlisted'
-         ORDER BY joined_at ASC, user_id ASC
-         LIMIT 1 FOR UPDATE`,
-        [event_id],
-      );
-      if (next_waitlisted) {
-        await connection.query(
-          `UPDATE participations
-           SET status = 'joined', left_at = NULL
-           WHERE user_id = ? AND event_id = ?`,
-          [next_waitlisted.user_id, event_id],
-        );
-        promoted_user_id = next_waitlisted.user_id;
-      }
+    if (participation.status === "joined" && event.status === "published" && event.registration_open) {
+      [promoted_user_id = null] = await promote_locked(connection, event, user_id, 1);
     }
 
     await connection.commit();
@@ -331,20 +434,37 @@ async function leave_event(event_id, user_id) {
   }
 }
 
-async function cancel_event(event_id, user_id) {
+async function cancel_event(event_id, user_id, expected_version, reason) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
 
+    // Locate the immutable parents first, then lock in the documented order.
+    const [[locator]] = await connection.query(
+      `SELECT e.booking_id, e.club_id, b.venue_id
+       FROM events e JOIN bookings b ON b.id = e.booking_id WHERE e.id = ?`,
+      [event_id],
+    );
+    if (!locator) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    await connection.query("SELECT id FROM venues WHERE id = ? FOR UPDATE", [locator.venue_id]);
+    await connection.query("SELECT id FROM clubs WHERE id = ? FOR UPDATE", [locator.club_id]);
+    const [[booking]] = await connection.query("SELECT id, venue_id, club_id FROM bookings WHERE id = ? FOR UPDATE", [locator.booking_id]);
     const [[event]] = await connection.query(
-      `SELECT id, booking_id, club_id, title, start_time, status
+      `SELECT id, booking_id, club_id, title, status,version,
+         start_time <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR) AS started
        FROM events WHERE id = ? FOR UPDATE`,
       [event_id],
     );
-    if (!event) {
-      await connection.rollback();
-      return { ok: false, reason: "not_found" };
+    if (!event || !booking || event.booking_id !== locator.booking_id ||
+        event.club_id !== locator.club_id || booking.venue_id !== locator.venue_id ||
+        booking.club_id !== locator.club_id) {
+      throw new Error("Event relationships changed while acquiring locks");
     }
 
     const [[membership]] = await connection.query(
@@ -352,32 +472,44 @@ async function cancel_event(event_id, user_id) {
        WHERE user_id = ? AND club_id = ? FOR UPDATE`,
       [user_id, event.club_id],
     );
-    if (!["committee", "president"].includes(membership?.role)) {
+    const [[actor]] = await connection.query("SELECT platform_role FROM users WHERE id=?", [user_id]);
+    if (!["committee", "president"].includes(membership?.role) && actor?.platform_role !== "venue_admin") {
       await connection.rollback();
       return { ok: false, reason: "forbidden" };
     }
     if (event.status === "cancelled") {
+      await connection.commit();
+      return { ok: true, event_title: event.title, already_cancelled: true };
+    }
+    if (event.version !== expected_version) {
       await connection.rollback();
-      return { ok: false, reason: "already_cancelled" };
+      return { ok: false, reason: "stale" };
+    }
+    if (event.started) {
+      await connection.rollback();
+      return { ok: false, reason: "started" };
     }
 
+    const [recipients] = await connection.query(
+      "SELECT user_id FROM participations WHERE event_id = ? AND status IN ('joined','waitlisted') FOR UPDATE", [event_id]);
+    await enqueueEventJob(connection, { type: "event_cancelled", eventId: event_id, bookingId: event.booking_id,
+      recipients: recipients.map(row => row.user_id), title: event.title });
+    await connection.query("UPDATE event_join_requests SET status='cancelled' WHERE event_id=? AND status='pending'",[event_id]);
+    await recordCancellation(connection, event_id, user_id);
     await connection.query(
-      `INSERT INTO notifications (user_id, event_id, event_title, message)
-       SELECT p.user_id, e.id, e.title,
-         CONCAT('"', e.title, '" was cancelled by its organising club.')
-       FROM participations p
-       JOIN events e ON e.id = p.event_id
-       WHERE e.id = ? AND p.status IN ('joined', 'waitlisted')`,
+      "UPDATE events SET status = 'cancelled', version=version+1 WHERE id = ?",
       [event_id],
     );
     await connection.query(
-      "UPDATE events SET status = 'cancelled' WHERE id = ?",
-      [event_id],
-    );
-    await connection.query(
-      "UPDATE bookings SET status = 'cancelled' WHERE id = ?",
+      "UPDATE bookings SET status = 'cancelled',version=version+1 WHERE id = ? AND status IN ('pending','confirmed')",
       [event.booking_id],
     );
+    await connection.query(
+      `UPDATE participations SET status = 'cancelled', left_at = CURRENT_TIMESTAMP(6)
+       WHERE event_id = ? AND status IN ('joined', 'waitlisted')`,
+      [event_id],
+    );
+    await audit(connection, user_id, "event", event_id, "event.cancelled", { reason });
 
     await connection.commit();
     return { ok: true, event_title: event.title };
@@ -391,17 +523,23 @@ async function cancel_event(event_id, user_id) {
 
 async function edit_event(
   event_id,
-  { title, description, date, venue, visibility, bounds },
+  { title, description, bounds, expected_version, capacity, visibility, registration_closes_at },
   user_id,
 ) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
 
+    const [[locator]] = await connection.query("SELECT club_id FROM events WHERE id=?", [event_id]);
+    if (!locator) { await connection.rollback(); return { ok: false, reason: "not_found" }; }
+    await connection.query("SELECT id FROM clubs WHERE id=? FOR UPDATE", [locator.club_id]);
     const [[event]] = await connection.query(
-      `SELECT e.id, e.booking_id, e.club_id, e.status
-       FROM events e WHERE e.id = ? FOR UPDATE`,
+      `SELECT e.id, e.booking_id, e.club_id, e.status, e.version, e.capacity, e.visibility,
+         e.registration_closes_at, e.start_time, b.status AS booking_status, v.capacity AS venue_capacity
+       FROM events e JOIN bookings b ON b.id=e.booking_id JOIN venues v ON v.id=b.venue_id
+       WHERE e.id = ? FOR UPDATE`,
       [event_id],
     );
     if (!event) {
@@ -418,73 +556,33 @@ async function edit_event(
       await connection.rollback();
       return { ok: false, reason: "forbidden" };
     }
-    if (event.status !== "published") {
+    if (event.version !== expected_version) {
+      await connection.rollback();
+      return { ok: false, reason: "stale" };
+    }
+    if (!["draft", "published"].includes(event.status) || !["pending", "confirmed"].includes(event.booking_status)) {
       await connection.rollback();
       return { ok: false, reason: "unavailable" };
     }
 
-    if (!bounds) {
-      await connection.query(
-        "UPDATE events SET title = ?, description = ? WHERE id = ?",
-        [title.trim(), description.trim(), event_id],
-      );
-    } else {
-      const [[venue_row]] = await connection.query(
-        "SELECT id, capacity FROM venues WHERE name = ?",
-        [venue],
-      );
-      if (!venue_row) {
-        await connection.rollback();
-        return { ok: false, reason: "unknown_venue" };
-      }
-
-      const [conflicts] = await connection.query(
-        `SELECT id FROM bookings
-         WHERE venue_id = ? AND status = 'confirmed' AND id <> ?
-           AND start_time < ? AND end_time > ?
-         FOR UPDATE`,
-        [venue_row.id, event.booking_id, bounds.end, bounds.start],
-      );
-      if (conflicts.length > 0) {
-        await connection.rollback();
-        return {
-          ok: false,
-          reason: "conflict",
-          message: `${venue} is already booked for the selected date and timeslot.`,
-        };
-      }
-
-      await connection.query(
-        `UPDATE bookings
-         SET venue_id = ?, start_time = ?, end_time = ?
-         WHERE id = ?`,
-        [venue_row.id, bounds.start, bounds.end, event.booking_id],
-      );
-      await connection.query(
-        `UPDATE events
-         SET title = ?, description = ?, start_time = ?, end_time = ?,
-             visibility = ?, capacity = ?
-         WHERE id = ?`,
-        [
-          title.trim(),
-          description.trim(),
-          bounds.start,
-          bounds.end,
-          database_visibility(visibility),
-          venue_row.capacity,
-          event_id,
-        ],
-      );
+    if (bounds || (event.status === "published" && (capacity !== undefined || visibility !== undefined || registration_closes_at !== undefined))) {
+      await connection.rollback();
+      return { ok: false, reason: "frozen" };
     }
-    await connection.query(
-      `INSERT INTO notifications (user_id, event_id, event_title, message)
-       SELECT p.user_id, e.id, e.title,
-         CONCAT('"', e.title, '" has been updated. Please review the new details.')
-       FROM participations p
-       JOIN events e ON e.id = p.event_id
-       WHERE e.id = ? AND p.status IN ('joined', 'waitlisted')`,
-      [event_id],
-    );
+    const nextCapacity = capacity ?? event.capacity;
+    const nextVisibility = visibility === undefined ? event.visibility : database_visibility(visibility);
+    const deadline = registration_closes_at ?? event.registration_closes_at ?? event.start_time;
+    const [[valid]] = await connection.query(`SELECT ? > DATE_ADD(UTC_TIMESTAMP(),INTERVAL 8 HOUR) AND ? <= ? AS valid`, [deadline, deadline, event.start_time]);
+    if (event.status === "draft" && (!Number.isSafeInteger(nextCapacity) || nextCapacity < 1 || nextCapacity > Math.min(event.venue_capacity, 500) || !valid.valid)) {
+      await connection.rollback(); return { ok: false, reason: "invalid_details" };
+    }
+    await connection.query(`UPDATE events SET title=?,description=?,capacity=?,visibility=?,registration_closes_at=?,version=version+1 WHERE id=?`,
+      [title.trim(), description.trim(), nextCapacity, nextVisibility, deadline, event_id]);
+    const [recipients] = await connection.query(
+      "SELECT user_id FROM participations WHERE event_id = ? AND status IN ('joined','waitlisted') FOR UPDATE", [event_id]);
+    if (event.status === "published") await enqueueEventJob(connection, { type: "event_changed", eventId: event_id, bookingId: event.booking_id,
+      recipients: recipients.map(row => row.user_id), title: title.trim() });
+    await audit(connection, user_id, "event", event_id, "event.updated", {});
 
     await connection.commit();
     return { ok: true };
@@ -539,12 +637,36 @@ async function create_event({
   timeslot,
   visibility,
   bounds,
+  capacity,
+  registration_closes_at,
   user_id,
 }) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
+
+    const [[venue_row]] = await connection.query(
+      "SELECT id, capacity FROM venues WHERE name = ? FOR UPDATE", [venue]);
+    if (!venue_row) {
+      await connection.rollback();
+      return { ok: false, reason: "unknown_venue", message: "Unknown venue" };
+    }
+
+    const [[time_check]] = await connection.query(
+      "SELECT ? > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR) AS future", [bounds.start]);
+    if (!time_check.future) {
+      await connection.rollback();
+      return { ok: false, reason: "invalid_time", message: "The selected slot has already started." };
+    }
+    const eventCapacity = capacity ?? Math.min(venue_row.capacity, 500);
+    const deadline = registration_closes_at ?? bounds.start;
+    const [[validDetails]] = await connection.query("SELECT ? > DATE_ADD(UTC_TIMESTAMP(),INTERVAL 8 HOUR) AND ? <= ? AS valid", [deadline, deadline, bounds.start]);
+    if (!Number.isSafeInteger(eventCapacity) || eventCapacity < 1 || eventCapacity > Math.min(venue_row.capacity, 500) || !validDetails.valid) {
+      await connection.rollback();
+      return { ok: false, reason: "invalid_details", message: "Capacity or registration deadline is invalid." };
+    }
 
     const [[club_row]] = await connection.query(
       "SELECT id FROM clubs WHERE name = ? FOR UPDATE",
@@ -569,15 +691,6 @@ async function create_event({
       };
     }
 
-    const [[venue_row]] = await connection.query(
-      "SELECT id, capacity FROM venues WHERE name = ?",
-      [venue],
-    );
-    if (!venue_row) {
-      await connection.rollback();
-      return { ok: false, reason: "unknown_venue", message: "Unknown venue" };
-    }
-
     // The overlap check rejects every booking that intersects this time range.
     const [conflicts] = await connection.query(
       `SELECT id FROM bookings
@@ -596,14 +709,14 @@ async function create_event({
     }
 
     const [booking_result] = await connection.query(
-      `INSERT INTO bookings (venue_id, club_id, start_time, end_time)
-       VALUES (?, ?, ?, ?)`,
-      [venue_row.id, club_row.id, bounds.start, bounds.end],
+      `INSERT INTO bookings (venue_id, club_id, start_time, end_time, requested_by)
+       VALUES (?, ?, ?, ?, ?)`,
+      [venue_row.id, club_row.id, bounds.start, bounds.end, user_id],
     );
     const [event_result] = await connection.query(
       `INSERT INTO events
-        (booking_id, club_id, title, description, start_time, end_time, visibility, capacity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (booking_id, club_id, title, description, start_time, end_time, visibility, capacity, registration_closes_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         booking_result.insertId,
         club_row.id,
@@ -612,9 +725,16 @@ async function create_event({
         bounds.start,
         bounds.end,
         database_visibility(visibility),
-        venue_row.capacity,
+        eventCapacity,
+        deadline,
       ],
     );
+
+    const [admins] = await connection.query(`SELECT u.id FROM users u WHERE u.platform_role='venue_admin'
+      AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id=u.id AND m.club_id=? AND m.role IN ('committee','president'))`, [club_row.id]);
+    await audit(connection, user_id, "booking", booking_result.insertId, "booking.requested", { event_id: event_result.insertId });
+    await enqueueEventJob(connection, { type: "booking_requested", eventId: event_result.insertId,
+      bookingId: booking_result.insertId, recipients: admins.map(row => row.id), title: title.trim() });
 
     await connection.commit();
     return {
@@ -629,6 +749,8 @@ async function create_event({
         description: description.trim(),
         visibility,
         joined_count: 0,
+        event_status: "draft",
+        booking_status: "pending",
         status: "Upcoming",
       },
     };
@@ -642,6 +764,7 @@ async function create_event({
 
 export {
   join_event,
+  reject_event_request,
   leave_event,
   list_events,
   list_my_participations,

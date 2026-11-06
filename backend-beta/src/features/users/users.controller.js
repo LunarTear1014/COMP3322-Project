@@ -1,4 +1,5 @@
 import { invalid_request, database_error } from "../../shared/http.js";
+import { randomBytes } from "node:crypto";
 import {
   normalize_email,
   validate_login,
@@ -21,6 +22,10 @@ function regenerate_session(req) {
       else resolve();
     });
   });
+}
+
+function save_session(req) {
+  return new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 }
 
 async function register_handler(req, res) {
@@ -47,6 +52,8 @@ async function register_handler(req, res) {
 
     await regenerate_session(req);
     req.session.user_id = result.user.id;
+    req.session.csrf_token = randomBytes(32).toString("hex");
+    await save_session(req);
     return res.status(201).json(result.user);
   } catch (error) {
     return database_error(res, error);
@@ -69,6 +76,8 @@ async function login_handler(req, res) {
     }
     await regenerate_session(req);
     req.session.user_id = user.id;
+    req.session.csrf_token = randomBytes(32).toString("hex");
+    await save_session(req);
     return res.json(user);
   } catch (error) {
     return database_error(res, error);

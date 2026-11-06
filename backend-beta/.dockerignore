@@ -3,4 +3,7 @@
 !package-lock.json
 !src/
 !src/**
+!db/
+!db/migrations/
+!db/migrations/*.sql
 **/*.test.js

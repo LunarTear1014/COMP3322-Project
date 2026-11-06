@@ -1,22 +1,7 @@
 # Frontend beta integration
 
-The default beta client uses the unversioned `/api` routes in `backend-beta`.
-It sends the Express session cookie through the same-origin Vite proxy. The
-backend is responsible for access checks, venue conflicts, and signup capacity.
+The default beta client uses the `/api/v1` routes in `backend-beta` through the same-origin Vite proxy. The API stores sessions in MySQL and enforces authorization, venue conflicts and signup capacity. Unversioned business routes return `410`.
 
-The live UI supports account registration and sign-in, profile edits, club
-membership requests and leave, event discovery, the weekly venue slot calendar,
-organizer booking and publication in one action, event edits and cancellation,
-participant lists, student registration and withdrawal, and notifications.
-The backend sets event capacity from the selected venue.
+The live UI supports registration and sign-in, profile edits, club membership requests and committee review, event discovery, a weekly venue calendar, event requests, independent venue review, publication, editing and cancellation, participant lists, registration and withdrawal, notifications and organizer reports. Club committee members review membership requests on the Organizer page and members-only event requests on the event management page. Public event registration is automatic; members-only event registration requires committee approval, after which available places and the waitlist are allocated. Event creation requests create a pending booking and draft; venue approval and publication are separate actions. The calendar uses confirmed booking intervals supplied by the API.
 
-The live provider has in-memory sessions. Separate venue approval and event
-publication, configurable registration deadlines, and organizer reports depend
-on the planned v1 provider. The live calendar shows unavailable campus slots
-from the provider's daily availability endpoint.
-
-Run `npm run dev:fixtures` for a read-only v1 preview. The preview login is
-`preview@clubspace.test` with password `preview12345`. It uses sample data and
-rejects business writes. `?preview=empty`, `?preview=error`, and
-`?preview=student` expose additional preview states. Run `npm run dev -- --mode
-v1` to connect the beta directly to a v1 provider when available.
+Run `npm run dev:fixtures` for a read-only preview. The preview login is `preview@clubspace.test` with password `preview12345`. It uses sample data and rejects business writes. `?preview=empty`, `?preview=error`, and `?preview=student` expose additional preview states. Set `CLUBSPACE_API_TARGET` before starting Vite if the backend runs elsewhere.
