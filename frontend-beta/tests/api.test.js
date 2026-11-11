@@ -111,6 +111,26 @@ test('main backend adapter identifies club join-request notifications', async ()
       created_epoch: timestamp,
       read_at: null,
     },
+    {
+      id: 10,
+      event_id: null,
+      club_id: 4,
+      club_join_request_id: null,
+      event_title: 'Committee role: Photography Society',
+      message: 'You have been made a committee member of Photography Society.',
+      created_epoch: timestamp,
+      read_at: null,
+    },
+    {
+      id: 11,
+      event_id: null,
+      club_id: 4,
+      club_join_request_id: null,
+      event_title: 'President role: Photography Society',
+      message: 'You have been made the president of Photography Society.',
+      created_epoch: timestamp,
+      read_at: null,
+    },
   ]), { status: 200 })
 
   const result = await requestMainBackend('/notifications')
@@ -119,6 +139,10 @@ test('main backend adapter identifies club join-request notifications', async ()
   assert.equal(result.data[0].club_id, 4)
   assert.equal(result.data[1].type, 'club_membership')
   assert.equal(result.data[1].join_request_id, null)
+  assert.equal(result.data[2].type, 'club_membership')
+  assert.match(result.data[2].body, /made a committee member/)
+  assert.equal(result.data[3].type, 'club_membership')
+  assert.match(result.data[3].body, /made the president/)
 })
 test('Hong Kong week and half-open interval boundaries', () => {
   assert.equal(weekStart('2026-11-11'), '2026-11-09')

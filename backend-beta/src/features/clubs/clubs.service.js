@@ -294,7 +294,7 @@ async function promote_club_member(club_id, member_user_id, user_id) {
     await connection.beginTransaction();
 
     const [[club]] = await connection.query(
-      "SELECT id FROM clubs WHERE id = ? FOR UPDATE",
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
       [club_id],
     );
     if (!club) {
@@ -331,6 +331,16 @@ async function promote_club_member(club_id, member_user_id, user_id) {
     await connection.query(
       "UPDATE memberships SET role = 'committee' WHERE user_id = ? AND club_id = ?",
       [member_user_id, club_id],
+    );
+    await connection.query(
+      `INSERT INTO notifications (user_id, club_id, event_title, message)
+       VALUES (?, ?, ?, ?)`,
+      [
+        member_user_id,
+        club_id,
+        `Committee role: ${club.name}`,
+        `You have been made a committee member of ${club.name}.`,
+      ],
     );
     await connection.commit();
     return { ok: true };
@@ -477,6 +487,26 @@ async function transfer_presidency(club_id, target_user_id, user_id, confirmatio
     await connection.query(
       "UPDATE memberships SET role = 'president' WHERE club_id = ? AND user_id = ?",
       [club_id, target_user_id],
+    );
+    await connection.query(
+      `INSERT INTO notifications (user_id, club_id, event_title, message)
+       VALUES (?, ?, ?, ?)`,
+      [
+        target_user_id,
+        club_id,
+        `President role: ${club.name}`,
+        `You have been made the president of ${club.name}.`,
+      ],
+    );
+    await connection.query(
+      `INSERT INTO notifications (user_id, club_id, event_title, message)
+       VALUES (?, ?, ?, ?)`,
+      [
+        user_id,
+        club_id,
+        `Committee role: ${club.name}`,
+        `You are now a committee member of ${club.name}.`,
+      ],
     );
     await connection.commit();
     return { ok: true };
