@@ -45,6 +45,14 @@ function previewFetch(scenario = '') {
       resolve(new Response(JSON.stringify({ data: { message: 'Member promoted to committee.' } }), { status: 200 }))
       return
     }
+    if (scenario === 'club-members' && url.pathname === '/api/v1/clubs/1/members/3' && options.method === 'DELETE') {
+      resolve(new Response(JSON.stringify({ data: { message: 'Member removed from the club.' } }), { status: 200 }))
+      return
+    }
+    if (scenario === 'president' && url.pathname === '/api/v1/clubs/2/members/3/committee' && options.method === 'DELETE') {
+      resolve(new Response(JSON.stringify({ data: { message: 'Member returned to regular member role.' } }), { status: 200 }))
+      return
+    }
     if (scenario === 'student' && url.pathname === '/api/v1/auth/session') {
       url.searchParams.set('preview', 'student')
     }
@@ -133,6 +141,23 @@ describe('frontend preview workflows', () => {
     expect(await screen.findByText('Riley Chen was promoted to the Photography Society committee.')).toBeTruthy()
   })
 
+  it('lets a committee member remove a regular member', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    const fetch = previewFetch('club-members')
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('Club members (3)'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Riley Chen from club' }))
+
+    await waitFor(() => {
+      const removal = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/members/3')
+      expect(removal).toBeTruthy()
+      expect(removal[1].method).toBe('DELETE')
+    })
+    expect(await screen.findByText('Riley Chen was removed from Photography Society.')).toBeTruthy()
+  })
+
   it('hides the clubs page from non-organizers', async () => {
     window.history.replaceState({}, '', '/clubs?preview=student')
     vi.stubGlobal('fetch', previewFetch('student'))
@@ -160,6 +185,23 @@ describe('frontend preview workflows', () => {
       expect(transfer[1].method).toBe('POST')
       expect(JSON.parse(transfer[1].body)).toEqual({ user_id: 3, confirmation: 'Film Society' })
     })
+  })
+
+  it('lets a president demote a committee member', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    const fetch = previewFetch('president')
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('Club members (1)'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Demote Morgan Lee to member' }))
+
+    await waitFor(() => {
+      const demotion = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/2/members/3/committee')
+      expect(demotion).toBeTruthy()
+      expect(demotion[1].method).toBe('DELETE')
+    })
+    expect(await screen.findByText('Morgan Lee was returned to regular member status.')).toBeTruthy()
   })
 
   it('shows join request notifications with approve and reject actions', async () => {

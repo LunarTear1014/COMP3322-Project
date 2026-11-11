@@ -126,6 +126,24 @@ function ClubCard({ club, refresh }) {
     )
   }
 
+  async function demoteMember(member) {
+    await action.run(
+      `/clubs/${club.club_id}/members/${member.user_id}/committee`,
+      'DELETE',
+      {},
+      `${member.name} was returned to regular member status.`,
+    )
+  }
+
+  async function removeMember(member) {
+    await action.run(
+      `/clubs/${club.club_id}/members/${member.user_id}`,
+      'DELETE',
+      {},
+      `${member.name} was removed from ${clubName}.`,
+    )
+  }
+
   return <article className="panel stack">
     <h2>{clubName}</h2>
     <p>{club.description || 'No description available.'}</p>
@@ -142,6 +160,8 @@ function ClubCard({ club, refresh }) {
             <ul className="club-member-list">{filteredMembers.map(member => <li key={member.user_id}>
               <span>{member.name} · {member.role}</span>
               {member.role === 'member' && <button className="secondary-button" disabled={action.busy} onClick={() => promoteMember(member)}>Make committee</button>}
+              {member.role === 'member' && <button className="secondary-button" disabled={action.busy} onClick={() => removeMember(member)}>Remove {member.name} from club</button>}
+              {club.role === 'president' && member.role === 'committee' && <button className="secondary-button" disabled={action.busy} onClick={() => demoteMember(member)}>Demote {member.name} to member</button>}
             </li>)}</ul>
             {members.data && !filteredMembers.length && <p role="status">No members match “{memberSearch}”.</p>}
             {members.data && !regularMembers.length && !memberSearch && <p>There are no regular members to promote.</p>}

@@ -74,6 +74,20 @@ test('main backend adapter loads club members and promotes a member', async () =
   assert.equal(calls[1].options.method, 'POST')
   assert.equal(result.data.message, 'Member promoted to committee.')
 })
+test('main backend adapter sends member demotions and removals to the backend', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    return new Response(JSON.stringify({ message: 'Member updated.' }), { status: 200 })
+  }
+
+  await requestMainBackend('/clubs/5/members/3/committee', { method: 'DELETE' })
+  await requestMainBackend('/clubs/5/members/3', { method: 'DELETE' })
+  assert.equal(calls[0].url, '/api/clubs/5/members/3/committee')
+  assert.equal(calls[0].options.method, 'DELETE')
+  assert.equal(calls[1].url, '/api/clubs/5/members/3')
+  assert.equal(calls[1].options.method, 'DELETE')
+})
 test('main backend adapter sends join request decisions to the backend', async () => {
   const calls = []
   globalThis.fetch = async (url, options) => {

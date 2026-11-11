@@ -359,7 +359,7 @@ async function demote_club_member(club_id, member_user_id, user_id) {
     await connection.beginTransaction();
 
     const [[club]] = await connection.query(
-      "SELECT id FROM clubs WHERE id = ? FOR UPDATE",
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
       [club_id],
     );
     if (!club) {
@@ -396,6 +396,81 @@ async function demote_club_member(club_id, member_user_id, user_id) {
     await connection.query(
       "UPDATE memberships SET role = 'member' WHERE user_id = ? AND club_id = ?",
       [member_user_id, club_id],
+    );
+    await connection.query(
+      `INSERT INTO notifications (user_id, club_id, event_title, message)
+       VALUES (?, ?, ?, ?)`,
+      [
+        member_user_id,
+        club_id,
+        `Committee role changed: ${club.name}`,
+        `Your committee role in ${club.name} was removed. You remain a club member.`,
+      ],
+    );
+    await connection.commit();
+    return { ok: true };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    throw error;
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+async function remove_club_member(club_id, member_user_id, user_id) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    const [[club]] = await connection.query(
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
+      [club_id],
+    );
+    if (!club) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+
+    const [[organizer]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id = ? AND club_id = ? FOR UPDATE",
+      [user_id, club_id],
+    );
+    if (!["committee", "president"].includes(organizer?.role)) {
+      await connection.rollback();
+      return { ok: false, reason: "forbidden" };
+    }
+    if (member_user_id === user_id) {
+      await connection.rollback();
+      return { ok: false, reason: "cannot_remove_self" };
+    }
+
+    const [[target]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id = ? AND club_id = ? FOR UPDATE",
+      [member_user_id, club_id],
+    );
+    if (!target) {
+      await connection.rollback();
+      return { ok: false, reason: "not_a_member" };
+    }
+    if (target.role !== "member") {
+      await connection.rollback();
+      return { ok: false, reason: "not_regular_member" };
+    }
+
+    await connection.query(
+      "DELETE FROM memberships WHERE user_id = ? AND club_id = ?",
+      [member_user_id, club_id],
+    );
+    await connection.query(
+      `INSERT INTO notifications (user_id, club_id, event_title, message)
+       VALUES (?, ?, ?, ?)`,
+      [
+        member_user_id,
+        club_id,
+        `Membership ended: ${club.name}`,
+        `You have been removed from ${club.name}.`,
+      ],
     );
     await connection.commit();
     return { ok: true };
@@ -570,6 +645,7 @@ export {
   list_club_members,
   promote_club_member,
   demote_club_member,
+  remove_club_member,
   leave_committee,
   create_club,
   transfer_presidency,
