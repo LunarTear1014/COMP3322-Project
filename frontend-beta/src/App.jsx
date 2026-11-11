@@ -84,12 +84,18 @@ function Clubs({ refreshSession }) {
 }
 function ClubCard({ club, refresh }) {
   const clubName = club.name || club.club_name
-  const members = useResource(club.role === 'president' ? `/clubs/${club.club_id}/members` : null)
-  const action = useAction(refresh)
+  const members = useResource(`/clubs/${club.club_id}/members`)
+  const action = useAction(() => {
+    refresh()
+    members.refresh()
+  })
   const navigate = useNavigate()
   const [targetId, setTargetId] = useState('')
   const [confirmation, setConfirmation] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
   const committeeMembers = (members.data || []).filter(member => member.role === 'committee')
+  const regularMembers = (members.data || []).filter(member => member.role === 'member')
+  const filteredMembers = (members.data || []).filter(member => member.name.toLocaleLowerCase().includes(memberSearch.trim().toLocaleLowerCase()))
 
   async function leaveCommittee() {
     const result = await action.run(
@@ -111,11 +117,38 @@ function ClubCard({ club, refresh }) {
     )
   }
 
+  async function promoteMember(member) {
+    await action.run(
+      `/clubs/${club.club_id}/members/${member.user_id}/committee`,
+      'POST',
+      {},
+      `${member.name} was promoted to the ${clubName} committee.`,
+    )
+  }
+
   return <article className="panel stack">
     <h2>{clubName}</h2>
     <p>{club.description || 'No description available.'}</p>
     <p>Your role: {club.role}</p>
     <Feedback action={action}/>
+    <section className="stack">
+      <details className="club-member-disclosure">
+        <summary>Club members{members.data && ` (${members.data.length})`}</summary>
+        <Resource value={members} empty="There are no members in this club yet.">
+          {!!members.data?.length && <label className="club-member-search">Search {clubName} members
+            <input type="search" value={memberSearch} onChange={event => setMemberSearch(event.target.value)} placeholder="Enter a member name"/>
+          </label>}
+          <div className="club-member-list-container">
+            <ul className="club-member-list">{filteredMembers.map(member => <li key={member.user_id}>
+              <span>{member.name} · {member.role}</span>
+              {member.role === 'member' && <button className="secondary-button" disabled={action.busy} onClick={() => promoteMember(member)}>Make committee</button>}
+            </li>)}</ul>
+            {members.data && !filteredMembers.length && <p role="status">No members match “{memberSearch}”.</p>}
+            {members.data && !regularMembers.length && !memberSearch && <p>There are no regular members to promote.</p>}
+          </div>
+        </Resource>
+      </details>
+    </section>
     {club.role === 'committee'
       ? <><p>Leaving the committee keeps you as a regular club member. You can leave the club from your profile afterward.</p><button disabled={action.busy} onClick={leaveCommittee}>Leave committee</button></>
       : <section className="stack">

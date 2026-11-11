@@ -49,6 +49,10 @@ export function fixturePlugin() {
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
       if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
+      if (url.pathname === '/clubs/1/members') return send(200, list([
+        { user_id: user.id, name: user.name, role: 'committee' },
+        { user_id: 3, name: 'Riley Chen', role: 'member' },
+      ]))
       if (url.pathname === '/clubs/2/members') return send(200, list([{ user_id: 3, name: 'Morgan Lee', role: 'committee' }]))
       if (/^\/venues\/\d+\/calendar$/.test(url.pathname)) {
         const venueId = Number(url.pathname.split('/')[2])

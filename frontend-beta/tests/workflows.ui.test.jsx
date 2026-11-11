@@ -33,6 +33,18 @@ function previewFetch(scenario = '') {
       resolve(new Response(JSON.stringify({ data: { message: 'Join request approved.' } }), { status: 200 }))
       return
     }
+    if (scenario === 'club-members' && url.pathname === '/api/v1/clubs/1/members' && options.method !== 'POST') {
+      resolve(new Response(JSON.stringify({ data: [
+        { user_id: 1, name: 'Alex Chan', role: 'committee' },
+        { user_id: 3, name: 'Riley Chen', role: 'member' },
+        { user_id: 4, name: 'Zara Wong', role: 'member' },
+      ] }), { status: 200 }))
+      return
+    }
+    if (scenario === 'club-members' && url.pathname === '/api/v1/clubs/1/members/3/committee') {
+      resolve(new Response(JSON.stringify({ data: { message: 'Member promoted to committee.' } }), { status: 200 }))
+      return
+    }
     if (scenario === 'student' && url.pathname === '/api/v1/auth/session') {
       url.searchParams.set('preview', 'student')
     }
@@ -98,6 +110,27 @@ describe('frontend preview workflows', () => {
     expect(screen.getByRole('link', { name: 'Clubs' })).toBeTruthy()
     expect(await screen.findByRole('heading', { name: 'Photography Society' })).toBeTruthy()
     expect(await screen.findByRole('button', { name: 'Leave committee' })).toBeTruthy()
+  })
+
+  it('lets committee members see the roster and promote a member', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    const fetch = previewFetch('club-members')
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('Club members (3)'))
+    const search = await screen.findByRole('searchbox', { name: 'Search Photography Society members' })
+    fireEvent.change(search, { target: { value: 'riley' } })
+    expect(await screen.findByText('Riley Chen · member')).toBeTruthy()
+    expect(screen.queryByText('Zara Wong · member')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Make committee' }))
+
+    await waitFor(() => {
+      const promotion = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/members/3/committee')
+      expect(promotion).toBeTruthy()
+      expect(promotion[1].method).toBe('POST')
+    })
+    expect(await screen.findByText('Riley Chen was promoted to the Photography Society committee.')).toBeTruthy()
   })
 
   it('hides the clubs page from non-organizers', async () => {

@@ -56,6 +56,24 @@ test('main backend adapter sends confirmed presidency transfers to the backend',
   assert.deepEqual(JSON.parse(calls[0].options.body), body)
   assert.equal(result.data.message, 'Presidency transferred.')
 })
+test('main backend adapter loads club members and promotes a member', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    if (options.method === 'GET') {
+      return new Response(JSON.stringify([{ user_id: 3, name: 'Riley Chen', role: 'member' }]), { status: 200 })
+    }
+    return new Response(JSON.stringify({ message: 'Member promoted to committee.' }), { status: 200 })
+  }
+
+  const members = await requestMainBackend('/clubs/5/members')
+  assert.deepEqual(members.data, [{ user_id: 3, name: 'Riley Chen', role: 'member' }])
+
+  const result = await requestMainBackend('/clubs/5/members/3/committee', { method: 'POST', body: {} })
+  assert.equal(calls[1].url, '/api/clubs/5/members/3/committee')
+  assert.equal(calls[1].options.method, 'POST')
+  assert.equal(result.data.message, 'Member promoted to committee.')
+})
 test('main backend adapter sends join request decisions to the backend', async () => {
   const calls = []
   globalThis.fetch = async (url, options) => {

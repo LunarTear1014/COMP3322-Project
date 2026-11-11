@@ -59,6 +59,56 @@ fieldset{border:0;margin:0;padding:0;min-width:0}fieldset+fieldset{border-top:1p
   letter-spacing: 0;
 }
 
+.club-member-disclosure {
+  border-top: 1px solid #e6eff1;
+  padding-top: .9rem;
+}
+
+.club-member-disclosure summary {
+  color: #536875;
+  font-size: .9rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.club-member-search {
+  margin: 1rem 0;
+}
+
+.club-member-list-container {
+  max-height: 24rem;
+  overflow: auto;
+  margin-top: 1rem;
+}
+
+.club-member-list {
+  display: grid;
+  gap: .75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.club-member-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid #e6eff1;
+  padding-bottom: .75rem;
+}
+
+.club-member-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.club-member-list .secondary-button {
+  min-height: 36px;
+  padding: .45rem .7rem;
+  font-size: .8rem;
+}
+
 .calendar-day-selector {
   display: none;
 }
