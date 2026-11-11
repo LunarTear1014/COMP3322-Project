@@ -109,6 +109,31 @@ fieldset{border:0;margin:0;padding:0;min-width:0}fieldset+fieldset{border-top:1p
   font-size: .8rem;
 }
 
+.club-action-log {
+  max-height: 32rem;
+  overflow: auto;
+  margin-top: 1rem;
+}
+
+.club-action-log-entry {
+  border-bottom: 1px solid #e6eff1;
+  padding: .8rem 0;
+}
+
+.club-action-log-entry:last-child {
+  border-bottom: 0;
+}
+
+.club-action-log-entry p {
+  margin-bottom: .35rem;
+}
+
+.club-action-log-entry .secondary-button {
+  min-height: 36px;
+  padding: .45rem .7rem;
+  font-size: .8rem;
+}
+
 .calendar-day-selector {
   display: none;
 }

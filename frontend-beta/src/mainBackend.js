@@ -82,6 +82,8 @@ export async function requestMainBackend(path, { method = 'GET', body, signal } 
   const clubMembersMatch = pathname.match(/^\/clubs\/(\d+)\/members$/)
   const clubMemberMatch = pathname.match(/^\/clubs\/(\d+)\/members\/(\d+)$/)
   const clubMemberCommitteeMatch = pathname.match(/^\/clubs\/(\d+)\/members\/(\d+)\/committee$/)
+  const clubActionsMatch = pathname.match(/^\/clubs\/(\d+)\/actions$/)
+  const clubActionUndoMatch = pathname.match(/^\/clubs\/(\d+)\/actions\/(\d+)\/undo$/)
   const presidencyMatch = pathname.match(/^\/clubs\/(\d+)\/presidency$/)
   const joinRequestReviewMatch = pathname.match(/^\/clubs\/(\d+)\/join-requests\/(\d+)\/review$/)
   const calendarMatch = pathname.match(/^\/venues\/(\d+)\/calendar$/)
@@ -100,6 +102,14 @@ export async function requestMainBackend(path, { method = 'GET', body, signal } 
   if (clubMemberMatch && method === 'DELETE') return data(await send(pathname))
   if (clubMemberCommitteeMatch && method === 'POST') return data(await send(pathname))
   if (clubMemberCommitteeMatch && method === 'DELETE') return data(await send(pathname))
+  if (clubActionsMatch && method === 'GET') {
+    const actions = await get(pathname)
+    return data(actions.map(action => ({
+      ...action,
+      created_at: new Date(Number(action.created_epoch) * 1000).toISOString(),
+    })))
+  }
+  if (clubActionUndoMatch && method === 'POST') return data(await send(pathname))
   if (presidencyMatch && method === 'POST') return data(await send(pathname, body))
   if (joinRequestReviewMatch && method === 'POST') return data(await send(pathname, body))
   if (pathname === '/config') return data({ campus_timezone: 'Asia/Hong_Kong', slots })

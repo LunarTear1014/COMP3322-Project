@@ -1,4 +1,8 @@
 import pool from "../../config/db.js";
+import {
+  parse_action_details,
+  record_club_action,
+} from "../../shared/club_action_log.js";
 
 async function list_clubs(user_id = null) {
   const [rows] = await pool.query(
@@ -198,6 +202,18 @@ async function review_join_request(club_id, request_id, user_id, decision) {
       "DELETE FROM notifications WHERE club_join_request_id = ?",
       [request_id],
     );
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      target_user_id: request.user_id,
+      action_type: decision === "accept"
+        ? "join_request_accepted"
+        : "join_request_rejected",
+      description: `${decision === "accept" ? "Accepted" : "Rejected"} a membership request.`,
+      undoable: true,
+      details: { request_id, decision },
+    });
     await connection.commit();
     return { ok: true, decision };
   } catch (error) {
@@ -208,29 +224,53 @@ async function review_join_request(club_id, request_id, user_id, decision) {
   }
 }
 
-async function leave_club(club_id, user_id = demo_user_id) {
-  const [[membership]] = await pool.query(
-    "SELECT role FROM memberships WHERE user_id = ? AND club_id = ?",
-    [user_id, club_id],
-  );
-  if (membership?.role === "president") {
-    return { ok: false, reason: "president_must_transfer" };
-  }
-
-  const [result] = await pool.query(
-    "DELETE FROM memberships WHERE user_id = ? AND club_id = ?",
-    [user_id, club_id],
-  );
-  if (result.affectedRows > 0) {
+async function leave_club(club_id, user_id) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[club]] = await connection.query(
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
+      [club_id],
+    );
+    if (!club) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+    const [[membership]] = await connection.query(
+      "SELECT role FROM memberships WHERE user_id = ? AND club_id = ? FOR UPDATE",
+      [user_id, club_id],
+    );
+    if (membership?.role === "president") {
+      await connection.rollback();
+      return { ok: false, reason: "president_must_transfer" };
+    }
+    if (!membership) {
+      await connection.rollback();
+      return { ok: false, reason: "not_a_member" };
+    }
+    await connection.query(
+      "DELETE FROM memberships WHERE user_id = ? AND club_id = ?",
+      [user_id, club_id],
+    );
+    if (membership.role === "committee") {
+      await record_club_action(connection, {
+        club_id,
+        club_name: club.name,
+        actor_user_id: user_id,
+        target_user_id: user_id,
+        action_type: "committee_left_club",
+        description: "Left the club and ended committee membership.",
+      });
+    }
+    await connection.commit();
     return { ok: true };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    throw error;
+  } finally {
+    if (connection) connection.release();
   }
-
-  const [[club]] = await pool.query("SELECT id FROM clubs WHERE id = ?", [
-    club_id,
-  ]);
-  return club
-    ? { ok: false, reason: "not_a_member" }
-    : { ok: false, reason: "not_found" };
 }
 
 async function list_club_members(club_id, user_id) {
@@ -261,30 +301,49 @@ async function list_club_members(club_id, user_id) {
 }
 
 async function leave_committee(club_id, user_id) {
-  const [result] = await pool.query(
-    `UPDATE memberships
-     SET role = 'member'
-     WHERE club_id = ? AND user_id = ? AND role = 'committee'`,
-    [club_id, user_id],
-  );
-  if (result.affectedRows > 0) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[club]] = await connection.query(
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
+      [club_id],
+    );
+    if (!club) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+    const [[membership]] = await connection.query(
+      "SELECT role FROM memberships WHERE club_id = ? AND user_id = ? FOR UPDATE",
+      [club_id, user_id],
+    );
+    if (membership?.role !== "committee") {
+      await connection.rollback();
+      return membership
+        ? { ok: false, reason: "not_committee" }
+        : { ok: false, reason: "not_a_member" };
+    }
+    await connection.query(
+      "UPDATE memberships SET role = 'member' WHERE club_id = ? AND user_id = ?",
+      [club_id, user_id],
+    );
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      target_user_id: user_id,
+      action_type: "committee_left",
+      description: "Left the committee and returned to regular member status.",
+      undoable: true,
+    });
+    await connection.commit();
     return { ok: true };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    throw error;
+  } finally {
+    if (connection) connection.release();
   }
-
-  const [[club]] = await pool.query("SELECT id FROM clubs WHERE id = ?", [
-    club_id,
-  ]);
-  if (!club) {
-    return { ok: false, reason: "not_found" };
-  }
-
-  const [[membership]] = await pool.query(
-    "SELECT role FROM memberships WHERE club_id = ? AND user_id = ?",
-    [club_id, user_id],
-  );
-  return membership
-    ? { ok: false, reason: "not_committee" }
-    : { ok: false, reason: "not_a_member" };
 }
 
 async function promote_club_member(club_id, member_user_id, user_id) {
@@ -342,6 +401,15 @@ async function promote_club_member(club_id, member_user_id, user_id) {
         `You have been made a committee member of ${club.name}.`,
       ],
     );
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      target_user_id: member_user_id,
+      action_type: "member_promoted",
+      description: "Promoted a regular member to committee.",
+      undoable: true,
+    });
     await connection.commit();
     return { ok: true };
   } catch (error) {
@@ -407,6 +475,15 @@ async function demote_club_member(club_id, member_user_id, user_id) {
         `Your committee role in ${club.name} was removed. You remain a club member.`,
       ],
     );
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      target_user_id: member_user_id,
+      action_type: "member_demoted",
+      description: "Demoted a committee member to regular member status.",
+      undoable: true,
+    });
     await connection.commit();
     return { ok: true };
   } catch (error) {
@@ -472,6 +549,15 @@ async function remove_club_member(club_id, member_user_id, user_id) {
         `You have been removed from ${club.name}.`,
       ],
     );
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      target_user_id: member_user_id,
+      action_type: "member_removed",
+      description: "Removed a regular member from the club.",
+      undoable: true,
+    });
     await connection.commit();
     return { ok: true };
   } catch (error) {
@@ -495,6 +581,14 @@ async function create_club({ name, description }, user_id) {
       "INSERT INTO memberships (user_id, club_id, role) VALUES (?, ?, 'president')",
       [user_id, result.insertId],
     );
+    await record_club_action(connection, {
+      club_id: result.insertId,
+      club_name: name.trim(),
+      actor_user_id: user_id,
+      action_type: "club_created",
+      description: "Created the club and became its president.",
+      undoable: false,
+    });
     await connection.commit();
     return {
       ok: true,
@@ -583,6 +677,16 @@ async function transfer_presidency(club_id, target_user_id, user_id, confirmatio
         `You are now a committee member of ${club.name}.`,
       ],
     );
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      target_user_id: target_user_id,
+      action_type: "presidency_transferred",
+      description: "Transferred the presidency to another committee member.",
+      undoable: true,
+      details: { previous_president_id: user_id, new_president_id: target_user_id },
+    });
     await connection.commit();
     return { ok: true };
   } catch (error) {
@@ -619,12 +723,263 @@ async function delete_club(club_id, user_id, confirmation) {
       return { ok: false, reason: "forbidden" };
     }
 
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      action_type: "club_deleted",
+      description: "Deleted the club.",
+      undoable: false,
+    });
     await connection.query("DELETE FROM events WHERE club_id = ?", [club_id]);
     await connection.query("DELETE FROM bookings WHERE club_id = ?", [club_id]);
     await connection.query("DELETE FROM memberships WHERE club_id = ?", [
       club_id,
     ]);
     await connection.query("DELETE FROM clubs WHERE id = ?", [club_id]);
+    await connection.commit();
+    return { ok: true };
+  } catch (error) {
+    if (connection) await connection.rollback();
+    throw error;
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+async function list_club_actions(club_id, user_id) {
+  const [[club]] = await pool.query(
+    "SELECT id, name FROM clubs WHERE id = ?",
+    [club_id],
+  );
+  if (!club) return { ok: false, reason: "not_found" };
+  const [[membership]] = await pool.query(
+    "SELECT role FROM memberships WHERE club_id = ? AND user_id = ?",
+    [club_id, user_id],
+  );
+  if (membership?.role !== "president") {
+    return { ok: false, reason: "forbidden" };
+  }
+  const [actions] = await pool.query(
+    `SELECT id, actor_name, target_name, action_type, description,
+       undoable, created_at, UNIX_TIMESTAMP(created_at) AS created_epoch,
+       undone_at
+     FROM club_action_log
+     WHERE club_id = ?
+     ORDER BY created_at DESC, id DESC`,
+    [club_id],
+  );
+  return { ok: true, actions };
+}
+
+async function undo_club_action(club_id, action_id, user_id) {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [[club]] = await connection.query(
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
+      [club_id],
+    );
+    if (!club) {
+      await connection.rollback();
+      return { ok: false, reason: "not_found" };
+    }
+    const [[president]] = await connection.query(
+      "SELECT role FROM memberships WHERE club_id = ? AND user_id = ? FOR UPDATE",
+      [club_id, user_id],
+    );
+    if (president?.role !== "president") {
+      await connection.rollback();
+      return { ok: false, reason: "forbidden" };
+    }
+    const [[action]] = await connection.query(
+      `SELECT id, actor_user_id, target_user_id, target_name, action_type, description,
+         undoable, details, undone_at
+       FROM club_action_log
+       WHERE id = ? AND club_id = ?
+       FOR UPDATE`,
+      [action_id, club_id],
+    );
+    if (!action) {
+      await connection.rollback();
+      return { ok: false, reason: "action_not_found" };
+    }
+    if (!action.undoable || action.undone_at) {
+      await connection.rollback();
+      return { ok: false, reason: "not_undoable" };
+    }
+    const details = parse_action_details(action.details);
+    const affectedUsers = action.action_type === "presidency_transferred"
+      ? [details.previous_president_id, details.new_president_id]
+      : [action.target_user_id];
+    for (const affectedUser of affectedUsers) {
+      const [[existingUser]] = await connection.query(
+        "SELECT id FROM users WHERE id = ?",
+        [affectedUser],
+      );
+      if (!existingUser) {
+        await connection.rollback();
+        return { ok: false, reason: "state_changed" };
+      }
+      const [[laterAction]] = await connection.query(
+        `SELECT id FROM club_action_log
+         WHERE club_id = ? AND id > ? AND target_user_id = ?
+           AND undone_at IS NULL AND action_type <> 'action_undone'
+         LIMIT 1`,
+        [club_id, action.id, affectedUser],
+      );
+      if (laterAction) {
+        await connection.rollback();
+        return { ok: false, reason: "later_action_exists" };
+      }
+    }
+
+    if (action.action_type === "join_request_accepted" ||
+        action.action_type === "join_request_rejected") {
+      const [[request]] = await connection.query(
+        `SELECT id, status FROM club_join_requests
+         WHERE id = ? AND club_id = ? AND user_id = ?
+         FOR UPDATE`,
+        [details.request_id, club_id, action.target_user_id],
+      );
+      const expectedStatus = action.action_type === "join_request_accepted"
+        ? "accepted"
+        : "rejected";
+      if (!request || request.status !== expectedStatus) {
+        await connection.rollback();
+        return { ok: false, reason: "state_changed" };
+      }
+      if (expectedStatus === "accepted") {
+        const [[membership]] = await connection.query(
+          "SELECT role FROM memberships WHERE club_id = ? AND user_id = ? FOR UPDATE",
+          [club_id, action.target_user_id],
+        );
+        if (membership?.role !== "member") {
+          await connection.rollback();
+          return { ok: false, reason: "state_changed" };
+        }
+        await connection.query(
+          "DELETE FROM memberships WHERE club_id = ? AND user_id = ?",
+          [club_id, action.target_user_id],
+        );
+      }
+      const [[otherPendingRequest]] = await connection.query(
+        `SELECT id FROM club_join_requests
+         WHERE club_id = ? AND user_id = ? AND status = 'pending' AND id <> ?
+         LIMIT 1`,
+        [club_id, action.target_user_id, request.id],
+      );
+      if (otherPendingRequest) {
+        await connection.rollback();
+        return { ok: false, reason: "state_changed" };
+      }
+      await connection.query(
+        `UPDATE club_join_requests
+         SET status = 'pending', reviewed_by = NULL, reviewed_at = NULL
+         WHERE id = ?`,
+        [request.id],
+      );
+      const [organizers] = await connection.query(
+        `SELECT user_id FROM memberships
+         WHERE club_id = ? AND role IN ('committee', 'president')`,
+        [club_id],
+      );
+      for (const organizer of organizers) {
+        await connection.query(
+          `INSERT INTO notifications
+            (user_id, club_id, club_join_request_id, event_title, message)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            organizer.user_id,
+            club_id,
+            request.id,
+            `Join request: ${club.name}`,
+            `${action.target_name || "A student"} has a membership request pending again.`,
+          ],
+        );
+      }
+    } else if (action.action_type === "member_promoted" ||
+               action.action_type === "member_demoted" ||
+               action.action_type === "member_removed" ||
+               action.action_type === "committee_left") {
+      const [[membership]] = await connection.query(
+        "SELECT role FROM memberships WHERE club_id = ? AND user_id = ? FOR UPDATE",
+        [club_id, action.target_user_id],
+      );
+      if (action.action_type === "member_promoted" && membership?.role === "committee") {
+        await connection.query(
+          "UPDATE memberships SET role = 'member' WHERE club_id = ? AND user_id = ?",
+          [club_id, action.target_user_id],
+        );
+      } else if (
+        (action.action_type === "member_demoted" && membership?.role === "member") ||
+        (action.action_type === "committee_left" && membership?.role === "member")
+      ) {
+        await connection.query(
+          "UPDATE memberships SET role = 'committee' WHERE club_id = ? AND user_id = ?",
+          [club_id, action.target_user_id],
+        );
+      } else if (action.action_type === "member_removed" && !membership) {
+        await connection.query(
+          "INSERT INTO memberships (user_id, club_id, role) VALUES (?, ?, 'member')",
+          [action.target_user_id, club_id],
+        );
+      } else {
+        await connection.rollback();
+        return { ok: false, reason: "state_changed" };
+      }
+    } else if (action.action_type === "presidency_transferred") {
+      const [[previousPresident]] = await connection.query(
+        "SELECT role FROM memberships WHERE club_id = ? AND user_id = ? FOR UPDATE",
+        [details.previous_president_id, club_id],
+      );
+      const [[newPresident]] = await connection.query(
+        "SELECT role FROM memberships WHERE club_id = ? AND user_id = ? FOR UPDATE",
+        [details.new_president_id, club_id],
+      );
+      if (previousPresident?.role !== "committee" || newPresident?.role !== "president") {
+        await connection.rollback();
+        return { ok: false, reason: "state_changed" };
+      }
+      await connection.query(
+        "UPDATE memberships SET role = 'president' WHERE club_id = ? AND user_id = ?",
+        [club_id, details.previous_president_id],
+      );
+      await connection.query(
+        "UPDATE memberships SET role = 'committee' WHERE club_id = ? AND user_id = ?",
+        [club_id, details.new_president_id],
+      );
+    } else {
+      await connection.rollback();
+      return { ok: false, reason: "not_undoable" };
+    }
+
+    const notificationMessage = `An action affecting your role or membership in ${club.name} was undone by the president.`;
+    for (const affectedUser of affectedUsers) {
+      await connection.query(
+        `INSERT INTO notifications (user_id, club_id, event_title, message)
+         VALUES (?, ?, ?, ?)`,
+        [
+          affectedUser,
+          club_id,
+          `Club action undone: ${club.name}`,
+          notificationMessage,
+        ],
+      );
+    }
+    await connection.query(
+      "UPDATE club_action_log SET undone_at = CURRENT_TIMESTAMP, undone_by = ? WHERE id = ?",
+      [user_id, action_id],
+    );
+    await record_club_action(connection, {
+      club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      target_user_id: action.target_user_id,
+      action_type: "action_undone",
+      description: `Undid action #${action_id}: ${action.description}`,
+    });
     await connection.commit();
     return { ok: true };
   } catch (error) {
@@ -650,4 +1005,6 @@ export {
   create_club,
   transfer_presidency,
   delete_club,
+  list_club_actions,
+  undo_club_action,
 };

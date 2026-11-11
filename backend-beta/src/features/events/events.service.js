@@ -1,5 +1,6 @@
 import pool from "../../config/db.js";
 import { today } from "../../shared/timeslots.js";
+import { record_club_action } from "../../shared/club_action_log.js";
 
 function display_visibility(visibility) {
   return visibility === "members_only" ? "Members only" : "Public";
@@ -384,6 +385,19 @@ async function cancel_event(event_id, user_id) {
       "UPDATE bookings SET status = 'cancelled' WHERE id = ?",
       [event.booking_id],
     );
+    const [[club]] = await connection.query(
+      "SELECT name FROM clubs WHERE id = ?",
+      [event.club_id],
+    );
+    await record_club_action(connection, {
+      club_id: event.club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      action_type: "event_cancelled",
+      description: `Cancelled event "${event.title}".`,
+      undoable: false,
+      details: { event_id },
+    });
 
     await connection.commit();
     return { ok: true, event_title: event.title };
@@ -406,7 +420,7 @@ async function edit_event(
     await connection.beginTransaction();
 
     const [[event]] = await connection.query(
-      `SELECT e.id, e.booking_id, e.club_id, e.status
+      `SELECT e.id, e.booking_id, e.club_id, e.status, e.title
        FROM events e WHERE e.id = ? FOR UPDATE`,
       [event_id],
     );
@@ -491,6 +505,19 @@ async function edit_event(
        WHERE e.id = ? AND p.status IN ('joined', 'pending')`,
       [event_id],
     );
+    const [[club]] = await connection.query(
+      "SELECT name FROM clubs WHERE id = ?",
+      [event.club_id],
+    );
+    await record_club_action(connection, {
+      club_id: event.club_id,
+      club_name: club.name,
+      actor_user_id: user_id,
+      action_type: "event_edited",
+      description: `Edited event "${event.title}".`,
+      undoable: false,
+      details: { event_id },
+    });
 
     await connection.commit();
     return { ok: true };
@@ -554,7 +581,7 @@ async function create_event({
     await connection.beginTransaction();
 
     const [[club_row]] = await connection.query(
-      "SELECT id FROM clubs WHERE name = ? FOR UPDATE",
+      "SELECT id, name FROM clubs WHERE name = ? FOR UPDATE",
       [club],
     );
     if (!club_row) {
@@ -622,6 +649,15 @@ async function create_event({
         venue_row.capacity,
       ],
     );
+    await record_club_action(connection, {
+      club_id: club_row.id,
+      club_name: club_row.name,
+      actor_user_id: user_id,
+      action_type: "event_created",
+      description: `Created event "${title.trim()}".`,
+      undoable: false,
+      details: { event_id: event_result.insertId },
+    });
 
     await connection.commit();
     return {

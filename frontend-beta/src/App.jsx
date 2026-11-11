@@ -85,9 +85,11 @@ function Clubs({ refreshSession }) {
 function ClubCard({ club, refresh }) {
   const clubName = club.name || club.club_name
   const members = useResource(`/clubs/${club.club_id}/members`)
+  const actionLog = useResource(club.role === 'president' ? `/clubs/${club.club_id}/actions` : null)
   const action = useAction(() => {
     refresh()
     members.refresh()
+    actionLog.refresh()
   })
   const navigate = useNavigate()
   const [targetId, setTargetId] = useState('')
@@ -184,6 +186,25 @@ function ClubCard({ club, refresh }) {
             <button disabled={action.busy || !targetId || confirmation !== clubName}>Transfer presidency</button>
           </form>}
         </Resource>
+        <details className="club-member-disclosure">
+          <summary>Club activity log</summary>
+          <Resource value={actionLog} empty="No club actions have been recorded yet.">
+            <div className="club-action-log">
+              {actionLog.data?.map(item => <article className="club-action-log-entry" key={item.id}>
+                <p><strong>{item.actor_name}</strong> · {item.description}</p>
+                {item.target_name && <p>Affected member: {item.target_name}</p>}
+                <p>{campusTime(item.created_at)} HKT{item.undone_at ? ' · Undone' : ''}</p>
+                {item.undoable && !item.undone_at && <button className="secondary-button" disabled={action.busy} onClick={() => action.run(
+                  `/clubs/${club.club_id}/actions/${item.id}/undo`,
+                  'POST',
+                  {},
+                  'Action undone. Affected members have been notified.',
+                )}>Undo action</button>}
+                {!item.undoable && <p>This action has related effects and cannot be safely undone.</p>}
+              </article>)}
+            </div>
+          </Resource>
+        </details>
       </section>}
   </article>
 }

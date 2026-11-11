@@ -216,13 +216,16 @@ brew services start mysql
    > intentionally want to reset local development data.
 
    For an existing database, apply the migration files in order; they preserve
-   existing records, add club join-request notifications, and notify organizers
-   about any join requests already pending. With the MySQL CLI:
+   existing records, add club join-request notifications, notify organizers
+   about any join requests already pending, and create the club action log.
+   The action log records actions from the time migration 004 is applied. With
+   the MySQL CLI:
 
    ```bash
    mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/001-normalize-event-registration-statuses.sql
    mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/002-club-join-request-notifications.sql
    mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/003-backfill-pending-join-request-notifications.sql
+   mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/004-club-action-log.sql
    ```
 
 4. Create the untracked local backend configuration:

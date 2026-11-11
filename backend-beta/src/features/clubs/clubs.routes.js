@@ -15,6 +15,8 @@ import {
   delete_club,
   list_join_requests,
   review_join_request,
+  list_club_actions,
+  undo_club_action,
 } from "./clubs.service.js";
 
 const router = Router();
@@ -213,9 +215,12 @@ router.delete("/api/clubs/:club_id/membership", async (req, res) => {
   if (club_id === null) {
     return invalid_request(res, "Club ID must be a positive integer.");
   }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Sign in before leaving a club." });
+  }
 
   try {
-    const result = await leave_club(club_id, req.session?.user_id);
+    const result = await leave_club(club_id, req.session.user_id);
     if (result.ok) {
       return res.status(204).end();
     }
@@ -251,6 +256,59 @@ router.get("/api/clubs/:club_id/members", async (req, res) => {
       return res.status(404).json({ message: "Club not found." });
     }
     return res.status(403).json({ message: "Only committee members or the president can view the club roster." });
+  } catch (error) {
+    return database_error(res, error);
+  }
+});
+
+router.get("/api/clubs/:club_id/actions", async (req, res) => {
+  const club_id = parse_club_id(req.params.club_id);
+  if (club_id === null) {
+    return invalid_request(res, "Club ID must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Sign in to view the club action log." });
+  }
+  try {
+    const result = await list_club_actions(club_id, req.session.user_id);
+    if (result.ok) return res.json(result.actions);
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Club not found." });
+    }
+    return res.status(403).json({ message: "Only the club president can view the action log." });
+  } catch (error) {
+    return database_error(res, error);
+  }
+});
+
+router.post("/api/clubs/:club_id/actions/:action_id/undo", async (req, res) => {
+  const club_id = parse_club_id(req.params.club_id);
+  const action_id = parse_user_id(req.params.action_id);
+  if (club_id === null) {
+    return invalid_request(res, "Club ID must be a positive integer.");
+  }
+  if (action_id === null) {
+    return invalid_request(res, "Action ID must be a positive integer.");
+  }
+  if (!Number.isSafeInteger(req.session?.user_id)) {
+    return res.status(401).json({ message: "Sign in to undo a club action." });
+  }
+  try {
+    const result = await undo_club_action(club_id, action_id, req.session.user_id);
+    if (result.ok) return res.json({ message: "Action undone. Affected members have been notified." });
+    if (result.reason === "not_found") {
+      return res.status(404).json({ message: "Club not found." });
+    }
+    if (result.reason === "forbidden") {
+      return res.status(403).json({ message: "Only the club president can undo actions." });
+    }
+    if (result.reason === "action_not_found") {
+      return res.status(404).json({ message: "Action not found." });
+    }
+    if (result.reason === "later_action_exists" || result.reason === "state_changed") {
+      return res.status(409).json({ message: "This action can no longer be safely undone because related club data has changed." });
+    }
+    return res.status(409).json({ message: "This action cannot be undone." });
   } catch (error) {
     return database_error(res, error);
   }

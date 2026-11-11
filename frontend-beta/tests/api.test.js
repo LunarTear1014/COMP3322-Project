@@ -88,6 +88,21 @@ test('main backend adapter sends member demotions and removals to the backend', 
   assert.equal(calls[1].url, '/api/clubs/5/members/3')
   assert.equal(calls[1].options.method, 'DELETE')
 })
+test('main backend adapter loads the club action log and requests an undo', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    return new Response(JSON.stringify([{ id: 21, actor_name: 'Morgan Lee', action_type: 'member_removed', created_epoch: Math.floor(Date.now() / 1000) }]), { status: 200 })
+  }
+
+  const actions = await requestMainBackend('/clubs/4/actions')
+  assert.equal(actions.data[0].actor_name, 'Morgan Lee')
+  const result = await requestMainBackend('/clubs/4/actions/21/undo', { method: 'POST', body: {} })
+  assert.equal(calls[0].url, '/api/clubs/4/actions')
+  assert.equal(calls[1].url, '/api/clubs/4/actions/21/undo')
+  assert.equal(calls[1].options.method, 'POST')
+  assert.equal(result.data[0].id, 21)
+})
 test('main backend adapter sends join request decisions to the backend', async () => {
   const calls = []
   globalThis.fetch = async (url, options) => {

@@ -53,6 +53,23 @@ function previewFetch(scenario = '') {
       resolve(new Response(JSON.stringify({ data: { message: 'Member returned to regular member role.' } }), { status: 200 }))
       return
     }
+    if (scenario === 'president' && url.pathname === '/api/v1/clubs/2/actions') {
+      resolve(new Response(JSON.stringify({ data: [{
+        id: 21,
+        actor_name: 'Morgan Lee',
+        target_name: 'Riley Chen',
+        action_type: 'member_removed',
+        description: 'Removed a regular member from the club.',
+        undoable: true,
+        created_at: new Date().toISOString(),
+        undone_at: null,
+      }] }), { status: 200 }))
+      return
+    }
+    if (scenario === 'president' && url.pathname === '/api/v1/clubs/2/actions/21/undo') {
+      resolve(new Response(JSON.stringify({ data: { message: 'Action undone. Affected members have been notified.' } }), { status: 200 }))
+      return
+    }
     if (scenario === 'student' && url.pathname === '/api/v1/auth/session') {
       url.searchParams.set('preview', 'student')
     }
@@ -202,6 +219,26 @@ describe('frontend preview workflows', () => {
       expect(demotion[1].method).toBe('DELETE')
     })
     expect(await screen.findByText('Morgan Lee was returned to regular member status.')).toBeTruthy()
+  })
+
+  it('shows the president who performed an action and allows undo', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    const fetch = previewFetch('president')
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    fireEvent.click(await screen.findByText('Club activity log'))
+    const description = await screen.findByText((_, element) => element.tagName === 'P' && element.textContent.includes('Removed a regular member from the club.'))
+    expect(within(description.closest('article')).getByText('Morgan Lee')).toBeTruthy()
+    expect(within(description.closest('article')).getByText(/Affected member: Riley Chen/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo action' }))
+
+    await waitFor(() => {
+      const undo = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/2/actions/21/undo')
+      expect(undo).toBeTruthy()
+      expect(undo[1].method).toBe('POST')
+    })
+    expect(await screen.findByText('Action undone. Affected members have been notified.')).toBeTruthy()
   })
 
   it('shows join request notifications with approve and reject actions', async () => {

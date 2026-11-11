@@ -48,11 +48,12 @@ Roles are `member`, `committee`, and `president`. Club and user IDs in paths are
 | `GET /api/clubs/:club_id/members` | Committee or president views the roster. | `200` array of `user_id`, `name`, `role` |
 | `POST /api/clubs/:club_id/members/:user_id/committee` | Committee or president promotes another regular member. | `200` message; self-promotion `400`, existing role `409` |
 | `DELETE /api/clubs/:club_id/members/:user_id/committee` | President removes another member's committee role. | `200` message; self-demotion `400`, wrong role `409` |
+| `DELETE /api/clubs/:club_id/members/:user_id` | Committee or president removes a regular member. Club membership, role, request, presidency, and event-management actions are recorded in the club action log. | `200` message; committee members must be demoted before removal |
+| `GET /api/clubs/:club_id/actions` | President views the club and event management action log, including each actor, affected member, and whether an action can be undone. | `200` array |
+| `POST /api/clubs/:club_id/actions/:action_id/undo` | President undoes a safe, supported club membership or role action. Undo is rejected if related data has since changed; affected users are notified. | `200` message; unsafe/stale action `409` |
 | `DELETE /api/clubs/:club_id/committee` | Committee member leaves the committee while retaining membership. | `200` message; non-committee `409` |
 | `POST /api/clubs/:club_id/presidency` | President sends `user_id` as a positive integer string and `confirmation` equal to the exact club name. The target must already be committee. | `200` message; wrong confirmation `422`, ineligible target `409` |
 | `DELETE /api/clubs/:club_id` | President sends JSON `confirmation` equal to the exact club name. Deletes the club and its associated events, bookings, and memberships. | `204`; wrong confirmation `422` |
-
-The membership deletion route does not explicitly check the session before calling its service. With no session, the current service's undefined default references an unavailable variable and the route can return `500`; clients should sign in before calling it.
 
 ## Venues
 
@@ -103,3 +104,8 @@ Title, description, club, and venue must be nonempty. The date must match `YYYY-
 | `GET /api/health` | Executes `SELECT 1` against MySQL. | `200 {"status":"ok"}` or `500` on database error |
 
 Event edits and cancellations, new club join requests, and join-request decisions insert in-app notification records directly. Join-request notifications are sent to every club committee member and president and are removed after the request is reviewed; the requester receives a separate notification with the outcome. The planned background worker, scheduled reminders, venue approval flow, separate publish action, and v1 reports are not implemented by these routes.
+
+Event creation, edits, cancellations, and club creation/deletion are logged but
+not undoable because reversing them could invalidate bookings or related data.
+The history starts when migration `004-club-action-log.sql` is applied; earlier
+actions are not backfilled.
