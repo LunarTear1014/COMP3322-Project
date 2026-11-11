@@ -139,7 +139,7 @@ async function review_join_request(club_id, request_id, user_id, decision) {
     connection = await pool.getConnection();
     await connection.beginTransaction();
     const [[club]] = await connection.query(
-      "SELECT id FROM clubs WHERE id = ? FOR UPDATE",
+      "SELECT id, name FROM clubs WHERE id = ? FOR UPDATE",
       [club_id],
     );
     if (!club) {
@@ -178,6 +178,21 @@ async function review_join_request(club_id, request_id, user_id, decision) {
        SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [decision === "accept" ? "accepted" : "rejected", user_id, request_id],
+    );
+    await connection.query(
+      `INSERT INTO notifications
+        (user_id, club_id, event_title, message)
+       VALUES (?, ?, ?, ?)`,
+      [
+        request.user_id,
+        club_id,
+        decision === "accept"
+          ? `Join request accepted: ${club.name}`
+          : `Join request unsuccessful: ${club.name}`,
+        decision === "accept"
+          ? `Your request to join ${club.name} was successful.`
+          : `Your request to join ${club.name} was unsuccessful.`,
+      ],
     );
     await connection.query(
       "DELETE FROM notifications WHERE club_join_request_id = ?",

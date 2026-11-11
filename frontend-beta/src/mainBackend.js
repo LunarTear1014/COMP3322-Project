@@ -182,7 +182,7 @@ export async function requestMainBackend(path, { method = 'GET', body, signal } 
       ...row,
       title: row.event_title,
       body: row.message,
-      type: row.club_join_request_id ? 'club_join_request' : 'event',
+      type: row.club_join_request_id ? 'club_join_request' : row.club_id ? 'club_membership' : 'event',
       join_request_id: row.club_join_request_id,
       created_at: new Date(Number(row.created_epoch) * 1000).toISOString(),
     })), searchParams, { unread_count: rows.filter(row => !row.read_at).length })

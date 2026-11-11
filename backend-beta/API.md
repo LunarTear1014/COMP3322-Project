@@ -44,7 +44,7 @@ Roles are `member`, `committee`, and `president`. Club and user IDs in paths are
 | `POST /api/clubs/:club_id/membership` | Signed-in user requests membership. Approval is required. | `202` with `status: "pending"`; duplicate membership or pending request `409` |
 | `DELETE /api/clubs/:club_id/membership` | Removes the current membership. A president must transfer presidency or delete the club first. | `204`; president or non-member `409` |
 | `GET /api/clubs/:club_id/join-requests` | Club committee or president lists pending requests. | `200` array of `id`, `user_id`, `name`, `requested_at` |
-| `POST /api/clubs/:club_id/join-requests/:request_id/review` | Committee or president sends `{"decision":"accept"}` or `{"decision":"reject"}`. | `200` message; missing or no-longer-pending request `404` |
+| `POST /api/clubs/:club_id/join-requests/:request_id/review` | Committee or president sends `{"decision":"accept"}` or `{"decision":"reject"}`. The requester is notified of the outcome. | `200` message; missing or no-longer-pending request `404` |
 | `GET /api/clubs/:club_id/members` | Committee or president views the roster. | `200` array of `user_id`, `name`, `role` |
 | `POST /api/clubs/:club_id/members/:user_id/committee` | Committee or president promotes another regular member. | `200` message; self-promotion `400`, existing role `409` |
 | `DELETE /api/clubs/:club_id/members/:user_id/committee` | President removes another member's committee role. | `200` message; self-demotion `400`, wrong role `409` |
@@ -102,4 +102,4 @@ Title, description, club, and venue must be nonempty. The date must match `YYYY-
 | `PATCH /api/notifications/:notification_id/read` | Marks the signed-in user's own notification read. | `204`; unknown or another user's notification `404` |
 | `GET /api/health` | Executes `SELECT 1` against MySQL. | `200 {"status":"ok"}` or `500` on database error |
 
-Event edits and cancellations, and new club join requests, insert in-app notification records directly. Join-request notifications are sent to every club committee member and president and are removed after the request is reviewed. The planned background worker, scheduled reminders, venue approval flow, separate publish action, and v1 reports are not implemented by these routes.
+Event edits and cancellations, new club join requests, and join-request decisions insert in-app notification records directly. Join-request notifications are sent to every club committee member and president and are removed after the request is reviewed; the requester receives a separate notification with the outcome. The planned background worker, scheduled reminders, venue approval flow, separate publish action, and v1 reports are not implemented by these routes.

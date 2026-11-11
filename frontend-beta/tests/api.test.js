@@ -72,21 +72,35 @@ test('main backend adapter sends join request decisions to the backend', async (
 })
 test('main backend adapter identifies club join-request notifications', async () => {
   const timestamp = Math.floor(Date.now() / 1000)
-  globalThis.fetch = async () => new Response(JSON.stringify([{
-    id: 8,
-    event_id: null,
-    club_id: 4,
-    club_join_request_id: 12,
-    event_title: 'Join request: Photography Society',
-    message: 'Sam Lee requested to join Photography Society.',
-    created_epoch: timestamp,
-    read_at: null,
-  }]), { status: 200 })
+  globalThis.fetch = async () => new Response(JSON.stringify([
+    {
+      id: 8,
+      event_id: null,
+      club_id: 4,
+      club_join_request_id: 12,
+      event_title: 'Join request: Photography Society',
+      message: 'Sam Lee requested to join Photography Society.',
+      created_epoch: timestamp,
+      read_at: null,
+    },
+    {
+      id: 9,
+      event_id: null,
+      club_id: 4,
+      club_join_request_id: null,
+      event_title: 'Join request accepted: Photography Society',
+      message: 'Your request to join Photography Society was successful.',
+      created_epoch: timestamp,
+      read_at: null,
+    },
+  ]), { status: 200 })
 
   const result = await requestMainBackend('/notifications')
   assert.equal(result.data[0].type, 'club_join_request')
   assert.equal(result.data[0].join_request_id, 12)
   assert.equal(result.data[0].club_id, 4)
+  assert.equal(result.data[1].type, 'club_membership')
+  assert.equal(result.data[1].join_request_id, null)
 })
 test('Hong Kong week and half-open interval boundaries', () => {
   assert.equal(weekStart('2026-11-11'), '2026-11-09')
