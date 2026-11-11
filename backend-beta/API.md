@@ -67,12 +67,14 @@ The fixed timeslot strings are `10:00 - 12:00`, `13:00 - 15:00`, and `16:00 - 18
 | `GET /api/events` | Public. Lists published events in start-time order. `?managed=true` requires a session and lists events managed by the user's club roles. | `200` array |
 | `GET /api/events/mine` | Signed-in user's participation history. | `200` array |
 | `GET /api/events/:event_id` | Published events are visible; organizers and users with participation can also access their relevant unpublished/cancelled event. | `200` event or `404` |
-| `GET /api/events/:event_id/participants` | Organizing club's committee or president. | `200` array of joined and waitlisted participants (`user_id`, `name`, `status`, `joined_at`) |
+| `GET /api/events/:event_id/participants` | Organizing club's committee or president. | `200` array of joined and pending participants (`user_id`, `name`, `status`, `joined_at`) |
 | `POST /api/events` | Organizing club's committee or president. Body and example below. Creates a confirmed booking and published event together. | `201` event; booking conflict `409`, unauthorized club `403` |
 | `PATCH /api/events/:event_id` | Organizing club's committee or president. Send both `title` and `description` for a details-only edit. To change venue/time/visibility, also send `date`, `venue`, `timeslot`, and `visibility`. | `200` message; conflict or cancelled event `409` |
 | `DELETE /api/events/:event_id` | Organizing club's committee or president cancels the event and booking and creates participant notifications. | `200` message; already cancelled `409` |
-| `POST /api/events/:event_id/participation` | Signed-in user. Optional JSON boolean `allow_waitlist` defaults to `true`. Members-only events require club membership. | `201` joined or `202` waitlisted, with `status` and `message`; already joined/waitlisted or unavailable `409` |
+| `POST /api/events/:event_id/participation` | Signed-in user. Optional JSON boolean `allow_waitlist` defaults to `true`. Members-only events require club membership. | `201` joined or `202` pending, with `status` and `message`; already joined/pending or unavailable `409` |
 | `DELETE /api/events/:event_id/participation` | Signed-in user withdraws from the event or waitlist. A joined user's withdrawal promotes the earliest waiting user when present. | `204`; no active participation `409` |
+
+Participation statuses are `joined`, `pending` (including waitlist entries), and `unsuccessful` (withdrawn registrations and registrations for cancelled events). Event status `cancelled` remains separate. Leaving the waitlist or event, or cancelling an event, makes the registration unsuccessful; the user may register again while the event remains available.
 
 The event list returns fields including `id`, `title`, `description`, `club`, `club_id`, `venue`, `venue_id`, `date`, `timeslot`, `visibility`, `capacity`, `joined_count`, `waitlisted_count`, `is_full`, `is_joined`, `participation_status`, `registration_status`, `event_status`, `booking_status`, `can_cancel`, and `status` (`Upcoming` or `Past`). Visibility is `Public` or `Members only`. `GET /api/events/mine` has a different participation-oriented shape. The list endpoint itself implements the `managed` filter only; the beta frontend adapter applies its discovery filters and pagination locally.
 
@@ -96,8 +98,8 @@ Title, description, club, and venue must be nonempty. The date must match `YYYY-
 
 | Method and path | Behavior | Success |
 | --- | --- | --- |
-| `GET /api/notifications` | Signed-in user receives up to 50 newest notifications, with `id`, `event_id`, `event_title`, `message`, `created_at`, `read_at`, and `created_epoch`. | `200` array |
+| `GET /api/notifications` | Signed-in user receives up to 50 newest event and club join-request notifications, with `id`, `event_id`, `club_id`, `club_join_request_id`, `event_title`, `message`, `created_at`, `read_at`, and `created_epoch`. | `200` array |
 | `PATCH /api/notifications/:notification_id/read` | Marks the signed-in user's own notification read. | `204`; unknown or another user's notification `404` |
 | `GET /api/health` | Executes `SELECT 1` against MySQL. | `200 {"status":"ok"}` or `500` on database error |
 
-Event edits and cancellations insert in-app notification records directly. The planned background worker, scheduled reminders, venue approval flow, separate publish action, and v1 reports are not implemented by these routes.
+Event edits and cancellations, and new club join requests, insert in-app notification records directly. Join-request notifications are sent to every club committee member and president and are removed after the request is reviewed. The planned background worker, scheduled reminders, venue approval flow, separate publish action, and v1 reports are not implemented by these routes.

@@ -24,10 +24,12 @@ function call(path, { method = 'GET', authenticated = true, body = '' } = {}) {
 test('preview exposes distinct participation states', async () => {
   const waiting = await call('/events/7')
   assert.equal(waiting.body.data.my_registration.queue_position, 2)
+  assert.equal(waiting.body.data.my_registration.status, 'pending')
   const closed = await call('/events/4')
   assert.equal(closed.body.data.eligibility.reason, 'REGISTRATION_CLOSED')
   const cancelled = await call('/events/5')
   assert.equal(cancelled.body.data.state, 'cancelled')
+  assert.equal(cancelled.body.data.my_registration.status, 'unsuccessful')
 })
 
 test('event discovery combines filters before pagination', async () => {

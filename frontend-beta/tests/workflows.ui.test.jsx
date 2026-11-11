@@ -13,6 +13,29 @@ function previewFetch(scenario = '') {
   let profileReads = 0
   return vi.fn((input, options = {}) => new Promise(resolve => {
     const url = new URL(input, 'http://localhost')
+    if (scenario === 'join-request-notification' && url.pathname === '/api/v1/notifications') {
+      resolve(new Response(JSON.stringify({
+        data: [{
+          id: 8,
+          club_id: 1,
+          join_request_id: 14,
+          type: 'club_join_request',
+          title: 'Join request: Photography Society',
+          body: 'Sam Lee requested to join Photography Society.',
+          created_at: new Date().toISOString(),
+          read_at: null,
+        }],
+        meta: { page: 1, page_size: 20, total: 1, unread_count: 1 },
+      }), { status: 200 }))
+      return
+    }
+    if (scenario === 'join-request-notification' && url.pathname === '/api/v1/clubs/1/join-requests/14/review') {
+      resolve(new Response(JSON.stringify({ data: { message: 'Join request approved.' } }), { status: 200 }))
+      return
+    }
+    if (scenario === 'student' && url.pathname === '/api/v1/auth/session') {
+      url.searchParams.set('preview', 'student')
+    }
     if (scenario === 'profile-refresh-failure' && url.pathname === '/api/v1/profile') {
       if (options.method === 'PATCH') {
         resolve(new Response(JSON.stringify({ error: { code: 'EMAIL_IN_USE', message: 'Email is already in use.', fields: {} } }), { status: 409 }))
@@ -37,11 +60,17 @@ function previewFetch(scenario = '') {
       statusCode: 200,
       setHeader(name, value) { headers.set(name, value) },
       end(payload) {
+        let responsePayload = payload
+        if (scenario === 'president' && request.url.startsWith('/me/memberships')) {
+          const result = JSON.parse(payload)
+          result.data.push({ club_id: 2, name: 'Film Society', description: 'Screenings and conversations for film lovers.', role: 'president' })
+          responsePayload = JSON.stringify(result)
+        }
         resolve({
           status: this.statusCode,
           ok: this.statusCode >= 200 && this.statusCode < 300,
           headers,
-          json: async () => JSON.parse(payload),
+          json: async () => JSON.parse(responsePayload),
         })
       },
     }
@@ -59,6 +88,62 @@ afterEach(() => {
 })
 
 describe('frontend preview workflows', () => {
+
+  it('shows the clubs page to committee members', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    vi.stubGlobal('fetch', previewFetch())
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Your clubs' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Clubs' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Photography Society' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Leave committee' })).toBeTruthy()
+  })
+
+  it('hides the clubs page from non-organizers', async () => {
+    window.history.replaceState({}, '', '/clubs?preview=student')
+    vi.stubGlobal('fetch', previewFetch('student'))
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Find your next event.' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Clubs' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Your clubs' })).toBeNull()
+  })
+
+  it('lets a president choose a committee successor and confirm the transfer', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    const fetch = previewFetch('president')
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Film Society' })).toBeTruthy()
+    fireEvent.change(await screen.findByLabelText('New president'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText(/Type.*Film Society.*to confirm/i), { target: { value: 'Film Society' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Transfer presidency' }))
+
+    await waitFor(() => {
+      const transfer = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/2/presidency')
+      expect(transfer).toBeTruthy()
+      expect(transfer[1].method).toBe('POST')
+      expect(JSON.parse(transfer[1].body)).toEqual({ user_id: 3, confirmation: 'Film Society' })
+    })
+  })
+
+  it('shows join request notifications with approve and reject actions', async () => {
+    window.history.replaceState({}, '', '/notifications')
+    const fetch = previewFetch('join-request-notification')
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    expect(await screen.findByText('Sam Lee requested to join Photography Society.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve request' }))
+    await waitFor(() => {
+      const review = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/join-requests/14/review')
+      expect(review).toBeTruthy()
+      expect(review[1].method).toBe('POST')
+      expect(JSON.parse(review[1].body)).toEqual({ decision: 'accept' })
+    })
+  })
 
   it('opens an event from discovery and reports a failed registration', async () => {
     window.history.replaceState({}, '', '/events')

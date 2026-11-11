@@ -231,10 +231,10 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
     }
     const result = await join_event(event_id, req.session.user_id, allow_waitlist);
     if (result.ok) {
-      return res.status(result.status === "waitlisted" ? 202 : 201).json({
+      return res.status(result.status === "pending" ? 202 : 201).json({
         status: result.status,
         message:
-          result.status === "waitlisted"
+          result.status === "pending"
             ? "The event is full. You have been added to the waitlist."
             : "You joined the event.",
       });
@@ -253,9 +253,9 @@ router.post("/api/events/:event_id/participation", async (req, res) => {
     if (result.reason === "unavailable") {
       return res.status(409).json({ message: "This event is not available." });
     }
-    if (result.reason === "already_waitlisted") {
+    if (result.reason === "already_pending") {
       return res.status(409).json({
-        message: "You are already on this event's waitlist.",
+        message: "You already have a pending registration for this event.",
       });
     }
     if (result.reason === "full") {

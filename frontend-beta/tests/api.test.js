@@ -14,6 +14,80 @@ test('main backend adapter exposes every page of club and venue options', async 
     assert.equal(result.data[0].id, 101)
   }
 })
+test('main backend adapter normalizes legacy event registration statuses', async () => {
+  const statuses = ['waitlisted', 'pending', 'left', 'cancelled', 'joined']
+  globalThis.fetch = async () => new Response(JSON.stringify(statuses.map((status, index) => ({
+    id: index + 1,
+    title: `Event ${index + 1}`,
+    date: '2099-01-01',
+    timeslot: '10:00 - 12:00',
+    event_status: index === 4 ? 'cancelled' : 'published',
+    participation_status: status,
+  }))), { status: 200 })
+
+  const result = await requestMainBackend('/me/registrations')
+  assert.deepEqual(result.data.map(registration => registration.status), [
+    'pending', 'pending', 'unsuccessful', 'unsuccessful', 'unsuccessful',
+  ])
+})
+test('main backend adapter sends committee leave requests to the backend', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    return new Response(JSON.stringify({ message: 'You are now a regular club member.' }), { status: 200 })
+  }
+
+  const result = await requestMainBackend('/clubs/4/committee', { method: 'DELETE' })
+  assert.equal(calls[0].url, '/api/clubs/4/committee')
+  assert.equal(calls[0].options.method, 'DELETE')
+  assert.equal(result.data.message, 'You are now a regular club member.')
+})
+test('main backend adapter sends confirmed presidency transfers to the backend', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    return new Response(JSON.stringify({ message: 'Presidency transferred.' }), { status: 200 })
+  }
+
+  const body = { user_id: 3, confirmation: 'Film Society' }
+  const result = await requestMainBackend('/clubs/4/presidency', { method: 'POST', body })
+  assert.equal(calls[0].url, '/api/clubs/4/presidency')
+  assert.equal(calls[0].options.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0].options.body), body)
+  assert.equal(result.data.message, 'Presidency transferred.')
+})
+test('main backend adapter sends join request decisions to the backend', async () => {
+  const calls = []
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options })
+    return new Response(JSON.stringify({ message: 'Join request approved.' }), { status: 200 })
+  }
+
+  const body = { decision: 'accept' }
+  const result = await requestMainBackend('/clubs/4/join-requests/12/review', { method: 'POST', body })
+  assert.equal(calls[0].url, '/api/clubs/4/join-requests/12/review')
+  assert.equal(calls[0].options.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0].options.body), body)
+  assert.equal(result.data.message, 'Join request approved.')
+})
+test('main backend adapter identifies club join-request notifications', async () => {
+  const timestamp = Math.floor(Date.now() / 1000)
+  globalThis.fetch = async () => new Response(JSON.stringify([{
+    id: 8,
+    event_id: null,
+    club_id: 4,
+    club_join_request_id: 12,
+    event_title: 'Join request: Photography Society',
+    message: 'Sam Lee requested to join Photography Society.',
+    created_epoch: timestamp,
+    read_at: null,
+  }]), { status: 200 })
+
+  const result = await requestMainBackend('/notifications')
+  assert.equal(result.data[0].type, 'club_join_request')
+  assert.equal(result.data[0].join_request_id, 12)
+  assert.equal(result.data[0].club_id, 4)
+})
 test('Hong Kong week and half-open interval boundaries', () => {
   assert.equal(weekStart('2026-11-11'), '2026-11-09')
   assert.equal(campusInstant('2026-11-09'), '2026-11-08T16:00:00.000Z')

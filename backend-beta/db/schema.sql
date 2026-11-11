@@ -247,7 +247,7 @@ CREATE TABLE `events` (
 CREATE TABLE `participations` (
     `user_id` INT NOT NULL,
     `event_id` INT NOT NULL,
-    `status` ENUM('joined', 'left', 'waitlisted') NOT NULL DEFAULT 'joined',
+    `status` ENUM('joined', 'pending', 'unsuccessful') NOT NULL DEFAULT 'joined',
     `joined_at` TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `left_at` TIMESTAMP(6) NULL DEFAULT NULL,
 
@@ -283,6 +283,8 @@ CREATE TABLE `notifications` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `user_id` INT NOT NULL,
     `event_id` INT NULL,
+    `club_id` INT NULL,
+    `club_join_request_id` INT NULL,
     `event_title` VARCHAR(255) NOT NULL,
     `message` VARCHAR(1000) NOT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -299,7 +301,17 @@ CREATE TABLE `notifications` (
     CONSTRAINT `fk_notifications_event`
         FOREIGN KEY (`event_id`)
         REFERENCES `events` (`id`)
-        ON DELETE SET NULL
+        ON DELETE SET NULL,
+
+    CONSTRAINT `fk_notifications_club`
+        FOREIGN KEY (`club_id`)
+        REFERENCES `clubs` (`id`)
+        ON DELETE CASCADE,
+
+    CONSTRAINT `fk_notifications_club_join_request`
+        FOREIGN KEY (`club_join_request_id`)
+        REFERENCES `club_join_requests` (`id`)
+        ON DELETE CASCADE
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;

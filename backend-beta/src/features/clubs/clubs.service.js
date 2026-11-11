@@ -75,6 +75,29 @@ async function join_club(club_id, user_id) {
       "INSERT INTO club_join_requests (user_id, club_id) VALUES (?, ?)",
       [user_id, club_id],
     );
+    const [[requester]] = await connection.query(
+      "SELECT name FROM users WHERE id = ?",
+      [user_id],
+    );
+    const [organizers] = await connection.query(
+      `SELECT user_id FROM memberships
+       WHERE club_id = ? AND role IN ('committee', 'president')`,
+      [club_id],
+    );
+    for (const organizer of organizers) {
+      await connection.query(
+        `INSERT INTO notifications
+          (user_id, club_id, club_join_request_id, event_title, message)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          organizer.user_id,
+          club_id,
+          result.insertId,
+          `Join request: ${club.name}`,
+          `${requester.name} requested to join ${club.name}.`,
+        ],
+      );
+    }
     await connection.commit();
     return { ok: true, request_id: result.insertId, club_name: club.name };
   } catch (error) {
@@ -155,6 +178,10 @@ async function review_join_request(club_id, request_id, user_id, decision) {
        SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [decision === "accept" ? "accepted" : "rejected", user_id, request_id],
+    );
+    await connection.query(
+      "DELETE FROM notifications WHERE club_join_request_id = ?",
+      [request_id],
     );
     await connection.commit();
     return { ok: true, decision };

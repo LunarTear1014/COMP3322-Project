@@ -27,7 +27,7 @@ function event_response(row) {
     capacity: Number(row.capacity),
     is_full: Number(row.joined_count) >= Number(row.capacity),
     is_joined: Boolean(row.is_joined),
-    participation_status: row.participation_status === "left" ? null : row.participation_status,
+    participation_status: row.participation_status,
     registration_status: row.participation_status,
     waitlisted_count: Number(row.waitlisted_count),
     event_status: row.event_status,
@@ -71,7 +71,7 @@ async function list_events(user_id = null, { event_id = null, managed = false } 
          FROM participations p
          WHERE p.event_id = e.id AND p.status = 'joined') AS joined_count,
         (SELECT COUNT(*) FROM participations p
-         WHERE p.event_id = e.id AND p.status = 'waitlisted') AS waitlisted_count,
+         WHERE p.event_id = e.id AND p.status = 'pending') AS waitlisted_count,
         EXISTS(
           SELECT 1
           FROM participations mine
@@ -158,7 +158,7 @@ async function list_event_participants(event_id, user_id) {
     `SELECT u.id AS user_id, u.name, p.status, p.joined_at
      FROM participations p
      JOIN users u ON u.id = p.user_id
-     WHERE p.event_id = ? AND p.status IN ('joined', 'waitlisted')
+     WHERE p.event_id = ? AND p.status IN ('joined', 'pending')
      ORDER BY CASE p.status WHEN 'joined' THEN 0 ELSE 1 END,
        p.joined_at ASC, u.name ASC`,
     [event_id],
@@ -208,9 +208,9 @@ async function join_event(event_id, user_id, allow_waitlist = true) {
       await connection.rollback();
       return { ok: false, reason: "already_joined" };
     }
-    if (participation?.status === "waitlisted") {
+    if (participation?.status === "pending") {
       await connection.rollback();
-      return { ok: false, reason: "already_waitlisted" };
+      return { ok: false, reason: "already_pending" };
     }
     const [[signup_count]] = await connection.query(
       `SELECT COUNT(*) AS joined_count
@@ -226,18 +226,18 @@ async function join_event(event_id, user_id, allow_waitlist = true) {
       if (participation) {
         await connection.query(
           `UPDATE participations
-           SET status = 'waitlisted', joined_at = CURRENT_TIMESTAMP(6), left_at = NULL
+           SET status = 'pending', joined_at = CURRENT_TIMESTAMP(6), left_at = NULL
            WHERE user_id = ? AND event_id = ?`,
           [user_id, event_id],
         );
       } else {
         await connection.query(
-          "INSERT INTO participations (user_id, event_id, status) VALUES (?, ?, 'waitlisted')",
+          "INSERT INTO participations (user_id, event_id, status) VALUES (?, ?, 'pending')",
           [user_id, event_id],
         );
       }
       await connection.commit();
-      return { ok: true, status: "waitlisted" };
+      return { ok: true, status: "pending" };
     }
     if (participation) {
       await connection.query(
@@ -288,7 +288,7 @@ async function leave_event(event_id, user_id) {
     );
     if (
       !participation ||
-      !["joined", "waitlisted"].includes(participation.status)
+      !["joined", "pending"].includes(participation.status)
     ) {
       await connection.rollback();
       return { ok: false, reason: "not_joined" };
@@ -296,28 +296,28 @@ async function leave_event(event_id, user_id) {
 
     await connection.query(
       `UPDATE participations
-       SET status = 'left', left_at = CURRENT_TIMESTAMP
+       SET status = 'unsuccessful', left_at = CURRENT_TIMESTAMP
        WHERE user_id = ? AND event_id = ?`,
       [user_id, event_id],
     );
 
     let promoted_user_id = null;
     if (participation.status === "joined") {
-      const [[next_waitlisted]] = await connection.query(
+      const [[next_pending]] = await connection.query(
         `SELECT user_id FROM participations
-         WHERE event_id = ? AND status = 'waitlisted'
+         WHERE event_id = ? AND status = 'pending'
          ORDER BY joined_at ASC, user_id ASC
          LIMIT 1 FOR UPDATE`,
         [event_id],
       );
-      if (next_waitlisted) {
+      if (next_pending) {
         await connection.query(
           `UPDATE participations
            SET status = 'joined', left_at = NULL
            WHERE user_id = ? AND event_id = ?`,
-          [next_waitlisted.user_id, event_id],
+          [next_pending.user_id, event_id],
         );
-        promoted_user_id = next_waitlisted.user_id;
+        promoted_user_id = next_pending.user_id;
       }
     }
 
@@ -367,7 +367,13 @@ async function cancel_event(event_id, user_id) {
          CONCAT('"', e.title, '" was cancelled by its organising club.')
        FROM participations p
        JOIN events e ON e.id = p.event_id
-       WHERE e.id = ? AND p.status IN ('joined', 'waitlisted')`,
+       WHERE e.id = ? AND p.status IN ('joined', 'pending')`,
+      [event_id],
+    );
+    await connection.query(
+      `UPDATE participations
+       SET status = 'unsuccessful', left_at = CURRENT_TIMESTAMP
+       WHERE event_id = ? AND status IN ('joined', 'pending')`,
       [event_id],
     );
     await connection.query(
@@ -482,7 +488,7 @@ async function edit_event(
          CONCAT('"', e.title, '" has been updated. Please review the new details.')
        FROM participations p
        JOIN events e ON e.id = p.event_id
-       WHERE e.id = ? AND p.status IN ('joined', 'waitlisted')`,
+       WHERE e.id = ? AND p.status IN ('joined', 'pending')`,
       [event_id],
     );
 
@@ -498,7 +504,8 @@ async function edit_event(
 
 async function list_notifications(user_id) {
   const [rows] = await pool.query(
-    `SELECT id, event_id, event_title, message, created_at, read_at,
+    `SELECT id, event_id, club_id, club_join_request_id,
+       event_title, message, created_at, read_at,
        UNIX_TIMESTAMP(created_at) AS created_epoch
      FROM notifications
      WHERE user_id = ?

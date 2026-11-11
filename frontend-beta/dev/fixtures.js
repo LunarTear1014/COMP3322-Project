@@ -15,9 +15,9 @@ const events = [
 events.push(
   { ...events[0], id: 3, title: 'Workshop waitlist', joined_count: 30, waitlisted_count: 4, eligibility: { can_register: false, can_waitlist: true, reason: 'EVENT_FULL' } },
   { ...events[0], id: 4, title: 'Registration closed', registration_closes_at: future(-1), eligibility: { can_register: false, can_waitlist: false, reason: 'REGISTRATION_CLOSED' } },
-  { ...events[0], id: 5, title: 'Cancelled gathering', state: 'cancelled', joined_count: 0, waitlisted_count: 0, eligibility: { can_register: false, can_waitlist: false, reason: 'EVENT_CANCELLED' }, my_registration: { status: 'cancelled', queue_position: null } },
+  { ...events[0], id: 5, title: 'Cancelled gathering', state: 'cancelled', joined_count: 0, waitlisted_count: 0, eligibility: { can_register: false, can_waitlist: false, reason: 'EVENT_CANCELLED' }, my_registration: { status: 'unsuccessful', queue_position: null } },
   { ...events[0], id: 6, title: 'Members-only gathering', club: { id: 2, name: 'Film Society' }, visibility: 'members_only', eligibility: { can_register: false, can_waitlist: false, reason: 'MEMBERSHIP_REQUIRED' } },
-  { ...events[0], id: 7, title: 'Waitlisted student', joined_count: 30, waitlisted_count: 4, eligibility: { can_register: false, can_waitlist: false, reason: 'ALREADY_REGISTERED' }, my_registration: { status: 'waitlisted', queue_position: 2 } },
+  { ...events[0], id: 7, title: 'Pending registration', joined_count: 30, waitlisted_count: 4, eligibility: { can_register: false, can_waitlist: false, reason: 'ALREADY_REGISTERED' }, my_registration: { status: 'pending', queue_position: 2 } },
   { ...events[0], id: 8, title: 'A very long event title for students who want to explore photography, creative practice and community together', description: 'A detailed programme with a long title to exercise layout and text wrapping.' },
   { ...events[0], id: 9, title: 'Event and waitlist full', joined_count: 30, waitlisted_count: 500, eligibility: { can_register: false, can_waitlist: false, reason: 'WAITLIST_FULL' } },
   { ...events[0], id: 10, title: 'Joined event', my_registration: { status: 'joined', queue_position: null }, eligibility: { can_register: false, can_waitlist: false, reason: 'ALREADY_REGISTERED' } },
@@ -49,6 +49,7 @@ export function fixturePlugin() {
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
       if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
+      if (url.pathname === '/clubs/2/members') return send(200, list([{ user_id: 3, name: 'Morgan Lee', role: 'committee' }]))
       if (/^\/venues\/\d+\/calendar$/.test(url.pathname)) {
         const venueId = Number(url.pathname.split('/')[2])
         const from = url.searchParams.get('from'), to = url.searchParams.get('to')

@@ -46,12 +46,15 @@ function eventResource(row, memberships = []) {
   const visibility = row.visibility === 'Members only' ? 'members_only' : 'public'
   const started = new Date(start_at) <= new Date()
   const registration = row.registration_status || row.participation_status
-  const status = row.event_status === 'cancelled' && ['joined', 'waitlisted'].includes(registration)
-    ? 'cancelled' : registration || 'none'
+  const status = row.event_status === 'cancelled' && ['joined', 'pending', 'waitlisted'].includes(registration)
+    ? 'unsuccessful'
+    : ['pending', 'waitlisted'].includes(registration) ? 'pending'
+      : ['left', 'cancelled'].includes(registration) ? 'unsuccessful'
+        : registration || 'none'
   const reason = row.event_status === 'cancelled' ? 'EVENT_CANCELLED'
     : started ? 'REGISTRATION_CLOSED'
     : visibility === 'members_only' && !memberships.some(membership => membership.club_id === row.club_id) ? 'MEMBERSHIP_REQUIRED'
-    : ['joined', 'waitlisted'].includes(status) ? 'ALREADY_REGISTERED'
+    : ['joined', 'pending'].includes(status) ? 'ALREADY_REGISTERED'
     : row.is_full ? 'EVENT_FULL' : null
   return {
     ...row,
@@ -75,6 +78,10 @@ export async function requestMainBackend(path, { method = 'GET', body, signal } 
   const session = async user => data({ user, memberships: membershipList(await get('/memberships')) })
   const eventMatch = pathname.match(/^\/events\/(\d+)(?:\/(registration|participants|cancel))?$/)
   const clubMatch = pathname.match(/^\/clubs\/(\d+)\/membership$/)
+  const committeeMatch = pathname.match(/^\/clubs\/(\d+)\/committee$/)
+  const clubMembersMatch = pathname.match(/^\/clubs\/(\d+)\/members$/)
+  const presidencyMatch = pathname.match(/^\/clubs\/(\d+)\/presidency$/)
+  const joinRequestReviewMatch = pathname.match(/^\/clubs\/(\d+)\/join-requests\/(\d+)\/review$/)
   const calendarMatch = pathname.match(/^\/venues\/(\d+)\/calendar$/)
 
   if (pathname === '/auth/session') return session(await get('/auth/me'))
@@ -86,6 +93,10 @@ export async function requestMainBackend(path, { method = 'GET', body, signal } 
   if (pathname === '/clubs') return page(await get('/clubs'), searchParams)
   if (pathname === '/me/memberships') return page(membershipList(await get('/memberships')), searchParams)
   if (clubMatch) return data(await send(pathname, body, method === 'PUT' ? 'POST' : method))
+  if (committeeMatch && method === 'DELETE') return data(await send(pathname))
+  if (clubMembersMatch && method === 'GET') return data(await get(pathname))
+  if (presidencyMatch && method === 'POST') return data(await send(pathname, body))
+  if (joinRequestReviewMatch && method === 'POST') return data(await send(pathname, body))
   if (pathname === '/config') return data({ campus_timezone: 'Asia/Hong_Kong', slots })
   if (pathname === '/venues') {
     const venues = await get('/venues')
@@ -168,7 +179,11 @@ export async function requestMainBackend(path, { method = 'GET', body, signal } 
     const unreadOnly = searchParams.get('unread_only') === 'true'
     const rows = await get(pathname)
     return page(rows.filter(row => !unreadOnly || !row.read_at).map(row => ({
-      ...row, title: row.event_title, body: row.message,
+      ...row,
+      title: row.event_title,
+      body: row.message,
+      type: row.club_join_request_id ? 'club_join_request' : 'event',
+      join_request_id: row.club_join_request_id,
       created_at: new Date(Number(row.created_epoch) * 1000).toISOString(),
     })), searchParams, { unread_count: rows.filter(row => !row.read_at).length })
   }
