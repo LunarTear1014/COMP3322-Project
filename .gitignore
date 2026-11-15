@@ -13,3 +13,6 @@ node_modules/
 
 # Server-generated TLS certificate and key
 /certs/
+
+# Local cover uploads
+backend-beta/data/

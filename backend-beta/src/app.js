@@ -15,6 +15,7 @@ function create_app({
   app_origin,
   legacy_routers = [],
   v1_routers = [],
+  is_multipart_route = () => false,
   session_store,
   cookie_secure = false,
   trust_proxy = false,
@@ -47,7 +48,8 @@ function create_app({
   });
 
   // Order (backend.md section 2): body limits -> session -> Origin/CSRF -> ...
-  v1.use(json_body());
+  // Multipart routes (event covers) parse their own body, after the CSRF check.
+  v1.use(json_body({ skip: is_multipart_route }));
   v1.use(session_middleware);
   v1.use(origin_and_csrf({ app_origin }));
   v1.use(create_v1_router());

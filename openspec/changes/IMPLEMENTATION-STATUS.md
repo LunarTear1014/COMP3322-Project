@@ -44,7 +44,8 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 8.1-8.8 frontend integration | partial | fixtures v1 preview; `mainBackend.js` adapter; 21 UI tests | live v1 provider absent |
 | 9.1-9.5 release | missing | `compose.yaml` runs web+backend+db only | |
 | 10.1 migrations 010-014 | partial | `db/migrations/010`-`014` (additive, idempotent helpers); 010 preflight tested with a fake | not executed on fresh or Alpha-copy MySQL (B1); operator must provision first presidents |
-| 10.2-10.7 | missing | beta has president transfer/demote/kick in `clubs.service.js` (different API) | |
+| 10.4 notification stream | done | `src/features/notifications/{stream_hub,stream.routes,notifications.repository}.js`; `stream_hub.test.js` 8 tests (headers, auth, delivery well under 2 s, isolation, Last-Event-ID replay without gaps or duplicates, refetch over 200, connection cap 429, heartbeat, late lower id); nginx location in `frontend-beta/nginx.conf` | repository SQL and the real session-based `authenticate` are untested on MySQL (B1); hub is not yet mounted in `index.js` because v1 auth does not exist |
+| 10.2-10.3, 10.5-10.7 | missing | beta has president transfer/demote/kick in `clubs.service.js` (different API) | |
 | 10.8 | n/a | tracked in visual refresh section 8 | |
 
 ## refresh-clubspace-visual-design
@@ -53,7 +54,13 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | --- | --- | --- | --- |
 | 0.1 | done | already ticked | |
 | 0.2 | missing | | product owner action |
-| 1.1-8.6 | missing | `App.jsx` is a single 51 KB file using MUI | |
+| 5.1 cover migration | partial | `db/migrations/015_events_cover.js` (nullable `cover_key`, `cover_alt`, `cover_updated_at`) | not run on MySQL (B1) |
+| 5.2 cover service | done | `backend-beta/src/features/covers/cover_service.js` (multer memory 5 MB, sharp decode/format/size, orientation, metadata strip, 3:2 crop, card/full WebP, random keys); `cover_service.test.js` 14 tests incl. EXIF GPS removal, PNG-as-JPEG 415, 800x600 422, 5 MB+ 413, replace/remove, orphan sweep | |
+| 5.3 cover routes | missing | `cover_upload()` middleware ready and tested via multipart probe route | needs v1 events/auth/permissions (B1) |
+| 5.4 DTO and cleanup | partial | `cover_dto`, `delete_cover_files`, `sweep_orphan_covers` | not wired to events DTO or worker (no worker yet) |
+| 5.5 volume and docs | done | `compose.yaml` (`cover_data` volume, `COVER_DIR`), `backend-beta/Dockerfile`, README "Event cover images and migrations"; `docker compose config` passes | not exercised on the server |
+| 5.6 cover contract tests | partial | service-level scenarios (413, 415, 422, EXIF, replace/remove) pass | 403, 404, 409 STALE_VERSION/INVALID_STATE need DB-backed routes |
+| 1.1-4.4, 6.1-8.6 | missing | `App.jsx` is a single 51 KB file using MUI | |
 
 ## Decisions
 

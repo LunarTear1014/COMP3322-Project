@@ -118,6 +118,23 @@ Use `docker compose up -d --build` again for code updates. Keep the
 `db_data` volume and back it up before schema changes. The initialization
 scripts run only for an empty database.
 
+### Event cover images and migrations
+
+Event cover images are stored under `COVER_DIR` (`/app/data/covers` in the
+backend container) on the named Docker volume `cover_data`. Back it up with
+the database volume: `docker run --rm -v clubspace-pg19_cover_data:/data -v
+"$PWD":/backup alpine tar -czf /backup/covers.tgz -C /data .`. A scheduled
+sweep removes files that no event references.
+
+Schema changes after the beta baseline are ordered migrations in
+`backend-beta/db/migrations`. Back up the database, then run
+`docker compose exec backend node src/ops/migrate.js`. The runner takes a
+database lock, verifies the checksum of each applied file, and records each
+version only after it finishes. Set `MIGRATION_DB_USER` and
+`MIGRATION_DB_PASSWORD` when the application account has no DDL rights.
+`APP_ORIGIN` (default `http://c3322-pg19.cs.hku.hk`) must match the address
+users open, because the v1 API rejects other origins.
+
 ### Redeploy an updated archive
 
 Upload the updated `clubspace-pg19-server.tar.gz` using the Mac commands

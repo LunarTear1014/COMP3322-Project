@@ -33,10 +33,10 @@
 ## 5. Event covers (backend)
 
 - [ ] 5.1 Write the additive migration `events_add_cover` (`cover_key`, `cover_alt`, `cover_updated_at`, all nullable). Run it against fresh and Alpha-copy databases.
-- [ ] 5.2 Add `multer` (memory storage, 5 MB limit) and `sharp`. Implement the cover service: decode, format and size checks, auto-orient, strip metadata, 3:2 crop, `card` and `full` WebP, random keys under `COVER_DIR`.
+- [x] 5.2 Add `multer` (memory storage, 5 MB limit) and `sharp`. Implement the cover service: decode, format and size checks, auto-orient, strip metadata, 3:2 crop, `card` and `full` WebP, random keys under `COVER_DIR`.
 - [ ] 5.3 Add the routes `PUT|DELETE /api/v1/events/:id/cover` (Origin, CSRF, committee check, `expected_version`, state check, rate limit) and `GET /api/v1/events/:id/cover/:size` (event visibility check, private caching, ETag).
 - [ ] 5.4 Add `cover` to the Event and EventSummary DTOs. Delete files after commit, and add the worker's daily orphan sweep.
-- [ ] 5.5 Add the named Docker volume for `COVER_DIR` and include it in backups. Document it in the README.
+- [x] 5.5 Add the named Docker volume for `COVER_DIR` and include it in backups. Document it in the README.
 - [ ] 5.6 Add contract tests for every `event-covers` scenario: 413, 415, 422, 403, 404, 409 STALE_VERSION and INVALID_STATE, EXIF removal, replace and remove cleanup.
 
 ## 6. Event covers (frontend)

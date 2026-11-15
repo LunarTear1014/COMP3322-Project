@@ -24,6 +24,10 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       SESSION_COOKIE_SECURE: "false"
+      APP_ORIGIN: ${APP_ORIGIN:-http://c3322-pg19.cs.hku.hk}
+      COVER_DIR: /app/data/covers
+    volumes:
+      - cover_data:/app/data/covers
     depends_on:
       db:
         condition: service_healthy
@@ -61,3 +65,4 @@ services:
 
 volumes:
   db_data:
+  cover_data:
