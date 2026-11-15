@@ -67,7 +67,9 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 2.1 navigation | done | `src/components/nav/{AppHeader,TabBar,AccountMenu,navigation}.jsx`, `src/hooks/useMediaQuery.js`, `src/App.jsx`; four tabs on phones, header links at 768 px and up, account control with Profile/Organizer/Admin/Sign out, badge hidden at 0 and read as "N unread"; UI tests for tab bar, badge, account menu Escape/focus; checked at 390 px in the fixture preview | club management moved to `/organizer/clubs`; `/clubs` is the new directory |
 | 2.2 scroll padding and nav tests | done | `src/styles/layout.css` (`scroll-padding-bottom`, `--bars-height`), `tests/workflows.ui.test.jsx` updated | |
 | 3.4 (part) Clubs directory | partial | `src/pages/ClubsDirectory.jsx` (your clubs, discover, join, in-page leave confirm, committee cannot leave) | member/event counts shown only if the API supplies them (v1 Club DTO has none); My events and Profile cleanup pending |
-| 3.1-4.4, 6.1-8.6 | missing | | |
+| 3.1 URL-synced filters and sheet | done | `src/lib/eventFilters.js`, `src/components/FilterChips.jsx`, `src/pages/Events.jsx`; `tests/eventFilters.test.js` (8) and `tests/discovery.ui.test.jsx` (6: chips to API and URL params, reload restores, sheet apply and count, filtered-empty with Clear filters, API failure not shown as empty, reversed range blocked) | "My clubs" chip omitted: `/events` accepts a single `club_id` |
+| 3.2 EventCard | done | `src/components/EventCard.jsx` (date tile, club colour, meter with Almost full at 85%, stickers, cover `<img width=600 height=400 alt="" loading=lazy>` or aria-hidden art, one link per card); asserted in `discovery.ui.test.jsx` | no layout-shift measurement in a real browser; checked visually in the fixture preview |
+| 3.3, 3.5-4.4, 6.1-8.6 | missing | | |
 
 ## Decisions
 

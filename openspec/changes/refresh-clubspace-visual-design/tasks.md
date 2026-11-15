@@ -17,8 +17,8 @@
 
 ## 3. Discovery and events
 
-- [ ] 3.1 Add URL-synced `FilterChips` and a filter sheet for `club_id`, `venue_id`, `visibility`, `from`/`to` and `phase`. Add the filtered-empty state.
-- [ ] 3.2 Rebuild `EventCard` with the date tile, club colour, capacity meter, stickers and cover or fallback. The whole card is a link; there's no layout shift.
+- [x] 3.1 Add URL-synced `FilterChips` and a filter sheet for `club_id`, `venue_id`, `visibility`, `from`/`to` and `phase`. Add the filtered-empty state.
+- [x] 3.2 Rebuild `EventCard` with the date tile, club colour, capacity meter, stickers and cover or fallback. The whole card is a link; there's no layout shift.
 - [ ] 3.3 Rebuild the event page: one-line time, registration state cards, `StickyActionBar` below 768 px, `.ics` Add to calendar, and an Undo toast for leaving.
 - [ ] 3.4 Build My events (Upcoming, Waitlist, Past) and the Clubs directory. Move join and leave out of Profile.
 - [ ] 3.5 Restyle Inbox with grouped, typed notifications and "Mark all as read".

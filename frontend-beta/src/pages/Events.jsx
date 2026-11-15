@@ -1,44 +1,131 @@
-import { useState } from 'react'
-import { Link } from 'react-router'
-import { query, campusTime, campusInstant, addDays } from '../api'
+import { Search } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
+import { query } from '../api'
 import { PageHeading, ErrorNotice, Resource, Pagination } from '../components/common'
-import { useResource, useAllOptions } from '../hooks/resources'
+import { EventCard } from '../components/EventCard'
+import { FilterChips } from '../components/FilterChips'
+import { BottomSheet, Button, EmptyState, TextField } from '../components/ui'
+import { useAllOptions, useResource } from '../hooks/resources'
+import {
+  activeFilterCount, clearedFilters, rangeProblem, readFilters, sheetFilterCount, toApiQuery, writeFilters,
+} from '../lib/eventFilters'
 
+export { EventCard }
+
+// Event discovery. Every filter is a URL parameter (?when=week&visibility=public),
+// so a filtered view can be shared and survives a refresh.
 export function Events() {
-  const [q, setQ] = useState('')
-  const [phase, setPhase] = useState('upcoming')
-  const [club, setClub] = useState('')
-  const [venue, setVenue] = useState('')
-  const [visibility, setVisibility] = useState('')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
-  const [page, setPage] = useState(1)
+  const [params, setParams] = useSearchParams()
+  const filters = useMemo(() => readFilters(params), [params])
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [draft, setDraft] = useState(filters)
   const clubs = useAllOptions('/clubs')
   const venues = useAllOptions('/venues')
-  const from = fromDate && toDate ? campusInstant(fromDate, '00:00') : ''
-  const to = fromDate && toDate ? campusInstant(addDays(toDate, 1), '00:00') : ''
-  const invalidRange = Boolean(fromDate || toDate) && (!from || !to || new Date(to) <= new Date(from) || new Date(to) - new Date(from) > 93 * 86400000)
-  const r = useResource(invalidRange ? null : `/events${query({q, phase, club_id:club, venue_id:venue, visibility, from, to, page})}`)
-  const change = setter => event => { setter(event.target.value); setPage(1) }
-  return <main><PageHeading title="Find your next event." description="Explore what’s happening across campus."/>
-    <div className="filters">
-      <label>Search<input value={q} maxLength={100} onChange={change(setQ)}/></label>
-      <label>When<select value={phase} onChange={change(setPhase)}><option value="upcoming">Upcoming</option><option value="past">Past</option></select></label>
-      <label>Club<select value={club} onChange={change(setClub)}><option value="">All clubs</option>{clubs.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label>Venue<select value={venue} onChange={change(setVenue)}><option value="">All venues</option>{venues.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label>Visibility<select value={visibility} onChange={change(setVisibility)}><option value="">All</option><option value="public">Public</option><option value="members_only">Members only</option></select></label>
-      <label>From date<input type="date" value={fromDate} onChange={change(setFromDate)}/></label>
-      <label>Through date<input type="date" value={toDate} onChange={change(setToDate)}/></label>
-    </div>
-    <ErrorNotice error={clubs.error}/><ErrorNotice error={venues.error}/>
-    {invalidRange ? <p role="alert">Choose both dates in order, spanning no more than 93 days.</p> : <Resource value={r} empty="No events match these filters."><div className="grid">{r.data?.map(event => <EventCard key={event.id} event={event}/>)}</div><Pagination meta={r.meta} page={page} setPage={setPage}/></Resource>}
-  </main>
-}
-export function EventCard({ event }) {
-  return <article className="panel event-card">
-    <p className="event-date">{campusTime(event.start_at)} HKT</p>
-    <h2><Link to={`/events/${event.id}`}>{event.title}</Link></h2>
-    <p>{event.club?.name} · {event.venue?.name}</p>
-    <p>{event.visibility === 'members_only' ? 'Members only' : 'Open to everyone'} · {event.joined_count} of {event.capacity} places filled{event.waitlisted_count > 0 && ` · ${event.waitlisted_count} waiting`}</p>
-  </article>
+
+  const problem = rangeProblem(filters)
+  const apiQuery = query(toApiQuery(filters))
+  const results = useResource(problem ? null : `/events${apiQuery}`)
+  const draftProblem = rangeProblem(draft)
+
+  const apply = next => setParams(writeFilters({ ...next, page: next.page ?? 1 }), { replace: false })
+  const set = patch => apply({ ...filters, ...patch, page: 1 })
+
+  const chips = [
+    { key: 'week', label: 'This week', pressed: filters.when === 'week' },
+    { key: 'month', label: 'This month', pressed: filters.when === 'month' },
+    { key: 'public', label: 'Open to everyone', pressed: filters.visibility === 'public' },
+    { key: 'members_only', label: 'Members only', pressed: filters.visibility === 'members_only' },
+    { key: 'past', label: 'Past events', pressed: filters.phase === 'past' },
+  ]
+  function toggle(key) {
+    if (key === 'week' || key === 'month') set({ when: filters.when === key ? '' : key, from: '', to: '' })
+    else if (key === 'past') set({ phase: filters.phase === 'past' ? 'upcoming' : 'past' })
+    else set({ visibility: filters.visibility === key ? '' : key })
+  }
+
+  function openSheet() { setDraft(filters); setSheetOpen(true) }
+  function applySheet() { apply({ ...draft, page: 1 }); setSheetOpen(false) }
+  const draftChange = patch => setDraft(current => ({ ...current, ...patch }))
+
+  const total = results.meta?.total
+  const noFilters = activeFilterCount(filters) === 0
+  const filtered = !noFilters
+
+  return (
+    <main className="page">
+      <PageHeading title="Find your next event." description="Explore what’s happening across campus. Times are in Hong Kong time." />
+      <form className="search-row" role="search" onSubmit={event => event.preventDefault()}>
+        <Search className="cs-icon search-icon" aria-hidden="true" />
+        <input
+          type="search"
+          className="cs-input search-input"
+          aria-label="Search events"
+          placeholder="Search by title, club or venue…"
+          maxLength={100}
+          value={filters.q}
+          onChange={event => set({ q: event.target.value })}
+        />
+      </form>
+      <FilterChips chips={chips} onToggle={toggle} onOpenSheet={openSheet} sheetCount={sheetFilterCount(filters)} sheetOpen={sheetOpen} />
+      <ErrorNotice error={clubs.error} /><ErrorNotice error={venues.error} />
+
+      {problem ? (
+        <p role="alert" className="cs-error">{problem} <Button variant="ghost" onClick={() => set({ from: '', to: '' })}>Clear dates</Button></p>
+      ) : (
+        <Resource
+          value={results}
+          allowEmpty
+        >
+          {results.data?.length === 0 ? (
+            filtered ? (
+              <EmptyState title="Nothing matches these filters" actions={<Button variant="primary" onClick={() => apply(clearedFilters)}>Clear filters</Button>}>
+                Try a wider date range, another club or fewer filters.
+              </EmptyState>
+            ) : (
+              <EmptyState title="No events yet" actions={<Button onClick={() => set({ phase: filters.phase === 'past' ? 'upcoming' : 'past' })}>{filters.phase === 'past' ? 'See upcoming events' : 'See past events'}</Button>}>
+                Nothing is scheduled right now. Check back soon.
+              </EmptyState>
+            )
+          ) : (
+            <>
+              <p className="cs-meta result-count" role="status">{total != null && `${total} ${total === 1 ? 'event' : 'events'}`}</p>
+              <div className="card-grid event-grid">
+                {results.data?.map((event, index) => <EventCard key={event.id} event={event} eager={index < 2} />)}
+              </div>
+              <Pagination meta={results.meta} page={filters.page} setPage={page => apply({ ...filters, page })} />
+            </>
+          )}
+        </Resource>
+      )}
+
+      <BottomSheet
+        open={sheetOpen}
+        title="Filters"
+        onClose={() => setSheetOpen(false)}
+        footer={(
+          <>
+            <Button onClick={() => setDraft({ ...clearedFilters, q: draft.q })}>Clear all</Button>
+            <Button variant="primary" disabled={Boolean(draftProblem)} onClick={applySheet}>Show events</Button>
+          </>
+        )}
+      >
+        <TextField as="select" label="Club" name="club_id" value={draft.club_id} onChange={event => draftChange({ club_id: event.target.value })}>
+          <option value="">All clubs</option>
+          {clubs.data?.map(club => <option key={club.id} value={club.id}>{club.name}</option>)}
+        </TextField>
+        <TextField as="select" label="Venue" name="venue_id" value={draft.venue_id} onChange={event => draftChange({ venue_id: event.target.value })}>
+          <option value="">All venues</option>
+          {venues.data?.map(venue => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+        </TextField>
+        <TextField as="select" label="Who can join" name="visibility" value={draft.visibility} onChange={event => draftChange({ visibility: event.target.value })}>
+          <option value="">Everyone and members only</option>
+          <option value="public">Open to everyone</option>
+          <option value="members_only">Members only</option>
+        </TextField>
+        <TextField label="From date" name="from" type="date" value={draft.from} onChange={event => draftChange({ from: event.target.value, when: '' })} />
+        <TextField label="Through date" name="to" type="date" value={draft.to} error={draftProblem} onChange={event => draftChange({ to: event.target.value, when: '' })} />
+      </BottomSheet>
+    </main>
+  )
 }

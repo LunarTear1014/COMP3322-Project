@@ -2,7 +2,16 @@ export class ApiError extends Error {
   constructor(message, status, code, fields = {}, retryAfter = null) { super(message); this.status = status; this.code = code; this.fields = fields; this.retryAfter = retryAfter }
 }
 
-export function query(values) { const params = new URLSearchParams(); Object.entries(values).forEach(([key, value]) => { if (value !== '' && value != null) params.set(key, value) }); const s = params.toString(); return s ? `?${s}` : '' }
+export function query(values) {
+  const params = new URLSearchParams()
+  Object.entries(values).forEach(([key, value]) => {
+    // Arrays repeat their key (?tag=a&tag=b), as the repeatable tag filter expects.
+    if (Array.isArray(value)) value.forEach(item => { if (item !== '' && item != null) params.append(key, item) })
+    else if (value !== '' && value != null) params.set(key, value)
+  })
+  const s = params.toString()
+  return s ? `?${s}` : ''
+}
 export const campusTime = value => value ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Hong_Kong', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
 export const campusDate = date => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
 export const campusInstant = (date, time = '00:00') => new Date(`${date}T${time}:00+08:00`).toISOString()
