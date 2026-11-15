@@ -31,7 +31,7 @@ Reference implementation plan: recipients may use their own development and trac
 
 ## 4. Booking/event backend
 
-- [ ] 4.1 Implement slot/date validation and Hong Kong-to-UTC mapping; test impossible dates, future boundaries and fixed slots.
+- [x] 4.1 Implement slot/date validation and Hong Kong-to-UTC mapping; test impossible dates, future boundaries and fixed slots.
 - [ ] 4.2 Implement atomic pending booking+draft creation with actor/audit/job writes; test injected mid-transaction failures.
 - [ ] 4.3 Implement admin review queue/decision, no self-decision, versioning and confirmed overlap check; pass independent-connection R1.
 - [ ] 4.4 Implement event visibility/list/detail/managed routes with bounded filters and private-draft protection; pass response contract tests.

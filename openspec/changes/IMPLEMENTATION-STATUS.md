@@ -31,12 +31,13 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 2.7 secure provisioning | partial | `src/ops/provision-starter-accounts.js` | not hash-generation tool, placeholders untested |
 | 3.1 module split | partial | `src/features/*` routes/service split | no app factory, controllers/repos/queries; no characterization tests |
 | 3.2 transaction helper | missing | transactions are hand-written per service | |
-| 3.3 validation/envelopes | missing | errors are `{message}` | |
-| 3.4 session/CSRF | missing | in-memory `express-session` only | |
+| 3.3 validation/envelopes | partial | `src/app.js`, `src/middleware/{request_id,json_body,error_handler}.js`, `src/shared/{errors,validate}.js`; `src/app.test.js` (8 tests: 404/405+Allow, 400/413/415/422, sanitized 500, request id) | 410 retired-URL handling not enabled (legacy `/api` routes still serve the beta frontend); v1 resources not yet mounted |
+| 3.4 session/CSRF | partial | `src/middleware/csrf.js`, `/api/v1/auth/csrf`; tests in `src/app.test.js` (Origin, token, stable token) | MySQL session store, login regeneration, restart persistence, logout: not done (B1) |
 | 3.5 hashing | partial | `passwords.js` scrypt N=16384 default | spec parameters, queue, throttle missing |
 | 3.6 profile/session endpoints | partial | `/api/auth/*` | not v1; `DEMO_USER_ID` only in `.env.example` |
 | 3.7 membership endpoints | partial | `clubs.routes.js` join/leave/committee | different model (join requests); not v1 |
-| 4.1-4.6 booking/event backend | missing | beta creates confirmed+published event in one step | |
+| 4.1 slot/date validation, HK to UTC | done | `src/shared/slots.js`, `src/shared/validate.js`; `src/shared/validate.test.js` (impossible dates, HK midnight, future boundary, fixed slots) | |
+| 4.2-4.6 booking/event backend | missing | beta creates confirmed+published event in one step | blocked by B1 for proof |
 | 5.1-5.5 participation backend | partial | `events.service.js` register/withdraw/promote with `FOR UPDATE` | no history, capacity rules, idempotency tests |
 | 6.1-6.5 background processing | missing | | |
 | 7.1-7.3 calendar/reporting | missing | | |
