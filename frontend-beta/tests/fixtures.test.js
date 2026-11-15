@@ -81,6 +81,22 @@ test('preview report and booking review expose populated and restricted states',
   assert.equal((await call('/bookings', { authenticated: false })).status, 401)
 })
 
+test('preview supplies covers, organizer groups and an unread inbox', async () => {
+  const withCover = await call('/events/1')
+  assert.match(withCover.body.data.cover.card_url, /^\/api\/v1\/events\/1\/cover\/card/)
+  assert.ok(withCover.body.data.cover.alt.length > 10)
+  assert.equal((await call('/events/12')).body.data.cover, null)
+  const mine = (await call('/me/events')).body.data
+  assert.ok(mine.some(event => event.state === 'draft' && event.booking.status === 'confirmed'), 'approved draft needs publishing')
+  assert.ok(mine.some(event => event.booking.status === 'rejected' && event.booking.decision_reason))
+  assert.ok(mine.some(event => event.phase === 'past'))
+  assert.equal((await call('/events/21')).status, 200)
+  const inbox = (await call('/notifications')).body
+  assert.equal(inbox.meta.unread_count, 3)
+  assert.equal((await call('/notifications?preview=empty')).body.meta.unread_count, 0)
+  assert.ok((await call('/clubs')).body.data.length >= 5, 'enough clubs to cycle through the club colours')
+})
+
 test('preview config is public and calendar results respect venue and interval', async () => {
   assert.equal((await call('/config', { authenticated: false })).status, 200)
   const now = Date.now()

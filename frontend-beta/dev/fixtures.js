@@ -5,6 +5,11 @@ const memberships = [{ club_id: 1, club_name: 'Photography Society', role: 'comm
 const session = { user, memberships, csrf_token: token }
 const venues = [{ id: 1, name: 'Harbour Room', location: 'Student Centre · Level 2', description: 'A flexible space for workshops and club gatherings.', capacity: 80, is_active: true }, { id: 2, name: 'The Studio', location: 'Arts Building · Level 1', description: 'A bright space for creative sessions and small events.', capacity: 40, is_active: true }]
 const clubs = [{ id: 1, name: 'Photography Society', description: 'A community for people who love making images.', my_role: 'committee' }, { id: 2, name: 'Film Society', description: 'Screenings and conversations for film lovers.', my_role: null }]
+clubs.push(
+  { id: 3, name: '攝影 Chess & Strategy', description: 'Board games, puzzles and friendly tournaments.', my_role: 'member' },
+  { id: 4, name: 'Hiking Club', description: 'Weekend trails around the New Territories.', my_role: null },
+  { id: 5, name: 'Robotics Lab', description: 'Build, break and rebuild.', my_role: null },
+)
 const slots = [{ id: 'morning', start: '10:00', end: '12:00' }, { id: 'afternoon', start: '13:00', end: '15:00' }, { id: 'evening', start: '16:00', end: '18:00' }]
 const future = days => new Date(Date.now() + days * 86400000).toISOString()
 const events = [
@@ -22,6 +27,30 @@ events.push(
   { ...events[0], id: 9, title: 'Event and waitlist full', joined_count: 30, waitlisted_count: 500, eligibility: { can_register: false, can_waitlist: false, reason: 'WAITLIST_FULL' } },
   { ...events[0], id: 10, title: 'Joined event', my_registration: { status: 'joined', queue_position: null }, eligibility: { can_register: false, can_waitlist: false, reason: 'ALREADY_REGISTERED' } },
 )
+// Covers are served by the preview as SVG art at the cover URL, standing in for uploaded WebP files.
+const withCover = (event, alt) => ({ ...event, cover: { card_url: `/api/v1/events/${event.id}/cover/card?v=fixture`, full_url: `/api/v1/events/${event.id}/cover/full?v=fixture`, alt, width: 1200, height: 800, updated_at: '2026-11-10T08:00:00Z' } })
+events[0] = withCover(events[0], 'Students walking across campus with cameras at golden hour')
+events.push(
+  { ...events[1], id: 11, title: 'Almost full board-game night', club: { id: 3, name: '攝影 Chess & Strategy' }, capacity: 20, joined_count: 18, venue: venues[1] },
+  { ...events[0], id: 12, title: 'Sunrise hike to Lion Rock', club: { id: 4, name: 'Hiking Club' }, cover: null, capacity: 25, joined_count: 6 },
+)
+const pastEvent = { ...events[0], id: 13, title: 'Autumn exhibition opening', start_at: future(-9), end_at: future(-8.9), phase: 'past', cover: null, my_registration: { status: 'joined', queue_position: null } }
+events.push(pastEvent)
+// Organizer view: needs action (approved draft, rejected request), upcoming and past.
+const organizerEvents = [
+  { ...events[0], id: 21, title: 'Portrait workshop', state: 'draft', cover: null, joined_count: 0, booking: { id: 21, status: 'confirmed', version: 2, expired: false, decision_reason: null, decided_at: future(-1) } },
+  { ...events[0], id: 22, title: 'Night photography meetup', state: 'draft', cover: null, joined_count: 0, booking: { id: 22, status: 'rejected', version: 2, expired: false, decision_reason: 'The room is closed for maintenance that day.', decided_at: future(-2) } },
+  { ...events[0], id: 23, title: 'Pending darkroom session', state: 'draft', cover: null, joined_count: 0, booking: { id: 23, status: 'pending', version: 1, expired: false, decision_reason: null, decided_at: null } },
+  events[0],
+  { ...pastEvent, id: 24, club: { id: 1, name: 'Photography Society' } },
+]
+events.push(...organizerEvents.filter(event => event.id >= 21))
+const inbox = [
+  { id: 31, type: 'event_published', event_id: 1, booking_id: null, title: 'New event: Campus photo walk', body: 'Photography Society just published Campus photo walk.', created_at: future(-0.01), read_at: null },
+  { id: 30, type: 'booking_decided', event_id: 21, booking_id: 21, title: 'Venue request approved', body: 'Harbour Room is yours. Publish Portrait workshop when you are ready.', created_at: future(-1), read_at: null },
+  { id: 29, type: 'registration_changed', event_id: 10, booking_id: null, title: 'You joined Joined event', body: 'You are going to Joined event.', created_at: future(-2), read_at: null },
+  { id: 28, type: 'event_reminder', event_id: 10, booking_id: null, title: 'Tomorrow: Joined event', body: 'Starts tomorrow at 13:00.', created_at: future(-5), read_at: future(-4) },
+]
 const bookingRequests = [
   { id: 11, event_id: 3, event_title: 'Student film showcase and conversation with emerging filmmakers', club_id: 2, venue_id: 2, start_at: future(12), end_at: future(12.08), status: 'pending', version: 1, expired: false },
   { id: 12, event_id: 4, event_title: 'Photography workshop', club_id: 1, venue_id: 1, start_at: future(15), end_at: future(15.08), status: 'pending', version: 1, expired: false },
@@ -46,6 +75,13 @@ export function fixturePlugin() {
       }
       if (url.searchParams.get('preview') === 'error' && (/^\/clubs\/\d+\/reports$/.test(url.pathname) || url.pathname === '/bookings')) return fail(503, 'DATABASE_UNAVAILABLE', 'The preview could not load this data. Try again.')
       const empty = url.searchParams.get('preview') === 'empty'
+      const cover = url.pathname.match(/^\/events\/(\d+)\/cover\/(card|full)$/)
+      if (cover) {
+        const hue = (Number(cover[1]) * 47) % 360
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'image/svg+xml')
+        return res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400"><rect width="600" height="400" fill="hsl(${hue} 70% 55%)"/><circle cx="440" cy="150" r="90" fill="hsl(${(hue + 40) % 360} 85% 75%)"/><path d="M0 330 L170 210 L300 300 L420 230 L600 340 V400 H0Z" fill="hsl(${hue} 60% 35%)"/></svg>`)
+      }
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
       if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
@@ -96,7 +132,7 @@ export function fixturePlugin() {
       const pageSize = Number(params.get('page_size')) || 20
       const eventList = { data: filteredEvents.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: filteredEvents.length } }
       const pagedList = rows => ({ data: rows.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: rows.length } })
-      const routes = { '/profile': { data: user }, '/clubs': pagedList(clubs), '/me/memberships': pagedList(empty ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list([events[0]]), '/me/registrations': list([]), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list([], { unread_count: 0 }) }
+      const routes = { '/profile': { data: user }, '/clubs': pagedList(clubs), '/me/memberships': pagedList(empty ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list(empty ? [] : organizerEvents), '/me/registrations': list([]), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list(empty ? [] : inbox, { unread_count: empty ? 0 : inbox.filter(n => !n.read_at).length }) }
       return routes[url.pathname] ? send(200, routes[url.pathname]) : fail(404, 'NOT_FOUND', 'This endpoint is not included in the preview.')
     })
   } }
