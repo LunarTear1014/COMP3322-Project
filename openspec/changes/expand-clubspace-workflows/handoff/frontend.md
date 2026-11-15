@@ -1,5 +1,7 @@
 # Frontend handoff
 
+> **Addendum 2026-11-16:** `beta-feedback.md` adds the president role and sign-off, live notifications and the notification matrix, event tags, check-in, view tracking and the effectiveness report. Where it conflicts with this file, `beta-feedback.md` wins.
+
 Target is existing `frontend-alpha/` React/Vite SPA. Preserve useful components/styles; replace Alpha-only browser state and name-based requests. No UI implementation is included in this proposal.
 
 ## 1. Shared client and account state
@@ -44,7 +46,7 @@ Reports: summary counts, daily-action chart with clear legend (join/waitlist/lea
 
 ## 5. Refresh and accessibility
 
-Poll unread inbox count/list every30s only while signed in and page visible; pause on hidden/unmounted tab and refetch on focus. Calendar refetch on week/venue change and after managed booking mutations. No claimed live push. Background delivery is eventual, so pending inbox delivery must not roll back UI success.
+Superseded by beta-feedback.md section 4: open the notification SSE stream while signed in, and fall back to polling every 60s only if the stream fails. Previous rule kept for the fallback: poll unread inbox count/list only while signed in and page visible; pause on hidden/unmounted tab and refetch on focus. Calendar refetch on week/venue change and after managed booking mutations. No claimed live push. Background delivery is eventual, so pending inbox delivery must not roll back UI success.
 
 Responsive layouts for phone/desktop; keyboard-accessible filters/actions/calendar alternatives, labelled inputs, visible focus, inline field errors, status text beyond color and live region for completed actions. Tables on narrow screens remain readable. Disable submit during request; don't automatically replay POST after network timeout. Every page has retry UI and handles401/403/404/409/422/429/503 distinctly where relevant.
 

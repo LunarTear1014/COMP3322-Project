@@ -29,9 +29,9 @@ The system SHALL restrict club reports to committee, separate current counts fro
 - **WHEN** a confirmed booking overlaps only part of report window
 - **THEN** only clipped duration contributes booked hours
 
-#### Scenario: Unavailable attendance
-- **WHEN** no attendance collection exists
-- **THEN** reports contain no attendance/no-show metric
+#### Scenario: Attendance stays in the effectiveness report
+- **WHEN** a committee member reads the activity report
+- **THEN** it contains no attendance or no-show metric, and turnout appears only in the effectiveness report for events with recorded check-in
 
 ### Requirement: Bounded queries
 Calendar/report APIs SHALL validate half-open ranges and bound them to31/93 days with deterministic output.

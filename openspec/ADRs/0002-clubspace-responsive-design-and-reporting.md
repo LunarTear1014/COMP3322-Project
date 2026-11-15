@@ -1,6 +1,6 @@
 # ADR 0002: ClubSpace responsive design and reporting
 
-Status: DRAFT. Date: 2026-11-05. Change: improve-clubspace-frontend-design.
+Status: DRAFT. Date: 2026-11-05. Change: improve-clubspace-frontend-design. The mobile navigation decision is superseded by ADR 0003 (bottom tab bar); the calendar and reporting decisions stand.
 
 ## Context
 

@@ -1,5 +1,7 @@
 # Database schema and migration handoff
 
+> **Addendum 2026-11-16:** `beta-feedback.md` adds the president role and sign-off, live notifications and the notification matrix, event tags, check-in, view tracking and the effectiveness report. Where it conflicts with this file, `beta-feedback.md` wins.
+
 **Design only.** DDL below is a target definition, not a migration to paste into production. The implementer must create ordered, checksummed migrations and execute them against both a fresh database and a copy of Alpha. Never use destructive `schema.sql` as an upgrade.
 
 ## 1. Storage conventions and existing defect
@@ -17,7 +19,7 @@ Current fresh schema creates `idx_users_role` on `users.role`, which does not ex
 | bookings | status ENUM('pending','confirmed','rejected','cancelled') NOT NULL DEFAULT 'pending'; version INT UNSIGNED NOT NULL DEFAULT1; requested_by INT NULL; decided_by INT NULL; decided_at DATETIME(6) NULL; decision_reason VARCHAR500 NULL; start_time/end_time ->DATETIME(6) UTC | Existing confirmed/cancelled retained. Actor NULL denotes legacy, never fabricated. Both actor FKs users.id RESTRICT. CHECK version>=1 and end>start |
 | events | status ENUM('draft','published','cancelled') NOT NULL DEFAULT 'draft'; version INT UNSIGNED NOT NULL DEFAULT1; registration_closes_at DATETIME(6); created_by INT NULL; start_time/end_time ->DATETIME(6) UTC | Preserve existing statuses. Backfill closes_at=start_time; then NOT NULL and CHECK closes_at<=start_time. created_by FK users.id RESTRICT; existing NULL legacy. Capacity1..500 and<=venue enforced by service; event capacity<=venue cross-table preflight |
 | participations | status extends ENUM('joined','left','waitlisted','cancelled'); last_registered_at DATETIME(6) NOT NULL; queued_at DATETIME(6) NULL; confirmed_at DATETIME(6) NULL; left_at ->DATETIME(6) NULL | Keep PK(user_id,event_id), existing joined_at as first registration timestamp. Backfill last_registered_at from joined_at; queued_at for waiting, confirmed_at for joined. queued_at retained through promotion; reset on a new waiting lifecycle. left_at cleared on rejoin and set on left/cancelled |
-| memberships | existing schema retained | PK(user_id,club_id); role member/committee; do not erase existing committee |
+| memberships | existing schema retained | PK(user_id,club_id); role member/committee, plus president, version and the one-president constraint from beta-feedback.md; do not erase existing committee |
 
 CHECK timing allows historical deadlines in the past; future-only checks belong to create/publish services. Draft legacy actors NULL are permitted by schema, but new API writes must supply them. Rejection requires nonempty reason in service; decision actor/time required for new decisions, not retroactively for legacy confirmed rows.
 

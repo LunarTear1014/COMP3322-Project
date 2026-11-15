@@ -1,5 +1,7 @@
 # API contract v1
 
+> **Addendum 2026-11-16:** `beta-feedback.md` adds the president role and sign-off, live notifications and the notification matrix, event tags, check-in, view tracking and the effectiveness report. Where it conflicts with this file, `beta-feedback.md` wins.
+
 This is the implementation target, not a list of endpoints already implemented.
 
 ## 1. Common conventions
@@ -29,6 +31,8 @@ Every error includes code/message/fields (object)/request_id; field errors map f
 
 All mutations require Content-Type: application/json, exact Origin=APP_ORIGIN and X-CSRF-Token. Empty action bodies are `{}`; unknown fields422. Missing expected_version422; obsolete version409. expected_version is resource metadata version (booking for decision; event for edit/publish/cancel), not registration count. Create POST has no automatic replay/idempotency guarantee. Registration, membership and withdrawal idempotency is explicitly defined below.
 
+Exception (change refresh-clubspace-visual-design, approved 2026-11-13): `PUT /events/:id/cover` takes `multipart/form-data` with `file`, `alt` and `expected_version` fields instead of JSON. Origin, CSRF, authentication, permission and version checks still apply in the order above. The 5 MB body limit is enforced before parsing (413), and the format is verified by decoding (415 for anything but JPEG or WebP). Full rules: `../../refresh-clubspace-visual-design/specs/event-covers/spec.md`.
+
 ## 2. Endpoint inventory
 
 Auth: public=anonymous allowed; user=authenticated; committee=committee of target club; admin=global venue_admin.
@@ -53,6 +57,9 @@ Auth: public=anonymous allowed; user=authenticated; committee=committee of targe
 | PATCH /events/:id | committee |EditEvent|200 Event |
 | POST /events/:id/publish | committee |{expected_version}|200 Event |
 | POST /events/:id/cancel | committee/admin |{expected_version,reason}|200 Event |
+| PUT /events/:id/cover | committee | multipart: file, alt, expected_version (see exception above) |200 Event with cover; 413/415/422/409 |
+| DELETE /events/:id/cover | committee |{expected_version}|200 Event with cover null |
+| GET /events/:id/cover/:size | user/scoped draft | size card or full |200 image/webp, private cache, ETag; hidden or no cover 404 |
 | GET /me/events | user |club_id?,state?,page,page_size|200 manageable Event[]; other roles yield empty unless committee |
 | POST /events/:id/registration | user |{allow_waitlist:boolean}|201 new lifecycle or200 existing RegistrationResult |
 | DELETE /events/:id/registration | user |{}|200 RegistrationResult; absent is left |
@@ -81,7 +88,7 @@ Retain root `/api/health` outside v1:200 `{status:"ok"}` or503 `{status:"unavail
 | EventFilters | q trimmed<=100; club_id,venue_id; visibility; phase upcoming/past (default upcoming); from/to optional paired UTC instants; page/page_size. Only published events; cancelled history via own registration/managed routes |
 | Date ranges | both UTC ISO8601 Z values, from<to, half-open; max31days calendar,93days report/event filter; reject impossible date/time or offset-less values |
 
-/me/events state accepts draft/published/cancelled; only returns actor's committee clubs, optional club_id must be one of them else403. Booking status accepts pending/confirmed/rejected/cancelled; expired boolean derived. Registration status joined/waitlisted/left/cancelled. Participant filtering permits those values, default joined. Boolean queries only literal true/false. q search uses escaped LIKE literal wildcards or equivalent safe search; no unbounded SQL wildcard injection or arbitrary SQL sorts.
+/me/events state accepts draft/awaiting_president/published/cancelled (beta-feedback.md); only returns actor's committee clubs, optional club_id must be one of them else403. Booking status accepts pending/confirmed/rejected/cancelled; expired boolean derived. Registration status joined/waitlisted/left/cancelled. Participant filtering permits those values, default joined. Boolean queries only literal true/false. q search uses escaped LIKE literal wildcards or equivalent safe search; no unbounded SQL wildcard injection or arbitrary SQL sorts.
 
 ## 4. Response resources
 
@@ -99,7 +106,7 @@ Canonical Event (summary omits description/booking decision details, otherwise s
 ```json
 {"data":{"id":12,"club":{"id":1,"name":"Photography Society"},"venue":{"id":1,"name":"Lok Yew Hall","capacity":80},"title":"Photography workshop","description":"Campus photography practice","start_at":"2026-11-12T02:00:00Z","end_at":"2026-11-12T04:00:00Z","registration_closes_at":"2026-11-11T16:00:00Z","visibility":"members_only","state":"draft","phase":"upcoming","version":1,"capacity":30,"joined_count":0,"waitlisted_count":0,"my_registration":{"status":"none","queue_position":null},"eligibility":{"can_register":false,"can_waitlist":false,"reason":"NOT_PUBLISHED"},"booking":{"id":14,"status":"pending","version":1,"expired":false,"decision_reason":null,"decided_at":null}}}
 ```
-state is persisted lifecycle, phase derived from start_at>=now; frontend must not infer lifecycle from dates. my_registration.status none/joined/waitlisted/left/cancelled, queue_position one-based only waiting. eligibility reasons null/NOT_PUBLISHED/EVENT_CANCELLED/REGISTRATION_CLOSED/MEMBERSHIP_REQUIRED/EVENT_FULL/WAITLIST_FULL/ALREADY_REGISTERED; can_register means direct admission possible (seat available), not eligibility to queue; expose `can_waitlist:boolean` alongside can_register. Actual writes always recheck. Event eligibility/counts are advisory after response.
+Event and EventSummary also carry `cover`: `null` or `{card_url,full_url,alt,width:1200,height:800,updated_at}` (change refresh-clubspace-visual-design). state is persisted lifecycle, phase derived from start_at>=now; frontend must not infer lifecycle from dates. my_registration.status none/joined/waitlisted/left/cancelled, queue_position one-based only waiting. eligibility reasons null/NOT_PUBLISHED/EVENT_CANCELLED/REGISTRATION_CLOSED/MEMBERSHIP_REQUIRED/EVENT_FULL/WAITLIST_FULL/ALREADY_REGISTERED; can_register means direct admission possible (seat available), not eligibility to queue; expose `can_waitlist:boolean` alongside can_register. Actual writes always recheck. Event eligibility/counts are advisory after response.
 
 Booking: `{id,event_id,club_id,venue_id,start_at,end_at,status,version,requested_by,created_at,decided_by,decided_at,decision_reason,expired}`; actor IDs may be null on migrated records. Admin list contains draft title as extra `event_title`. Only authorized recipients get decision details. Public published event responses omit requester/decision actor IDs.
 

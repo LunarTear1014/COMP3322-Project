@@ -1,5 +1,7 @@
 # Backend implementation contract
 
+> **Addendum 2026-11-16:** `beta-feedback.md` adds the president role and sign-off, live notifications and the notification matrix, event tags, check-in, view tracking and the effectiveness report. Where it conflicts with this file, `beta-feedback.md` wins.
+
 Proposed behavior, not implemented code. Read API and database handoffs together with this document.
 
 ## 1. Module/service map
@@ -77,7 +79,7 @@ promoteLocked assumes club/event held, published+confirmed and open registration
 
 ## 9. Jobs/notifications/reminders
 
-Types: booking_requested, booking_decided, registration_changed, event_changed, event_cancelled, event_reminder. Source transaction inserts unique action key and JSON entity IDs/recipient snapshot; no request dumps/secrets. Event change/cancel captures joined+waitlisted IDs at action time; decision captures current committee. Fan-out max1500 IDs; event joined max500+waiting max500; admin/committee provisioning max500 each.
+Types (extended in beta-feedback.md section 3, which also moves immediate types into the source transaction): booking_requested, booking_decided, registration_changed, event_changed, event_cancelled, event_reminder. Source transaction inserts unique action key and JSON entity IDs/recipient snapshot; no request dumps/secrets. Event change/cancel captures joined+waitlisted IDs at action time; decision captures current committee. Fan-out max1500 IDs; event joined max500+waiting max500; admin/committee provisioning max500 each.
 
 Poll5s, default single-job concurrency; claim only available execution slots (at most10 if explicitly configured), using due jobs using FOR UPDATE SKIP LOCKED; set processing, attempts+1, UUID token,120s lease, commit claim before domain locks. Reclaim expired leases only while attempts<5; an expired fifth-attempt lease becomes failed with lease_expired_last_attempt, never attempts6. Delivery transaction locks club/event, inserts UNIQUE(user_id,dedup_key) messages, conditionally completes matching-token job. Zero matched completion ->rollback delivery. Duplicate insert is successful replay. Never hold claim-job locks while acquiring club locks; target transactions<10s. At-least-once execution with idempotent visible results, not exactly-once execution.
 

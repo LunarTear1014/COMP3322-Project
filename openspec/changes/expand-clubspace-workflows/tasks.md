@@ -78,3 +78,14 @@ Reference implementation plan: recipients may use their own development and trac
 - [ ] 9.3 Prove clean Linux deployment, persisted restart, TLS/session/proxy behavior, worker health, backup restore and documented rollback limitations.
 - [ ] 9.4 Update README, API/ER/system diagrams, final coursework PDF and app credits to shipped scope; rehearse role-based demo and member explanations.
 - [ ] 9.5 Review the implemented scope and release evidence with the team before merge; record outstanding limitations in the final handoff.
+
+## 10. Beta feedback additions (see handoff/beta-feedback.md)
+
+- [ ] 10.1 Add migrations 010–014 (president role and constraint, sign-off states, tags, attendance and views, notification types and digests). Run them against fresh and Alpha-copy databases, and have the operator provision each club's first president.
+- [ ] 10.2 Implement `GovernanceService`: role changes, presidency transfer, booking and publication sign-off, and president-only cancellation of published events. Test that two presidents are impossible, the 403s, stale versions, and that awaiting bookings are never busy or seen by admins.
+- [ ] 10.3 Move immediate notification types into their source transactions, following the matrix. Add the `event_published`, `signoff_*`, `role_changed`, `club_updated`, `checkin_opened` and `activity_digest` types, the 09:00 HKT digest job and its catch-up. Test that the actor is excluded, dedup holds and nothing is sent on rollback.
+- [ ] 10.4 Implement `NotificationStreamHub` and `GET /notifications/stream`: 1 s tail, Last-Event-ID replay, heartbeat, per-user connection cap and proxy settings. Test delivery under 2 s, reconnect with no gaps or duplicates, and isolation between users.
+- [ ] 10.5 Implement campus and club tags, event tagging on create and edit, the `tag` filter and tag-aware keyword search. Test limits, cross-club tags, retired tags and the combination with other filters.
+- [ ] 10.6 Implement check-in (open, code, mark and unmark, window, rate limit, joined-only) and view tracking (sources, 30-minute dedup, 180-day purge).
+- [ ] 10.7 Implement `GET /clubs/:id/reports/effectiveness` with named SQL. Verify against hand-built fixtures: join, leave and rejoin; a promoted no-show; no check-in; a group under 3; and views by source.
+- [ ] 10.8 Frontend parts of these features are tracked in `refresh-clubspace-visual-design` (section 8).

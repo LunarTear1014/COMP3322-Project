@@ -18,6 +18,7 @@ Alpha connects event creation, venue browsing and a demo profile to MySQL, but m
 - **BREAKING:** use ID-based `/api/v1` contracts and structured envelopes; replace Alpha name-based payloads and demo-user identity. Update React in the same release. Keep `/api/health`; old business endpoints return 410 after cutover.
 - **BREAKING:** event creation produces a pending booking and draft event, not immediate reservation/publication.
 - Plan data-preserving migrations, production sessions/worker, audit/history and real MySQL verification.
+- **Beta feedback (2026-11-16):** add a club president who manages roles, signs off committee venue requests and publications, and alone cancels published events. Deliver notifications live over server-sent events, and notify every club-related action (joins and leaves as a daily committee digest). Add campus and club event tags with a tag filter. Add attendance check-in, event view tracking and an event effectiveness report. Details: `handoff/beta-feedback.md`.
 
 ## Capabilities
 
@@ -29,6 +30,9 @@ Alpha connects event creation, venue browsing and a demo profile to MySQL, but m
 - `notifications-reminders`: durable jobs, in-app delivery, retries and reminders.
 - `calendar-reporting`: privacy-aware scheduling and organizer aggregate reports.
 - `api-frontend-contract`: versioned REST, validation/errors and React integration.
+- `club-governance`: president role, role management, sign-off and president-only cancellation.
+- `event-tags`: campus tag list, club tags, event tagging and tag filters.
+- `event-effectiveness`: attendance check-in, view tracking and the effectiveness report.
 - `schema-deployment`: upgrade/backfill safety, production processes and release gates.
 
 ### Modified Capabilities
@@ -47,7 +51,7 @@ None. No existing OpenSpec capability specifications are initialized in the base
 
 ## Non-goals
 
-Payment/proofs, OAuth, equipment, recurring events, QR attendance, reviews, poster uploads, email, WebSockets and self-service committee/admin appointments. Keep the existing three fixed campus timeslots. These are separate future proposals.
+Payment/proofs, OAuth, equipment, recurring events, QR or location-based attendance (check-in uses a 4-digit code or committee marking), reviews, email, WebSockets (live delivery uses server-sent events) and self-service admin appointments. Event cover images are specified in `refresh-clubspace-visual-design`. Keep the existing three fixed campus timeslots. These are separate future proposals.
 
 ## Decisions requiring review
 
@@ -56,5 +60,6 @@ Payment/proofs, OAuth, equipment, recurring events, QR attendance, reviews, post
 3. Approval and publication are separate; published venue/time/capacity/visibility/deadline are frozen.
 4. Rescheduling/retrying a rejected request creates a new request; no series or resubmission workflow.
 5. Accept the `/api/v1` breaking cutover and the expanded course scope.
+6. Beta feedback, confirmed 2026-11-16: the president role and sign-off, the live notification matrix with a daily digest, the shared campus tags plus club tags, and check-in-based turnout. President sign-off applies to every venue request and every publication by a committee member who is not president (confirmed 2026-11-16).
 
 Defaults are fully specified below; implementers must not invent alternatives without a reviewed spec change. This is a proposed scope inferred from the latest discussion, not a claim that every feature was individually approved.

@@ -27,7 +27,7 @@ Every browser mutation SHALL validate configured Origin and a session-bound CSRF
 - **THEN** the session ID and CSRF token change and the response returns the replacement token
 
 ### Requirement: Club scoped authority
-The system SHALL derive committee permissions from current membership in the target club and venue administration from a separate global role.
+The system SHALL derive committee and president permissions from current membership in the target club, and venue administration from a separate global role. A president holds all committee permissions for their club, plus the president-only actions in `club-governance`.
 
 #### Scenario: Other club management
 - **WHEN** committee of club A attempts to manage a published event of club B
@@ -38,11 +38,15 @@ The system SHALL derive committee permissions from current membership in the tar
 - **THEN** the request returns403
 
 ### Requirement: Persistent membership lifecycle
-The system SHALL persist idempotent membership join/leave, prohibit public role appointment and serialize eligibility-sensitive membership writes with registrations.
+The system SHALL persist idempotent membership join/leave, allow role changes only by an operator or the club's president, and serialize eligibility-sensitive membership writes with registrations.
 
 #### Scenario: Repeated join
-- **WHEN** a committee member joins the same club again
-- **THEN** the original committee role is returned without downgrade
+- **WHEN** a committee member or president joins the same club again
+- **THEN** the original role is returned without downgrade
+
+#### Scenario: Self-appointment
+- **WHEN** a member sends a request that would raise their own role
+- **THEN** the request returns 403 FORBIDDEN and the role is unchanged
 
 #### Scenario: Member leave with protected registration
 - **WHEN** a member with upcoming members-only active participation leaves that club
