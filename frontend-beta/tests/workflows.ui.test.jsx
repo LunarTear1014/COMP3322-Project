@@ -298,12 +298,12 @@ describe('frontend preview workflows', () => {
     expect(screen.getByText(/original event remains unchanged/i)).toBeTruthy()
   })
 
-  it('shows clubs to a student with no memberships', async () => {
-    window.history.replaceState({}, '', '/profile')
+  it('shows the Clubs directory to a student with no memberships', async () => {
+    window.history.replaceState({}, '', '/clubs')
     vi.stubGlobal('fetch', previewFetch('empty-memberships'))
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Club memberships' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Discover clubs' })).toBeTruthy()
     const club = (await screen.findByRole('heading', { name: 'Film Society' })).closest('article')
     expect(within(club).getByRole('button', { name: 'Join club' })).toBeTruthy()
   })
@@ -318,7 +318,7 @@ describe('frontend preview workflows', () => {
 
     expect(await screen.findByText('Profile temporarily unavailable.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Club memberships' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Your clubs' })).toBeTruthy()
   })
 
   it('navigates calendar weeks and carries the selected slot to the request form', async () => {

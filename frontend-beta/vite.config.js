@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   }
   return {
     plugins: [react(), ...(mode === 'fixtures' ? [fixturePlugin()] : [])],
+    test: { setupFiles: ['./tests/support/setup.js'] },
     server: { proxy },
     preview: { proxy },
   }

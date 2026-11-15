@@ -45,6 +45,15 @@ const organizerEvents = [
   { ...pastEvent, id: 24, club: { id: 1, name: 'Photography Society' } },
 ]
 events.push(...organizerEvents.filter(event => event.id >= 21))
+const byId = id => events.find(event => event.id === id)
+const registration = (event, status, queue_position = null) => ({ event, status, queue_position, last_registered_at: future(-3), confirmed_at: status === 'joined' ? future(-3) : null, left_at: status === 'left' ? future(-1) : null })
+const myRegistrations = [
+  registration(byId(10), 'joined'),
+  registration(byId(7), 'pending', 2),
+  registration(byId(13), 'joined'),
+  registration(byId(5), 'unsuccessful'),
+  registration({ ...byId(2), id: 14, title: 'Left a workshop', start_at: future(20), end_at: future(20.08) }, 'left'),
+]
 const inbox = [
   { id: 31, type: 'event_published', event_id: 1, booking_id: null, title: 'New event: Campus photo walk', body: 'Photography Society just published Campus photo walk.', created_at: future(-0.01), read_at: null },
   { id: 30, type: 'booking_decided', event_id: 21, booking_id: 21, title: 'Venue request approved', body: 'Harbour Room is yours. Publish Portrait workshop when you are ready.', created_at: future(-1), read_at: null },
@@ -132,7 +141,7 @@ export function fixturePlugin() {
       const pageSize = Number(params.get('page_size')) || 20
       const eventList = { data: filteredEvents.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: filteredEvents.length } }
       const pagedList = rows => ({ data: rows.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: rows.length } })
-      const routes = { '/profile': { data: user }, '/clubs': pagedList(clubs), '/me/memberships': pagedList(empty ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list(empty ? [] : organizerEvents), '/me/registrations': list([]), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list(empty ? [] : inbox, { unread_count: empty ? 0 : inbox.filter(n => !n.read_at).length }) }
+      const routes = { '/profile': { data: user }, '/clubs': pagedList(clubs), '/me/memberships': pagedList(empty ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list(empty ? [] : organizerEvents), '/me/registrations': pagedList(empty ? [] : myRegistrations), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list(empty ? [] : inbox, { unread_count: empty ? 0 : inbox.filter(n => !n.read_at).length }) }
       return routes[url.pathname] ? send(200, routes[url.pathname]) : fail(404, 'NOT_FOUND', 'This endpoint is not included in the preview.')
     })
   } }
