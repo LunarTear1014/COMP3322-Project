@@ -60,7 +60,8 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 5.4 DTO and cleanup | partial | `cover_dto`, `delete_cover_files`, `sweep_orphan_covers` | not wired to events DTO or worker (no worker yet) |
 | 5.5 volume and docs | done | `compose.yaml` (`cover_data` volume, `COVER_DIR`), `backend-beta/Dockerfile`, README "Event cover images and migrations"; `docker compose config` passes | not exercised on the server |
 | 5.6 cover contract tests | partial | service-level scenarios (413, 415, 422, EXIF, replace/remove) pass | 403, 404, 409 STALE_VERSION/INVALID_STATE need DB-backed routes |
-| 1.1-4.4, 6.1-8.6 | missing | `App.jsx` is a single 51 KB file using MUI | |
+| 1.1 split App.jsx | done | `frontend-beta/src/{App.jsx,pages/*,components/common.jsx,hooks/resources.js,lib/roles.js}`; code moved verbatim by a script; `npm test` 18 + 21 pass, `npm run build` ok, lint warnings unchanged in kind (0 errors) | long single-line components were kept as is; they are rebuilt page by page in 2-4 |
+| 1.2-4.4, 6.1-8.6 | missing | | |
 
 ## Decisions
 
