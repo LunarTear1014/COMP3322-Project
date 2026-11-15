@@ -22,7 +22,7 @@ Reference implementation plan: recipients may use their own development and trac
 ## 3. Backend foundation
 
 - [ ] 3.1 Separate startup/app/router/controller/service/repository/query modules without changing runtime behavior prematurely; add characterization contract tests.
-- [ ] 3.2 Implement transaction helper, UTC connection setup, global lock order, bounded retry and original-error preservation; test rollback/release/uncertain commit.
+- [x] 3.2 Implement transaction helper, UTC connection setup, global lock order, bounded retry and original-error preservation; test rollback/release/uncertain commit.
 - [ ] 3.3 Implement JSON/query validation, request IDs, error envelopes,404/405/410 handling and bounded body parsing.
 - [ ] 3.4 Implement server-side session adapter/config and CSRF/Origin middleware; verify cookies, token renewal, restart persistence and logout.
 - [ ] 3.5 Implement password hashing/verification, normalized registration/login, dummy path, hash queue and throttling; benchmark target memory/latency.

@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { load_migrations } from "../../src/db/migrate.js";
+
+// Shape checks that need no database: every shipped migration loads, is
+// ordered, runs against a recording context, and only issues additive SQL.
+const directory = fileURLToPath(new URL(".", import.meta.url));
+
+function recording_context() {
+  const statements = [];
+  const record = async (sql) => { statements.push(sql.replace(/\s+/g, " ").trim()); return []; };
+  return {
+    statements,
+    database: "recorded",
+    query: async (sql) => (statements.push(sql.replace(/\s+/g, " ").trim()), []),
+    add_column: async (table, column, definition) => record(`ADD COLUMN ${table}.${column} ${definition}`),
+    add_index: async (table, index, columns) => record(`ADD INDEX ${table}.${index} (${columns})`),
+    create_table: async (table, ddl) => record(ddl),
+  };
+}
+
+test("shipped migrations load in order with unique numbers", async () => {
+  const migrations = await load_migrations(directory);
+  assert.deepEqual(migrations.map((migration) => migration.version), [
+    "002_workflow_columns", "003_support_tables", "010_club_president", "011_signoff_states",
+    "012_tags", "013_attendance_views", "014_notifications_live", "015_events_cover",
+  ]);
+  for (const migration of migrations) assert.match(migration.checksum, /^[0-9a-f]{64}$/);
+});
+
+test("migrations are additive and never disable foreign key checks", async () => {
+  for (const migration of await load_migrations(directory)) {
+    const context = recording_context();
+    // Migration 010 inspects data first; an empty result means no duplicates.
+    await migration.up(context);
+    assert.ok(context.statements.length > 0, `${migration.version} issued no statements`);
+    for (const sql of context.statements) {
+      assert.doesNotMatch(sql, /FOREIGN_KEY_CHECKS/i, migration.version);
+      assert.doesNotMatch(sql, /\bDROP\s+(TABLE|COLUMN|DATABASE)\b/i, migration.version);
+      assert.doesNotMatch(sql, /\bTRUNCATE\b|\bDELETE\s+FROM\b/i, migration.version);
+    }
+  }
+});
+
+test("010 refuses clubs that already have two presidents", async () => {
+  const [migration] = (await load_migrations(directory)).filter((m) => m.version === "010_club_president");
+  const context = { query: async () => [{ club_id: 7, presidents: 2 }] };
+  await assert.rejects(() => migration.up(context), (error) => error.code === "PREFLIGHT_FAILED" && /7/.test(error.message));
+});
