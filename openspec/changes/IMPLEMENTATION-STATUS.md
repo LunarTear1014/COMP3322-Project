@@ -69,7 +69,8 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 3.4 (part) Clubs directory | partial | `src/pages/ClubsDirectory.jsx` (your clubs, discover, join, in-page leave confirm, committee cannot leave) | member/event counts shown only if the API supplies them (v1 Club DTO has none); My events and Profile cleanup pending |
 | 3.1 URL-synced filters and sheet | done | `src/lib/eventFilters.js`, `src/components/FilterChips.jsx`, `src/pages/Events.jsx`; `tests/eventFilters.test.js` (8) and `tests/discovery.ui.test.jsx` (6: chips to API and URL params, reload restores, sheet apply and count, filtered-empty with Clear filters, API failure not shown as empty, reversed range blocked) | "My clubs" chip omitted: `/events` accepts a single `club_id` |
 | 3.2 EventCard | done | `src/components/EventCard.jsx` (date tile, club colour, meter with Almost full at 85%, stickers, cover `<img width=600 height=400 alt="" loading=lazy>` or aria-hidden art, one link per card); asserted in `discovery.ui.test.jsx` | no layout-shift measurement in a real browser; checked visually in the fixture preview |
-| 3.3, 3.5-4.4, 6.1-8.6 | missing | | |
+| 3.3 event page | done | `src/pages/EventDetail.jsx`, `src/components/StickyActionBar.jsx`, `src/lib/{registration,ics}.js`, `src/styles/event.css`; `tests/registration.test.js` (9) and `tests/eventPage.ui.test.jsx` (9: state cards, Join/Join waitlist bodies, 409 next to the action with refetch, restrictions say why, .ics download, Undo sends nothing and expiry sends DELETE once, phone sticky bar with aria-live and reserved height); checked at desktop and 390 px in the fixture preview | the leave request is lost if the tab closes during the 5 s Undo window (by design) |
+| 3.5-4.4, 6.1-8.6 | missing | | |
 
 ## Decisions
 

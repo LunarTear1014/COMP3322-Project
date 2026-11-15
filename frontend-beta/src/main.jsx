@@ -5,6 +5,7 @@ import './styles/theme.css'
 import './styles/components.css'
 import './styles/app.css'
 import './styles/layout.css'
+import './styles/event.css'
 import './index.css'
 import App from './App.jsx'
 
