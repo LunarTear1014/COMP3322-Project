@@ -6,8 +6,8 @@
 ## 1. Foundations (frontend only)
 
 - [x] 1.1 Split `App.jsx` into `src/pages/` and `src/components/` with no behaviour change. Keep `npm test`, `npm run build` and `npm run lint` passing.
-- [ ] 1.2 Add `src/styles/tokens.css` from the design system and port the component styles. Remove literal colours from page CSS. Set the title "ClubSpace", the favicon from `clubspace-mark.svg`, `theme-color`, and Google Fonts with `preconnect`.
-- [ ] 1.3 Add `lucide-react`. Build the `Button`, `StatusChip`, `TextField`, `Toast`, `EmptyState` and `BottomSheet` components, with hover, press, focus and reduced-motion states.
+- [x] 1.2 Add `src/styles/tokens.css` from the design system and port the component styles. Remove literal colours from page CSS. Set the title "ClubSpace", the favicon from `clubspace-mark.svg`, `theme-color`, and Google Fonts with `preconnect`.
+- [x] 1.3 Add `lucide-react`. Build the `Button`, `StatusChip`, `TextField`, `Toast`, `EmptyState` and `BottomSheet` components, with hover, press, focus and reduced-motion states.
 - [ ] 1.4 Extend fixtures with club colours, covers, needs-action organizer events and unread counts.
 
 ## 2. Navigation

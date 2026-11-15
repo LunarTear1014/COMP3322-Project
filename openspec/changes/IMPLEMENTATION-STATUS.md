@@ -61,7 +61,9 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 5.5 volume and docs | done | `compose.yaml` (`cover_data` volume, `COVER_DIR`), `backend-beta/Dockerfile`, README "Event cover images and migrations"; `docker compose config` passes | not exercised on the server |
 | 5.6 cover contract tests | partial | service-level scenarios (413, 415, 422, EXIF, replace/remove) pass | 403, 404, 409 STALE_VERSION/INVALID_STATE need DB-backed routes |
 | 1.1 split App.jsx | done | `frontend-beta/src/{App.jsx,pages/*,components/common.jsx,hooks/resources.js,lib/roles.js}`; code moved verbatim by a script; `npm test` 18 + 21 pass, `npm run build` ok, lint warnings unchanged in kind (0 errors) | long single-line components were kept as is; they are rebuilt page by page in 2-4 |
-| 1.2-4.4, 6.1-8.6 | missing | | |
+| 1.2 tokens, fonts, title, favicon | done | `src/styles/{tokens,theme,components,app}.css`, `index.html`, `public/favicon.svg`; `tests/design.test.js` (4 tests incl. no literal colours in any page or component stylesheet); `App.css` re-tokenised (123 literals replaced by hue/lightness mapping) and checked in the fixture preview | the old page markup keeps its old class names until each page is rebuilt (2-4); local additions `--scrim`, `--sheen-*` documented in tokens.css |
+| 1.3 lucide and base components | done | `src/components/ui/{Button,StatusChip,TextField,Toast,EmptyState,BottomSheet}.jsx`; `tests/components.ui.test.jsx` (13 tests: busy, chips as words, label/hint/error linking, live region, 5 s, pause, Undo and expiry, focus trap/return, Escape, scrim); focus rings, 44 px and reduced motion come from `components.css`/`app.css` | |
+| 1.4-4.4, 6.1-8.6 | missing | | |
 
 ## Decisions
 

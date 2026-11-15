@@ -1,0 +1,34 @@
+/* Layout and app-level rules built only from tokens (no literal colours). */
+
+/* Fixed-position versions of the sheet and toast, which the design system
+   previews inside a fixed-size stage. */
+.cs-sheet-root { position: fixed; inset: 0; z-index: var(--z-sheet); }
+.cs-sheet-root .cs-scrim { position: fixed; inset: 0; }
+.cs-sheet-root .cs-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; max-height: 85vh; overflow-y: auto;
+  overscroll-behavior: contain; display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4); padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  animation: cs-rise 240ms ease-out;
+}
+.cs-sheet-body { display: flex; flex-direction: column; gap: var(--space-3); }
+@media (min-width: 768px) {
+  .cs-sheet-root .cs-sheet {
+    left: 50%; right: auto; bottom: auto; top: 50%; width: min(480px, calc(100vw - 32px));
+    transform: translate(-50%, -50%); border: 2px solid var(--outline); border-radius: var(--radius-lg);
+    animation: cs-fade 160ms ease-out;
+  }
+  .cs-grabber { display: none; }
+}
+@keyframes cs-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes cs-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.cs-toast-region {
+  position: fixed; left: var(--space-4); right: var(--space-4); z-index: var(--z-toast);
+  bottom: calc(var(--space-4) + var(--bars-height, 0px) + env(safe-area-inset-bottom));
+  display: flex; justify-content: center; pointer-events: none;
+}
+.cs-toast-region .cs-toast { pointer-events: auto; animation: cs-rise 200ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-sheet-root .cs-sheet, .cs-toast-region .cs-toast { animation: none; }
+}

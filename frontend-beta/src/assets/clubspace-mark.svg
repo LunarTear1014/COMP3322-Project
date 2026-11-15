@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 68" width="68" height="68" role="img" aria-label="ClubSpace">
+  <rect x="6" y="9" width="56" height="56" rx="16" fill="#13202b"/>
+  <rect x="3" y="6" width="56" height="56" rx="16" fill="#0068b0" stroke="#13202b" stroke-width="3"/>
+  <path d="M39.9 24.1 A14 14 0 1 0 39.9 43.9" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+  <g stroke-linecap="round">
+    <g stroke="#13202b" stroke-width="10"><path d="M55 4v18"/><path d="M47.2 8.5l15.6 9"/><path d="M47.2 17.5l15.6-9"/></g>
+    <g stroke="#ffc83d" stroke-width="5"><path d="M55 4v18"/><path d="M47.2 8.5l15.6 9"/><path d="M47.2 17.5l15.6-9"/></g>
+  </g>
+</svg>
