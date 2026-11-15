@@ -127,7 +127,7 @@ afterEach(() => {
 describe('frontend preview workflows', () => {
 
   it('shows the clubs page to committee members', async () => {
-    window.history.replaceState({}, '', '/clubs')
+    window.history.replaceState({}, '', '/organizer/clubs')
     vi.stubGlobal('fetch', previewFetch())
     render(<App />)
 
@@ -138,7 +138,7 @@ describe('frontend preview workflows', () => {
   })
 
   it('lets committee members see the roster and promote a member', async () => {
-    window.history.replaceState({}, '', '/clubs')
+    window.history.replaceState({}, '', '/organizer/clubs')
     const fetch = previewFetch('club-members')
     vi.stubGlobal('fetch', fetch)
     render(<App />)
@@ -159,7 +159,7 @@ describe('frontend preview workflows', () => {
   })
 
   it('lets a committee member remove a regular member', async () => {
-    window.history.replaceState({}, '', '/clubs')
+    window.history.replaceState({}, '', '/organizer/clubs')
     const fetch = previewFetch('club-members')
     vi.stubGlobal('fetch', fetch)
     render(<App />)
@@ -175,18 +175,23 @@ describe('frontend preview workflows', () => {
     expect(await screen.findByText('Riley Chen was removed from Photography Society.')).toBeTruthy()
   })
 
-  it('hides the clubs page from non-organizers', async () => {
-    window.history.replaceState({}, '', '/clubs?preview=student')
+  it('keeps role tools out of a student\'s account menu and sends management links to the directory', async () => {
+    window.history.replaceState({}, '', '/organizer/clubs?preview=student')
     vi.stubGlobal('fetch', previewFetch('student'))
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Find your next event.' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Clubs' })).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'Your clubs' })).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'Clubs' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Your clubs' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Clubs' }).getAttribute('aria-current')).toBe('page')
+    fireEvent.click(screen.getByRole('button', { name: /Account/ }))
+    expect(screen.getByRole('link', { name: 'Profile' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Organizer' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Admin' })).toBeNull()
   })
 
   it('lets a president choose a committee successor and confirm the transfer', async () => {
-    window.history.replaceState({}, '', '/clubs')
+    window.history.replaceState({}, '', '/organizer/clubs')
     const fetch = previewFetch('president')
     vi.stubGlobal('fetch', fetch)
     render(<App />)
@@ -205,7 +210,7 @@ describe('frontend preview workflows', () => {
   })
 
   it('lets a president demote a committee member', async () => {
-    window.history.replaceState({}, '', '/clubs')
+    window.history.replaceState({}, '', '/organizer/clubs')
     const fetch = previewFetch('president')
     vi.stubGlobal('fetch', fetch)
     render(<App />)
@@ -222,7 +227,7 @@ describe('frontend preview workflows', () => {
   })
 
   it('shows the president who performed an action and allows undo', async () => {
-    window.history.replaceState({}, '', '/clubs')
+    window.history.replaceState({}, '', '/organizer/clubs')
     const fetch = previewFetch('president')
     vi.stubGlobal('fetch', fetch)
     render(<App />)
@@ -384,32 +389,50 @@ describe('frontend preview workflows', () => {
     expect(screen.getByText(/0 events.*0 currently joined/)).toBeTruthy()
   })
 
-  it('returns focus to the mobile menu when Escape closes it', async () => {
-    window.history.replaceState({}, '', '/events')
+  it('shows a four-tab bottom bar on phones with the unread count', async () => {
+    window.matchMedia = query => ({ matches: query.includes('max-width: 767.98px'), addEventListener() {}, removeEventListener() {} })
+    window.history.replaceState({}, '', '/me/registrations')
     vi.stubGlobal('fetch', previewFetch())
     render(<App />)
 
-    const menu = await screen.findByRole('button', { name: 'Menu · Events' })
-    fireEvent.click(menu)
-    expect(menu.getAttribute('aria-expanded')).toBe('true')
-    fireEvent.keyDown(screen.getByRole('navigation', { name: 'Main navigation' }), { key: 'Escape' })
-    expect(menu.getAttribute('aria-expanded')).toBe('false')
-    expect(document.activeElement).toBe(menu)
+    const bar = await screen.findByRole('navigation', { name: 'Main' })
+    expect(within(bar).getAllByRole('link').map(link => link.textContent.replace(/\d.*$/, '').trim())).toEqual(['Explore', 'My events', 'Clubs', 'Inbox'])
+    expect(within(bar).getByRole('link', { name: /My events/ }).getAttribute('aria-current')).toBe('page')
+    expect(within(bar).getByRole('link', { name: 'Explore' }).getAttribute('aria-current')).toBeNull()
+    expect(await within(bar).findByText(', 3 unread')).toBeTruthy()
+    expect(document.documentElement.style.getPropertyValue('--bars-height')).toBe('68px')
+    delete window.matchMedia
   })
 
 
-  it('closes the account menu and restores focus to its trigger on Escape', async () => {
+  it('opens the account menu with role tools and restores focus to its trigger on Escape', async () => {
     window.history.replaceState({}, '', '/events')
     vi.stubGlobal('fetch', previewFetch())
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Find your next event.' })
-    const account = screen.getByText('Account')
-    const disclosure = account.closest('details')
-    disclosure.open = true
-    fireEvent.keyDown(account, { key: 'Escape' })
-    expect(disclosure.open).toBe(false)
-    expect(document.activeElement).toBe(account)
+    const trigger = screen.getByRole('button', { name: /Account/ })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    for (const name of ['Profile', 'Organizer', 'Admin']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('link', { name: 'Profile' }), { key: 'Escape' })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('hides the Inbox badge at zero unread and shows header links on desktop', async () => {
+    window.history.replaceState({}, '', '/events')
+    const preview = previewFetch()
+    vi.stubGlobal('fetch', vi.fn((input, options) => String(input).includes('/notifications')
+      ? Promise.resolve(new Response(JSON.stringify({ data: [], meta: { page: 1, page_size: 1, total: 0, unread_count: 0 } }), { status: 200 }))
+      : preview(input, options)))
+    render(<App />)
+
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    expect(within(nav).getAllByRole('link').length).toBe(4)
+    expect(within(nav).getByRole('link', { name: 'Inbox' })).toBeTruthy()
+    expect(within(nav).queryByText(/unread/)).toBeNull()
   })
 
   it('loads the correct editor values when switching between event IDs', async () => {

@@ -63,7 +63,11 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 1.1 split App.jsx | done | `frontend-beta/src/{App.jsx,pages/*,components/common.jsx,hooks/resources.js,lib/roles.js}`; code moved verbatim by a script; `npm test` 18 + 21 pass, `npm run build` ok, lint warnings unchanged in kind (0 errors) | long single-line components were kept as is; they are rebuilt page by page in 2-4 |
 | 1.2 tokens, fonts, title, favicon | done | `src/styles/{tokens,theme,components,app}.css`, `index.html`, `public/favicon.svg`; `tests/design.test.js` (4 tests incl. no literal colours in any page or component stylesheet); `App.css` re-tokenised (123 literals replaced by hue/lightness mapping) and checked in the fixture preview | the old page markup keeps its old class names until each page is rebuilt (2-4); local additions `--scrim`, `--sheen-*` documented in tokens.css |
 | 1.3 lucide and base components | done | `src/components/ui/{Button,StatusChip,TextField,Toast,EmptyState,BottomSheet}.jsx`; `tests/components.ui.test.jsx` (13 tests: busy, chips as words, label/hint/error linking, live region, 5 s, pause, Undo and expiry, focus trap/return, Escape, scrim); focus rings, 44 px and reduced motion come from `components.css`/`app.css` | |
-| 1.4-4.4, 6.1-8.6 | missing | | |
+| 1.4 fixtures | done | `frontend-beta/dev/fixtures.js` (5 clubs, covers with SVG art route, approved/rejected/pending drafts, past event, inbox with 3 unread), `src/lib/club.js`; `tests/fixtures.test.js` | |
+| 2.1 navigation | done | `src/components/nav/{AppHeader,TabBar,AccountMenu,navigation}.jsx`, `src/hooks/useMediaQuery.js`, `src/App.jsx`; four tabs on phones, header links at 768 px and up, account control with Profile/Organizer/Admin/Sign out, badge hidden at 0 and read as "N unread"; UI tests for tab bar, badge, account menu Escape/focus; checked at 390 px in the fixture preview | club management moved to `/organizer/clubs`; `/clubs` is the new directory |
+| 2.2 scroll padding and nav tests | done | `src/styles/layout.css` (`scroll-padding-bottom`, `--bars-height`), `tests/workflows.ui.test.jsx` updated | |
+| 3.4 (part) Clubs directory | partial | `src/pages/ClubsDirectory.jsx` (your clubs, discover, join, in-page leave confirm, committee cannot leave) | member/event counts shown only if the API supplies them (v1 Club DTO has none); My events and Profile cleanup pending |
+| 3.1-4.4, 6.1-8.6 | missing | | |
 
 ## Decisions
 

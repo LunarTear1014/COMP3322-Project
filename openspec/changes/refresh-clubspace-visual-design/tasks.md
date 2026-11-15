@@ -8,12 +8,12 @@
 - [x] 1.1 Split `App.jsx` into `src/pages/` and `src/components/` with no behaviour change. Keep `npm test`, `npm run build` and `npm run lint` passing.
 - [x] 1.2 Add `src/styles/tokens.css` from the design system and port the component styles. Remove literal colours from page CSS. Set the title "ClubSpace", the favicon from `clubspace-mark.svg`, `theme-color`, and Google Fonts with `preconnect`.
 - [x] 1.3 Add `lucide-react`. Build the `Button`, `StatusChip`, `TextField`, `Toast`, `EmptyState` and `BottomSheet` components, with hover, press, focus and reduced-motion states.
-- [ ] 1.4 Extend fixtures with club colours, covers, needs-action organizer events and unread counts.
+- [x] 1.4 Extend fixtures with club colours, covers, needs-action organizer events and unread counts.
 
 ## 2. Navigation
 
-- [ ] 2.1 Replace the disclosure menu with `TabBar` below 768 px and header links above it. Move Profile, Organizer, Admin and Sign out into the account menu. Hide the badge at 0 unread.
-- [ ] 2.2 Add `scroll-padding-bottom` for the fixed bars. Update the navigation UI tests for the tab bar and account menu.
+- [x] 2.1 Replace the disclosure menu with `TabBar` below 768 px and header links above it. Move Profile, Organizer, Admin and Sign out into the account menu. Hide the badge at 0 unread.
+- [x] 2.2 Add `scroll-padding-bottom` for the fixed bars. Update the navigation UI tests for the tab bar and account menu.
 
 ## 3. Discovery and events
 
