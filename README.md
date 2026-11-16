@@ -153,28 +153,98 @@ and `TEST_DB_NAME` in a file outside the repository, and run
 inside that database only and refuse `DB_NAME` or any name without `test`.
 Frontend tests: `cd frontend-beta && npm test`, `npm run lint`, `npm run build`.
 
+### Assign a venue administrator
+
+Register a separate account on the website first. An administrator who is also
+committee for a club cannot decide that club's requests. Run this after the
+migrations, because they add `platform_role`. In the server SSH session, paste
+this block and enter the registered administrator's email:
+
+```bash
+(
+  set -eu
+  cd "$HOME/clubspace-pg19"
+  printf 'Registered venue administrator email: '
+  IFS= read -r administrator_email
+  docker compose exec -T -e ADMIN_EMAIL="$administrator_email" backend node --input-type=module - <<'NODE'
+import pool from './src/config/db.js';
+try {
+  const email = process.env.ADMIN_EMAIL.trim().toLowerCase();
+  const [result] = await pool.execute("UPDATE users SET platform_role='venue_admin' WHERE email=?", [email]);
+  if (!result.affectedRows) throw new Error('Register this email on the website first.');
+  console.log('Venue administrator access is ready.');
+} finally { await pool.end(); }
+NODE
+)
+```
+
+### Retry a failed notification job
+
+A job that used up its attempts stays `failed` and is never retried on its own.
+After fixing the cause, queue it again; the command writes an audit entry with
+the operator name you give:
+
+```bash
+docker compose exec -T backend node src/ops/retry-notification-job.js JOB_ID "your name"
+```
+
 ### Redeploy an updated archive
 
 Upload the updated `clubspace-pg19-server.tar.gz` using the Mac commands
-above. In the server SSH session, paste:
+above. This procedure stops the application, saves a database backup, runs
+the tracked migrations, then starts everything again. The first migration of a
+database with legacy bookings needs `LEGACY_DATETIME_TIMEZONE=Asia/Taipei`: the
+beta stored event times as UTC+8 local time, and migration 004 converts them
+to UTC once. If that is not true for your database, stop and investigate
+before running it. In the server SSH session, paste:
 
 ```bash
 (
   set -eu
   tar -xzf "$HOME/clubspace-pg19-server.tar.gz" -C "$HOME"
   cd "$HOME/clubspace-pg19"
+  docker compose stop web backend worker
+  docker compose up -d db
+  attempts=0
+  until docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$MYSQL_USER" "$MYSQL_DATABASE" -e "SELECT 1" >/dev/null 2>&1'; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 30 ]; then
+      printf 'Database did not become ready. Check docker compose logs db.\n' >&2
+      exit 1
+    fi
+    sleep 2
+  done
+  mkdir -p "$HOME/clubspace-backups"
+  backup="$HOME/clubspace-backups/clubspace-$(date -u +%Y%m%dT%H%M%SZ).sql"
+  umask 077
+  docker compose exec -T db sh -c 'exec mysqldump --single-transaction --routines --triggers -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' > "$backup"
+  test -s "$backup"
+  docker compose build backend
+  docker compose run --rm --no-deps -e LEGACY_DATETIME_TIMEZONE=Asia/Taipei \
+    backend node src/ops/migrate.js
   docker compose up -d --build
   curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
     --connect-timeout 2 --max-time 5 http://127.0.0.1/api/health
   printf '\n'
+  docker compose exec -T backend node src/ops/provision-dev.js
   docker compose ps
+  printf 'Database backup: %s\n' "$backup"
 )
 ```
 
 The server's existing `.env` and database volume supply its credentials and
 data. If the MySQL recovery setup uses `compose.override.yaml` and the
 `db_recovery` volume, keep that override in the project directory for
-subsequent deployments.
+subsequent deployments. The migration runner refuses a changed checksum or an
+interrupted migration; do not blindly retry after such an error. Restore the
+backup or inspect the partial schema before continuing.
+
+Before applying the first migration to an older database, the runner checks
+relationships, booking overlaps, capacities, waitlist size, normalized
+identities and event and booking states. If it reports records that need
+repair, keep the application stopped and resolve them with the backup at hand.
+`provision-dev.js` gives every club without a president a generated fictional
+one; it prints a generated password once unless `DEV_ACCOUNT_PASSWORD` is set.
 
 ## Beta interview submission
 
@@ -250,18 +320,21 @@ brew services start mysql
    > `schema.sql` drops and recreates the project tables. Use it only when you
    > intentionally want to reset local development data.
 
-   For an existing database, apply the migration files in order; they preserve
+   For an existing beta database, first apply the legacy SQL files in order; they preserve
    existing records, add club join-request notifications, notify organizers
    about any join requests already pending, and create the club action log.
    The action log records actions from the time migration 004 is applied. With
    the MySQL CLI:
 
    ```bash
-   mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/001-normalize-event-registration-statuses.sql
-   mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/002-club-join-request-notifications.sql
-   mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/003-backfill-pending-join-request-notifications.sql
-   mysql -u clubspace_app -p clubspace < backend-beta/db/migrations/004-club-action-log.sql
+   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/001-normalize-event-registration-statuses.sql
+   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/002-club-join-request-notifications.sql
+   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/003-backfill-pending-join-request-notifications.sql
+   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/004-club-action-log.sql
    ```
+
+   Then apply the tracked migrations, after a backup, with
+   `cd backend-beta && LEGACY_DATETIME_TIMEZONE=Asia/Taipei node src/ops/migrate.js`.
 
 4. Create the untracked local backend configuration:
 

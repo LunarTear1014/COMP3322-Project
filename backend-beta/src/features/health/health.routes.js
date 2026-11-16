@@ -1,6 +1,5 @@
 import { Router } from "express";
 import pool from "../../config/db.js";
-import { database_error } from "../../shared/http.js";
 
 const router = Router();
 
@@ -9,8 +8,9 @@ router.get("/api/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
     res.json({ status: "ok" });
-  } catch (error) {
-    database_error(res, error);
+  } catch {
+    // Don't leak database errors to an unauthenticated probe.
+    res.status(503).json({ status: "unavailable" });
   }
 });
 
