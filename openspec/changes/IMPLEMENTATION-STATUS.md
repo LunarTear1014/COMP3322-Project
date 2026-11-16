@@ -1,51 +1,70 @@
 # Implementation status
 
 Branch: `worktree-agent-ace44ab10ef85bdb2` (from `beta-interview`). Targets: `backend-beta/`, `frontend-beta/` (not the alpha folders).
-Last updated: 2026-11-16. Audit baseline: backend `npm test` 6 pass, frontend `npm test` 18 node + 21 vitest pass, build ok, lint 5 warnings (react set-state-in-effect).
+Last updated: 2026-11-16 (second run, disposable MySQL available).
 
-Legend: done = code and a passing test prove it (ticked). partial = some code exists but the task is not met. missing = nothing relevant. blocked = needs the disposable MySQL database (see Blockers).
+Legend: done = code and a passing test prove it (ticked). partial = some code exists but the task is not met. missing = nothing relevant.
 
-## Blockers
+## Test database
 
-- **B1 test database.** The configured MySQL user (`clubspace_app`) has `ALL` on `clubspace` only; `CREATE DATABASE clubspace_test_agent` fails with `ER_DBACCESS_DENIED_ERROR`. Per the run rules I did not use root, change grants, or touch `clubspace`. DB-dependent tests are written to skip unless `TEST_DB_NAME` names a disposable database (guard: name must contain `test` and differ from `DB_NAME`), so they have **not been run**. Any task whose proof needs them is not ticked.
-- MySQL server reports version `26.7.0`, not 8.4. Spec text pins 8.4. The `compose.yaml` image is `mysql:8.4`.
-
-## Audit of the beta (what really exists)
-
-`backend-beta` is smaller than the brief suggested. It has: session auth (register/login/logout/me/update/delete, scrypt, in-memory sessions), clubs, join requests, presidency, committee appoint/demote, kick, an undoable club action log, events that are created already confirmed and published, participation with a FIFO-ish waitlist (`participations.status` joined/pending/unsuccessful, no history table), notifications (rows written inline, no jobs), venues. It has **no** `/api/v1`, booking approval, bookings API, calendar, reports, jobs/worker, migration runner, request IDs, CSRF, versions, tags, check-in or covers. Unversioned `/api/*` routes are used by `frontend-beta/src/mainBackend.js`, which adapts v1-shaped calls onto them. The frontend already has a fixtures-mode v1 preview.
+A disposable MySQL 8.4.13 (`clubspace-test-mysql`, port 3307) is used for every DB test. Settings come from `TEST_ENV_FILE=<path to test.env>`
+(loaded by `backend-beta/test/db_guard.js`, never printed or committed). The guard refuses any database whose name lacks "test" or equals
+`DB_NAME`/`clubspace`; `reset_tables` only drops tables inside it. One extra database, `<TEST_DB_NAME>_upgrade`, is created and dropped by
+`src/db/baseline.db.test.js`. Run `TEST_ENV_FILE=... npm test` in `backend-beta` (serial, `--test-concurrency=1`). Without the variable the
+DB tests are skipped. Last full run: 164 tests pass.
 
 ## expand-clubspace-workflows
 
 | Task | Status | Evidence | Gaps |
 | --- | --- | --- | --- |
-| 1.1 scope review | partial | Product owner approved implementation 2026-11-16 (run brief) | Proposal questions not individually recorded |
-| 1.2 deployment/timezone preflight | missing | | needs operator input |
-| 1.3 contract fixtures | missing | | |
-| 1.4 verification scripts, test DB config | partial | `test/db_guard.js` (disposable-DB guard), `src/db/*.db.test.js` skip unless `TEST_DB_NAME` | no runnable DB; command docs pending |
-| 2.1 migration runner | partial | `src/db/migrate.js`, `src/ops/migrate.js`; 8 fake-connection tests in `src/db/migrate.test.js` (order, checksum, resume after interrupted DDL, lock contention, version gate); real-DB test `src/db/migrate.db.test.js` written, NOT RUN (B1). Legacy loose SQL moved to `db/legacy-sql/` | advisory lock and information_schema helpers unproven on MySQL |
-| 2.2 integrity preflight | missing | | |
-| 2.3 workflow fields | partial | `db/migrations/002_workflow_columns.js`, `003_support_tables.js`; shape tests in `db/migrations/migrations.test.js` | not executed on MySQL (B1) |
-| 2.4 UTC backfill | missing | | |
-| 2.5 constraints/indexes | missing | | |
-| 2.6 fresh schema baseline | partial | `schema.sql` has no invalid `users.role` index | no version table/baseline |
-| 2.7 secure provisioning | partial | `src/ops/provision-starter-accounts.js` | not hash-generation tool, placeholders untested |
-| 3.1 module split | partial | `src/features/*` routes/service split | no app factory, controllers/repos/queries; no characterization tests |
-| 3.2 transaction helper | done | `src/db/transaction.js` (READ COMMITTED, retry 1213/1205 twice, lock-order helper, uncertain commit), `src/db/pool.js` (UTC pool); `src/db/transaction.test.js` 9 tests with a fake pool | legacy services keep hand-written transactions; real-MySQL deadlock injection not run (B1) |
-| 3.3 validation/envelopes | partial | `src/app.js`, `src/middleware/{request_id,json_body,error_handler}.js`, `src/shared/{errors,validate}.js`; `src/app.test.js` (8 tests: 404/405+Allow, 400/413/415/422, sanitized 500, request id) | 410 retired-URL handling not enabled (legacy `/api` routes still serve the beta frontend); v1 resources not yet mounted |
-| 3.4 session/CSRF | partial | `src/middleware/csrf.js`, `/api/v1/auth/csrf`; tests in `src/app.test.js` (Origin, token, stable token) | MySQL session store, login regeneration, restart persistence, logout: not done (B1) |
-| 3.5 hashing | partial | `src/features/users/password_hasher.js` (scrypt N=131072/r=8/p=1, versioned format, legacy verify and rehash flag, dummy path for unknown email, concurrency 2 / queue 10 / 503 AUTH_BUSY, 10-per-15-min throttle); `password_hasher.test.js` 10 tests; benchmark on this Mac: one hash 177 ms | not wired into login/registration (no v1 auth); VM memory benchmark (2 x 128 MiB) not done |
-| 3.6 profile/session endpoints | partial | `/api/auth/*` | not v1; `DEMO_USER_ID` only in `.env.example` |
-| 3.7 membership endpoints | partial | `clubs.routes.js` join/leave/committee | different model (join requests); not v1 |
-| 4.1 slot/date validation, HK to UTC | done | `src/shared/slots.js`, `src/shared/validate.js`; `src/shared/validate.test.js` (impossible dates, HK midnight, future boundary, fixed slots) | |
-| 4.2-4.6 booking/event backend | missing | beta creates confirmed+published event in one step | blocked by B1 for proof |
-| 5.1-5.5 participation backend | partial | `events.service.js` register/withdraw/promote with `FOR UPDATE` | no history, capacity rules, idempotency tests |
-| 6.1-6.5 background processing | missing | | |
-| 7.1-7.3 calendar/reporting | missing | | |
-| 8.1-8.8 frontend integration | partial | fixtures v1 preview; `mainBackend.js` adapter; 21 UI tests | live v1 provider absent |
-| 9.1-9.5 release | missing | `compose.yaml` runs web+backend+db only | |
-| 10.1 migrations 010-014 | partial | `db/migrations/010`-`014` (additive, idempotent helpers); 010 preflight tested with a fake | not executed on fresh or Alpha-copy MySQL (B1); operator must provision first presidents |
-| 10.4 notification stream | done | `src/features/notifications/{stream_hub,stream.routes,notifications.repository}.js`; `stream_hub.test.js` 8 tests (headers, auth, delivery well under 2 s, isolation, Last-Event-ID replay without gaps or duplicates, refetch over 200, connection cap 429, heartbeat, late lower id); nginx location in `frontend-beta/nginx.conf` | repository SQL and the real session-based `authenticate` are untested on MySQL (B1); hub is not yet mounted in `index.js` because v1 auth does not exist |
-| 10.2-10.3, 10.5-10.7 | missing | beta has president transfer/demote/kick in `clubs.service.js` (different API) | |
+| 1.1 scope review | done | Product owner approved 2026-11-16; decisions recorded below | |
+| 1.2 deployment and timezone preflight | partial | legacy timezone confirmed Asia/Taipei (UTC+8); MySQL 8.4 verified on an 8.4.13 container | deployment schedule, VM resources and TLS not provided |
+| 1.3 contract fixtures | partial | DTO shapes asserted in the `*.db.test.js` files | no frozen fixture files generated from api.md |
+| 1.4 verification scripts, disposable DB | done | `test/db_guard.js`, `test/db_helper.js`, `test/v1_harness.js`, `scripts/run_migrations_dev.mjs`, README "Testing" | |
+| 2.1 migration runner | done | `src/db/migrate.js`, `src/ops/migrate.js`; fake-connection tests plus `migrate.db.test.js` on MySQL (apply, rerun no-op, lock contention, president constraint) | |
+| 2.2 integrity preflight | done | `src/db/preflight.js`, `db/migrations/001_preflight.js`; `legacy_upgrade.db.test.js` refuses overlaps, mismatched intervals, over-capacity and colliding identities | |
+| 2.3 workflow fields and tables | done | `002_workflow_columns.js`, `003_support_tables.js` executed on MySQL | |
+| 2.4 one-time UTC backfill | done | `004_backfill_utc.js` (Asia/Taipei, Asia/Hong_Kong or UTC; marker and shift in one transaction); tests: Taipei shift, already-UTC, interrupted rerun never double-shifts, refusal without `LEGACY_DATETIME_TIMEZONE` | |
+| 2.5 constraints, indexes, EXPLAIN | done | `005_constraints_indexes.js`; `explain.db.test.js` (9 hot queries use an index); IDs and counts preserved in `legacy_upgrade.db.test.js` | composite booking/event interval FK not added (see Deviations) |
+| 2.6 fresh and upgrade baselines | done | `baseline.db.test.js`: no `users.role` index; fresh and upgraded databases have identical columns, indexes, constraints, foreign keys and migration checksums | |
+| 2.7 secure provisioning | done | `src/ops/dev_provisioning.js`, `provision-dev.js`; `provisioning.db.test.js` (placeholders cannot log in, no admin seeded, admin refuses production, env password) | the beta `provision-starter-accounts.js` still carries two committed hashes (pre-existing) |
+| 3.1 module split | partial | `src/app.js`, `src/middleware/*`, `src/api_v1/*` (routes with services inline), `src/db/*`, `src/jobs/*` | no separate controller and repository layers; SQL sits in route modules |
+| 3.2 transaction helper | done | `src/db/transaction.js`; fake-pool tests plus every v1 write | |
+| 3.3 validation and envelopes | done | `src/middleware/*`, `src/shared/validate.js`, `src/app.test.js`; 410 for retired URLs deferred to the coordinated cutover (decision below, spec updated) | |
+| 3.4 sessions and CSRF | done | `src/api_v1/session_store.js` (MySQL), `middleware/csrf.js`; `auth.db.test.js` (regeneration, token rotation, logout row removal, restart persistence, stale token) | |
+| 3.5 hashing and throttling | partial | `password_hasher.js` wired into login and register (`auth.db.test.js`: generic errors, throttle 429); 177 ms per hash locally | memory and latency not benchmarked on the target VM |
+| 3.6 profile, session, config | done | `src/api_v1/auth.js`, `router.js`; no `DEMO_USER_ID` in v1; privileges read per request (tested) | |
+| 3.7 membership endpoints | done | `src/api_v1/clubs.js`; `registration.db.test.js` (protected leave, active registrations, R5 race), `governance.db.test.js` | |
+| 4.1 slot and date validation | done | `src/shared/slots.js`, `validate.test.js` | |
+| 4.2 atomic pending booking and draft | done | `events.js` create; a failed create leaves no rows (tag failure after inserts) | |
+| 4.3 admin review | done | `events.db.test.js` (R1 one confirmed, conflict leaves pending, stale, self-decision, reason required) | |
+| 4.4 event visibility, list, detail | done | hidden drafts 404, filters, wildcards literal, 422 for repeats | |
+| 4.5 edit and publish | done | frozen fields, stale versions, approval is not publication, R6 | |
+| 4.6 cancellation | done | atomic, idempotent, no promotion, after-start rejected, slot released | |
+| 5.1 registration and history | done | `registration.js`; cross-session persistence, idempotent repeat, one confirmation | |
+| 5.2 capacity and waitlist | done | final-seat race R2; queue limit constant 500 | the 500-entry limit is not exercised with 500 rows |
+| 5.3 withdrawal and promoteLocked | done | FIFO, R3 race, ineligible legacy waiter skipped with a reason, deadline rules | |
+| 5.4 my registration and participants | done | committee-only, admin alone 403, ordering and positions, R5 | |
+| 5.5 history only for real transitions | done | repeat registration and repeat cancel add no rows; history counts asserted | |
+| 6.1 outbox writes | done | `src/jobs/queue.js`; rollback leaves no orphan job | |
+| 6.2 claims, leases, retries | done | `jobs.db.test.js`: exclusive claim R7, fenced ack, 5/30/120/600 s delays, last-attempt lease expiry, failed-job requeue with audit | |
+| 6.3 deduplicated delivery and inbox | done | unique `(user_id, dedup_key)`, replay tests, own-inbox and read endpoints | |
+| 6.4 reminders | done | 24 h scan, late joins and promotions share one visible key, started and cancelled suppressed, downtime catch-up | |
+| 6.5 worker lifecycle | partial | `src/worker.js` (heartbeat, SIGTERM stop), Compose `worker` service, crash recovery R8, reminder versus cancel R9 | SIGTERM drain within 30 s not tested |
+| 7.1 calendar | done | `engagement.db.test.js`: confirmed only, anonymous drafts, 31-day bound, cross-midnight legacy interval | |
+| 7.2 club report | done | zero-filled Hong Kong days, clipped hours, no attendance fields, committee-only | |
+| 7.3 frozen contract fixtures | missing | | |
+| 8.1-8.8 frontend integration | partial | the frontend already speaks v1 in fixtures mode (see refresh); `--mode v1` against the real backend is not walked through in a browser | 8.8 coordinated cutover not done, by decision |
+| 9.1 full MySQL suite | done | 164 tests on MySQL 8.4.13 incl. R1-R9 and migration and restart; command above | |
+| 9.2 production Compose and gate | partial | `compose.yaml` worker and `cover_data`, schema gate in `index.js` and `worker.js`, `APP_ORIGIN` | migration account and runtime privilege split, secrets template |
+| 9.3-9.5 | missing | | needs a Linux VM |
+| 10.1 migrations 010-014 | done | run on fresh and upgraded MySQL; the unique constraint rejects a second president | first presidents provisioned by `provision-dev.js` (names below) |
+| 10.2 GovernanceService | done | `clubs.js`, `events.js`, `governance.db.test.js` (403s, stale versions, two presidents impossible, concurrent transfer, sign-off, awaiting never busy nor visible to admins) | |
+| 10.3 live notifications | done | matrix types written in source transactions with the actor excluded; digest job 09:00 HKT with catch-up | `event_changed` is never emitted: after publication only title, description and tags change and the matrix excludes them |
+| 10.4 notification stream | done | hub mounted on `/api/v1/notifications/stream` with session auth; `engagement.db.test.js` delivers over real HTTP within 2 s | |
+| 10.5 tags | done | campus and club tags, filters, keyword search, limits, retired tags | |
+| 10.6 check-in and views | done | window, code, joined-only, 5 attempts per 10 min, marks, view dedup, 180-day purge | |
+| 10.7 effectiveness report | done | named SQL in `src/queries/reports/effectiveness/`; hand-built fixtures (join/leave/rejoin, promoted no-show, no check-in, group under 3, views by source) | |
 | 10.8 | n/a | tracked in visual refresh section 8 | |
 
 ## refresh-clubspace-visual-design
@@ -89,9 +108,18 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 
 ## Decisions
 
-(none yet)
+- **Legacy routes stay (2026-11-16).** The unversioned `/api/...` routes remain mounted next to `/api/v1`; they are not retired with 410 until a coordinated cutover. Specs updated (`api-frontend-contract`, `handoff/api.md`, `design.md`, `proposal.md`, tasks 3.3 and 8.8). New features exist only on `/api/v1`. Both share one session and cookie.
+- **Legacy timezone (2026-11-16).** Existing DATETIME values are Asia/Taipei local time (UTC+8, no DST); migration 004 shifts them once with `LEGACY_DATETIME_TIMEZONE=Asia/Taipei`. Because legacy routes stay, their SQL now stores UTC and adds 8 hours on reads (`shared/timeslots.js`, `events.service.js`, `venues.service.js`), proven by `legacy_compat.db.test.js`.
+- **First presidents (2026-11-16): generated.** `src/ops/provision-dev.js` creates one fictional president per club without one (never promoting an existing committee member), with `.example` emails, unique `PRES-nnn` student IDs and a password from `DEV_ACCOUNT_PASSWORD` or generated at run time. Generated presidents: Photography Society: Chan Hiu Tung (`president.club1@clubspace.example`); Film Society: Leung Ka Ho (`president.club2@clubspace.example`); Debate Club: Wong Tsz Yan (`president.club3@clubspace.example`); preview fixtures only: Chess & Strategy: Lam Man Kit, Hiking Club: Cheung Yuk Ching, Robotics Lab: Ng Chun Wai.
+- v1 `PUT /clubs/:id/membership` joins immediately as the spec says; the beta's join-request approval flow stays on the legacy routes.
+- `campus_tag_ids` is optional on create and defaults to Social (the spec lists 1..3 as required) so existing clients keep working.
+- Tab destinations are unconfirmed; the current choice is kept.
 
 ## Deviations
+
+- `memberships.president_club_id` is VIRTUAL, not STORED: MySQL rejects a stored generated column over `club_id` because of its `ON DELETE CASCADE` foreign key. The unique index still enforces one president per club.
+- The composite booking/event interval foreign key (database.md section 2) is not added: the legacy edit flow rewrites both rows in two statements. The service layer keeps them equal.
+- Legacy `participations` keep `pending`/`unsuccessful` beside the spec's statuses; v1 reads map them to waitlisted and left.
 
 - Legacy `/api` routes stay mounted and used by the beta frontend (`mainBackend.js` adapter); v1 currently serves only `/config` and `/auth/csrf`. No 410 retirement of old URLs yet.
 - Club management moved to `/organizer/clubs` and `/clubs` became the directory (tab destinations still an open review decision).
@@ -100,4 +128,3 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 - `bookings.status` and `events.status` keep legacy defaults (`confirmed`/`published`) in 002 so the beta API keeps working.
 - Mark all as read sends one PATCH per message (no bulk endpoint). Club cards show counts only if the API supplies them.
 
-(none yet)

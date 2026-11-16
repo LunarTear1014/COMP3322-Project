@@ -135,6 +135,24 @@ version only after it finishes. Set `MIGRATION_DB_USER` and
 `APP_ORIGIN` (default `http://c3322-pg19.cs.hku.hk`) must match the address
 users open, because the v1 API rejects other origins.
 
+### Worker, provisioning and testing
+
+The `worker` Compose service sends reminders and daily club digests, and keeps a
+heartbeat in `worker_heartbeats`; run exactly one. After migrating, give every
+club without a president a generated fictional one with
+`docker compose exec backend node src/ops/provision-dev.js` (set
+`DEV_ACCOUNT_PASSWORD` or note the generated password it prints once). The first
+migration of a database with legacy bookings needs
+`LEGACY_DATETIME_TIMEZONE=Asia/Taipei` to be set to confirm how times were stored.
+
+Backend tests: `cd backend-beta && npm test` runs the unit tests. The database
+tests run only against a disposable database: create one (its name must contain
+`test`), put `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER`, `TEST_DB_PASSWORD`
+and `TEST_DB_NAME` in a file outside the repository, and run
+`TEST_ENV_FILE=/path/to/that/file npm test`. The tests drop and recreate tables
+inside that database only and refuse `DB_NAME` or any name without `test`.
+Frontend tests: `cd frontend-beta && npm test`, `npm run lint`, `npm run build`.
+
 ### Redeploy an updated archive
 
 Upload the updated `clubspace-pg19-server.tar.gz` using the Mac commands
