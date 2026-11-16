@@ -293,8 +293,8 @@ describe('frontend preview workflows', () => {
     expect(screen.getByLabelText('Title').value).toBe('Campus photo walk')
     expect(screen.getByLabelText('Club').value).toBe('1')
     expect(screen.getByLabelText('Venue').value).toBe('1')
-    expect(screen.getByLabelText('Date').value).toBe('')
-    expect(screen.getByLabelText('Slot').value).toBe('')
+    expect(document.querySelector('.selected-slot')).toBeNull()
+    expect(window.location.search).not.toMatch(/slot_id|date=/)
     expect(screen.getByText(/original event remains unchanged/i)).toBeTruthy()
   })
 
@@ -355,8 +355,9 @@ describe('frontend preview workflows', () => {
     const date = params.get('date')
     expect(params.get('venue_id')).toBe('1')
     expect(params.get('slot_id')).toBe('morning')
-    expect(screen.getByDisplayValue(date)).toBeTruthy()
-    expect(screen.getByText(new RegExp(`Harbour Room.*${date}.*10:00–12:00`))).toBeTruthy()
+    expect(window.location.search).toContain(`date=${date}`)
+    await waitFor(() => expect(document.querySelector('.selected-slot').textContent).toMatch(/Harbour Room.*10:00–12:00/))
+    expect(screen.getByRole('button', { name: /10:00–12:00\s*Selected/ }).getAttribute('aria-pressed')).toBe('true')
   })
 
 
@@ -455,15 +456,18 @@ describe('frontend preview workflows', () => {
 
     const club = await screen.findByRole('combobox', { name: 'Club' })
     fireEvent.change(club, { target: { value: '1' } })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'Camera workshop' } })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Description' }), { target: { value: 'A practical session.' } })
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Capacity' }), { target: { value: '20' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: /10:00–12:00\s*Selected/ })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Next: event details' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Camera workshop' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A practical session.' } })
+    fireEvent.change(screen.getByLabelText('Capacity'), { target: { value: '20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Next: review' }))
     fireEvent.submit(screen.getByRole('button', { name: 'Submit request' }).closest('form'))
 
     expect((await screen.findByRole('alert')).textContent).toContain('read-only preview')
-    expect(screen.getByRole('textbox', { name: 'Title' }).value).toBe('Camera workshop')
-    expect(screen.getByRole('spinbutton', { name: 'Capacity' }).value).toBe('20')
-    expect(screen.getByDisplayValue('2026-11-30')).toBeTruthy()
+    expect(screen.getByLabelText('Title').value).toBe('Camera workshop')
+    expect(screen.getByLabelText('Capacity').value).toBe('20')
+    expect(window.location.search).toContain('date=2026-11-30')
   })
 
   it('retains a decision reason after a booking conflict', async () => {

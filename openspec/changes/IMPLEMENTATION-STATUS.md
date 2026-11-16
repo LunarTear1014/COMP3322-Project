@@ -71,7 +71,13 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 3.3 event page | done | `src/pages/EventDetail.jsx`, `src/components/StickyActionBar.jsx`, `src/lib/{registration,ics}.js`, `src/styles/event.css`; `tests/registration.test.js` (9) and `tests/eventPage.ui.test.jsx` (9: state cards, Join/Join waitlist bodies, 409 next to the action with refetch, restrictions say why, .ics download, Undo sends nothing and expiry sends DELETE once, phone sticky bar with aria-live and reserved height); checked at desktop and 390 px in the fixture preview | the leave request is lost if the tab closes during the 5 s Undo window (by design) |
 | 3.4 My events and Clubs directory | done | `src/pages/{Registrations,ClubsDirectory,Profile}.jsx`, `src/lib/myEvents.js`; `tests/myEvents.ui.test.jsx` (tabs with counts, URL tab, arrow keys, empty states, join toast, leave needs an in-page confirm, Profile has no join or leave); club management moved to `/organizer/clubs` | member and event counts on club cards appear only if the API supplies them (the v1 Club DTO has none) |
 | 3.5 Inbox | done | `src/pages/Notifications.jsx`, `src/lib/notificationTypes.js` (every type from beta-feedback section 3 has an icon and label; day groups in campus time); tests in `myEvents.ui.test.jsx` | no bulk-read endpoint exists: Mark all as read sends one PATCH per unread message on the page and reports failures |
-| 4.1-4.4, 6.1-8.6 | missing | | |
+| 4.1 SlotPicker | done | `src/components/SlotPicker.jsx`, `src/lib/slots.js`, `src/pages/CreateEvent.jsx`; `tests/request.ui.test.jsx` (past/booked/available from full intervals, week and slot in the URL, 409 shown above the slots with refresh and fields kept) | |
+| 4.2 three-step request | done | step, venue, week, date and slot in the URL; inline errors, venue capacity check, review step; tests above plus the updated copy-details and calendar-carry tests in `workflows.ui.test.jsx` | cover uploader slot is added in 6.1 |
+| 4.3-4.4, 6.1-8.6 | missing | | |
+
+## Base commits from teammates
+
+`beta-interview` already contains the president action log with undo, demote and kick, role-change notifications and club join requests (`clubs.service.js`, `club_action_log.js`, migrations in `db/legacy-sql/`). They count toward 10.2 and 10.3 as partial (president-only role changes and some immediate notifications exist, on unversioned `/api` routes without versions, sign-off, tags, SSE) and are built on, not duplicated.
 
 ## Decisions
 

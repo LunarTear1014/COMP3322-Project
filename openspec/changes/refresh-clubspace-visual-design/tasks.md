@@ -25,8 +25,8 @@
 
 ## 4. Organizer and admin
 
-- [ ] 4.1 Replace the request form's date and slot inputs with `SlotPicker` fed by `/config` and the venue calendar. Show 409 inline and keep the other fields.
-- [ ] 4.2 Split the request into Venue and time, Event details and Review, with step state in the URL.
+- [x] 4.1 Replace the request form's date and slot inputs with `SlotPicker` fed by `/config` and the venue calendar. Show 409 inline and keep the other fields.
+- [x] 4.2 Split the request into Venue and time, Event details and Review, with step state in the URL.
 - [ ] 4.3 Build the organizer home (Needs action, Upcoming, Past) and `LifecycleStepper`. Restructure Manage event into Overview, Edit and People with an in-page cancel confirmation.
 - [ ] 4.4 Build the admin queue table and review panel with the venue's day, capacity check, and a reason required to reject.
 
