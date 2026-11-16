@@ -139,3 +139,6 @@ body { padding: 0; }
 .review-list .pre { white-space: pre-line; }
 @media (max-width: 520px) { .review-list div { grid-template-columns: 1fr; gap: var(--space-1); } }
 .day-heading { margin: var(--space-6) 0 var(--space-2); font-size: 14px; line-height: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-muted); }
+
+/* Visually hidden text inside a scrolling region must not widen the page. */
+.cs-tablewrap { position: relative; }

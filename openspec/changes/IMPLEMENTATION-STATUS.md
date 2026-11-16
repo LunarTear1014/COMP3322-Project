@@ -77,7 +77,10 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 4.4 admin queue and review panel | done | `src/pages/Admin.jsx` (table, review dialog with the venue's day, capacity line, reason required to reject, own-club block, expired disabled); tests in `organizer.ui.test.jsx` and `workflows.ui.test.jsx` | capacity check shows only when the booking DTO carries `capacity` |
 | 6.1 CoverUploader | done | `src/components/CoverUploader.jsx`, `src/lib/cover.js`, multipart support in `src/api.js`, wired into request step 2 (uploaded after the event is created) and Manage event > Edit (Replace, Remove); `tests/cover.ui.test.jsx` (6), `tests/apiForm.test.js` | no byte-level progress (fetch has none): indeterminate progress and a busy button; only proven against fixtures, the real cover routes need the DB-backed backend (B1); hidden when the legacy `/api` provider is used |
 | 6.2 render covers | done | `<img>` with width/height and alt on the event page, `alt=""` plus lazy loading below the first two cards, aria-hidden fallback art (`EventCard`, `EventDetail`; asserted in `discovery.ui.test.jsx`, `eventPage.ui.test.jsx`) | |
-| 7.1-8.6 | missing | | |
+| 7.1 screens at five widths, both themes | partial | contrast test `tests/contrast.test.js`; browser measurement: no horizontal overflow at 320/390/768/1024/1440 on 11 routes (fixed a table `.cs-sr` overflow); spot screenshots at desktop and 390 px | no stored screenshot set, no canvas comparison, dark mode checked only as the browser pane's scheme |
+| 7.2 keyboard walk, 200% zoom, reduced motion | partial | focus order, Escape, focus return, arrow keys covered by UI tests; reduced-motion rules in `components.css` and `app.css` | no manual keyboard and zoom walk recorded |
+| 7.3 run builds, record results | done | `frontend-beta/INTEGRATION.md` "Verification record"; backend 79 and frontend 45 node plus 79 vitest tests pass, build ok, lint 0 errors | real-provider run not possible (B1), recorded as such; there was no "missing filters" note in the beta to remove |
+| 8.1-8.6 | missing | | |
 
 ## Base commits from teammates
 

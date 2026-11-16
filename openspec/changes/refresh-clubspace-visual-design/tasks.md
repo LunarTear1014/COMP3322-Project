@@ -48,7 +48,7 @@
 
 - [ ] 7.1 Capture screens at 320, 390, 768, 1024 and 1440 CSS px in light and dark mode, and compare them with the key-screens canvas.
 - [ ] 7.2 Walk the tabs, filters, sheet, slot picker, request steps, join, leave with Undo, and the admin review using only the keyboard. Check 200% zoom, contrast and reduced motion.
-- [ ] 7.3 Run the frontend and backend build, lint and tests. Record fixture and real-API verification separately in `frontend-alpha/INTEGRATION.md`, and remove the "missing filters" follow-up note.
+- [x] 7.3 Run the frontend and backend build, lint and tests. Record fixture and real-API verification separately in `frontend-alpha/INTEGRATION.md`, and remove the "missing filters" follow-up note.
 
 ## 8. Beta feedback screens (backend in expand-clubspace-workflows section 10)
 
