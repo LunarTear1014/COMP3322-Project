@@ -357,7 +357,7 @@ describe('frontend preview workflows', () => {
     expect(params.get('slot_id')).toBe('morning')
     expect(window.location.search).toContain(`date=${date}`)
     await waitFor(() => expect(document.querySelector('.selected-slot').textContent).toMatch(/Harbour Room.*10:00–12:00/))
-    expect(screen.getByRole('button', { name: /10:00–12:00\s*Selected/ }).getAttribute('aria-pressed')).toBe('true')
+    expect((await screen.findByRole('button', { name: /10:00–12:00\s*Selected/ })).getAttribute('aria-pressed')).toBe('true')
   })
 
 
@@ -437,13 +437,13 @@ describe('frontend preview workflows', () => {
   })
 
   it('loads the correct editor values when switching between event IDs', async () => {
-    window.history.replaceState({}, '', '/organizer/events/1')
+    window.history.replaceState({}, '', '/organizer/events/1?tab=edit')
     vi.stubGlobal('fetch', previewFetch())
     render(<App />)
 
     const title = await screen.findByRole('textbox', { name: 'Title' })
     fireEvent.change(title, { target: { value: 'Unsaved first event title' } })
-    window.history.pushState({}, '', '/organizer/events/2')
+    window.history.pushState({}, '', '/organizer/events/2?tab=edit')
     fireEvent.popState(window)
     await screen.findByRole('heading', { name: 'Film night: stories in motion' })
     expect((await screen.findByRole('textbox', { name: 'Title' })).value).toBe('Film night: stories in motion')
@@ -475,13 +475,15 @@ describe('frontend preview workflows', () => {
     vi.stubGlobal('fetch', previewFetch())
     render(<App />)
 
-    const title = await screen.findByRole('heading', { name: 'Student film showcase and conversation with emerging filmmakers' })
-    const request = title.closest('article')
-    const reason = within(request).getByRole('textbox', { name: 'Decision reason (required for rejection)' })
-    fireEvent.change(reason, { target: { value: 'Please check the venue.' } })
-    fireEvent.click(within(request).getByRole('button', { name: 'Approve' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Student film showcase and conversation with emerging filmmakers' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Review request' })
+    expect(within(dialog).getByRole('button', { name: 'Reject' })).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }))
+    expect(within(dialog).getByRole('button', { name: 'Reject request' }).disabled).toBe(true)
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /Reason for rejecting/ }), { target: { value: 'Please check the venue.' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reject request' }))
 
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('no longer available'))
-    await waitFor(() => expect(within(request).getByRole('textbox').value).toBe('Please check the venue.'))
+    expect(await within(dialog).findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('no longer available'))
+    await waitFor(() => expect(within(dialog).getByRole('textbox').value).toBe('Please check the venue.'))
   })
 })

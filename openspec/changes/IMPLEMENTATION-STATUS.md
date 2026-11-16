@@ -73,7 +73,9 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 3.5 Inbox | done | `src/pages/Notifications.jsx`, `src/lib/notificationTypes.js` (every type from beta-feedback section 3 has an icon and label; day groups in campus time); tests in `myEvents.ui.test.jsx` | no bulk-read endpoint exists: Mark all as read sends one PATCH per unread message on the page and reports failures |
 | 4.1 SlotPicker | done | `src/components/SlotPicker.jsx`, `src/lib/slots.js`, `src/pages/CreateEvent.jsx`; `tests/request.ui.test.jsx` (past/booked/available from full intervals, week and slot in the URL, 409 shown above the slots with refresh and fields kept) | |
 | 4.2 three-step request | done | step, venue, week, date and slot in the URL; inline errors, venue capacity check, review step; tests above plus the updated copy-details and calendar-carry tests in `workflows.ui.test.jsx` | cover uploader slot is added in 6.1 |
-| 4.3-4.4, 6.1-8.6 | missing | | |
+| 4.3 organizer home, stepper, manage event | done | `src/pages/{Organizer,ManageEvent}.jsx`, `src/lib/lifecycle.js`, `src/components/LifecycleStepper.jsx`; `tests/organizer.ui.test.jsx` (steps from booking and event state, Needs action first, publish sends expected_version, in-page cancel confirm, rejected reason, tab in URL) | |
+| 4.4 admin queue and review panel | done | `src/pages/Admin.jsx` (table, review dialog with the venue's day, capacity line, reason required to reject, own-club block, expired disabled); tests in `organizer.ui.test.jsx` and `workflows.ui.test.jsx` | capacity check shows only when the booking DTO carries `capacity` |
+| 6.1-8.6 | missing | | |
 
 ## Base commits from teammates
 

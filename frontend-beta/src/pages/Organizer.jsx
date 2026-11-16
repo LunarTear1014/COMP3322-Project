@@ -1,8 +1,70 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { query, campusTime, usesMainBackend } from '../api'
+import { usesMainBackend } from '../api'
+import { PageHeading, Resource } from '../components/common'
+import { EventCard } from '../components/EventCard'
+import { ButtonLink, EmptyState, StatusChip } from '../components/ui'
+import { useAllOptions } from '../hooks/resources'
+import { groupManaged } from '../lib/lifecycle'
 import { isOrganizer } from '../lib/roles'
-import { PageHeading, Resource, Pagination } from '../components/common'
-import { useResource } from '../hooks/resources'
 
-export function Organizer({session}) { const [club,setClub]=useState(''); const [state,setState]=useState(''); const [page,setPage]=useState(1); const r=useResource(`/me/events${query({club_id:club,state,page})}`); return <main><PageHeading title="Organizer" description="Manage your club events and requests."/><p><Link className="primary-link" to="/bookings/new">{usesMainBackend ? 'Book a venue and publish an event' : 'Request a venue and create a draft'}</Link></p><div className="filters"><label>Club<select value={club} onChange={e=>{setClub(e.target.value);setPage(1)}}><option value="">All committee clubs</option>{session.memberships.filter(isOrganizer).map(m=><option key={m.club_id} value={m.club_id}>{m.club_name}</option>)}</select></label><label>Event state<select value={state} onChange={e=>{setState(e.target.value);setPage(1)}}><option value="">All</option>{(usesMainBackend ? ['published','cancelled'] : ['draft','published','cancelled']).map(x=><option key={x}>{x}</option>)}</select></label></div>{!usesMainBackend && <p>Reports: {session.memberships.filter(isOrganizer).map(m=><span key={m.club_id}><Link to={`/organizer/clubs/${m.club_id}/reports`}>{m.club_name}</Link> </span>)}</p>}<Resource value={r} empty="No managed events.">{r.data?.map(e=><article className="panel" key={e.id}><h2><Link to={`/organizer/events/${e.id}`}>{e.title}</Link></h2><p>{e.club?.name} · {campusTime(e.start_at)} HKT</p><div className="status-row"><span>Event: {e.state}</span><span>Booking: {e.booking?.status || 'Unavailable'}</span></div></article>)}<Pagination meta={r.meta} page={page} setPage={setPage}/></Resource></main> }
+const NEEDS_HINT = {
+  confirmed: 'Approved. Publish it so students can join.',
+  rejected: 'Rejected. Request another slot.',
+  returned: 'Returned by the president.',
+}
+
+function Group({ id, title, events, empty }) {
+  return (
+    <section aria-labelledby={id}>
+      <h2 id={id} className="section-title">{title} <span className="cs-meta cs-nums">({events.length})</span></h2>
+      {events.length ? (
+        <div className="card-grid">
+          {events.map(event => (
+            <div key={event.id} className="managed-item">
+              <EventCard flat event={event} chip={<><StatusChip state={event.state} /><StatusChip state={event.booking?.status} /></>} />
+              {NEEDS_HINT[event.booking?.status] && event.state === 'draft' && <p className="cs-meta">{NEEDS_HINT[event.booking.status]}</p>}
+              <Link className="managed-link" to={`/organizer/events/${event.id}`}>Manage {event.title}</Link>
+            </div>
+          ))}
+        </div>
+      ) : <p className="cs-meta">{empty}</p>}
+    </section>
+  )
+}
+
+// Organizer home: what needs you first. Flat cards, one primary action.
+export function Organizer({ session }) {
+  const [club, setClub] = useState('')
+  const events = useAllOptions('/me/events')
+  const committeeClubs = session.memberships.filter(isOrganizer)
+  const groups = groupManaged((events.data || []).filter(event => !club || String(event.club?.id) === club))
+  return (
+    <main className="page">
+      <PageHeading title="Organizer" description="Manage your club events and requests." />
+      <div className="cs-row organizer-tools">
+        <ButtonLink variant="primary" to="/bookings/new">{usesMainBackend ? 'Book a venue and publish an event' : 'Request a venue and create a draft'}</ButtonLink>
+        <ButtonLink to="/organizer/clubs">Club members</ButtonLink>
+      </div>
+      <div className="cs-field organizer-club">
+        <label htmlFor="organizer-club">Club</label>
+        <select id="organizer-club" className="cs-input" value={club} onChange={event => setClub(event.target.value)}>
+          <option value="">All committee clubs</option>
+          {committeeClubs.map(item => <option key={item.club_id} value={item.club_id}>{item.club_name}</option>)}
+        </select>
+      </div>
+      {!usesMainBackend && <p>Reports: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/reports`}>{item.club_name}</Link> </span>)}</p>}
+      <Resource value={events} allowEmpty>
+        {events.data?.length === 0 ? (
+          <EmptyState title="No managed events yet" actions={<ButtonLink variant="primary" to="/bookings/new">Request a venue</ButtonLink>}>Request a venue to create your first event.</EmptyState>
+        ) : (
+          <>
+            <Group id="needs-action" title="Needs action" events={groups.needs} empty="Nothing waiting on you." />
+            <Group id="upcoming" title="Upcoming" events={groups.upcoming} empty="No upcoming events." />
+            <Group id="past" title="Past" events={groups.past} empty="No past events." />
+          </>
+        )}
+      </Resource>
+    </main>
+  )
+}
