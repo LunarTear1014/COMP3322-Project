@@ -13,7 +13,7 @@ services:
       retries: 6
     restart: unless-stopped
 
-  # One-shot: applies the tracked migrations (001-016) before the API and the
+  # One-shot: applies the tracked migrations (001-017) before the API and the
   # worker start. On a fresh database it builds the v1 schema on top of the
   # baseline from schema.sql; on later deploys it applies only new files.
   migrate:
@@ -30,6 +30,28 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    restart: "no"
+
+  # One-shot: fills an empty database with demo clubs, accounts and events
+  # (backend-beta/src/ops/demo_seed.js). It does nothing when
+  # DEMO_ACCOUNT_PASSWORD is unset or the database already has events. The site
+  # does not wait for it, so a failure here never blocks the deployment.
+  seed:
+    build: ./backend-beta
+    command: ["node", "src/ops/seed-demo.js"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: clubspace
+      DB_USER: clubspace_app
+      DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      DEMO_ACCOUNT_PASSWORD: ${DEMO_ACCOUNT_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: "no"
 
   backend:

@@ -37,11 +37,9 @@ full v1 schema on top of `schema.sql`.
    ```
 
 2. Paste this block into the SSH session. It unpacks the archive, generates
-   the deployment credentials, starts Compose, and provisions a regular
-   member, a committee account and a generated president for each club. Later
-   runs reuse the existing `.env` and accounts. The president provisioning
-   prints its generated password once; save it in the group's password
-   manager.
+   the deployment credentials (and a demo account password, if `.env` has
+   none), starts Compose, and waits for the demo data. Later runs reuse the
+   existing `.env`, and the demo data is created only on an empty database.
 
    ```bash
    (
@@ -60,30 +58,48 @@ full v1 schema on top of `schema.sql`.
            "$db_root_password" "$db_app_password" "$app_session_secret" > .env
        )
      fi
+     if ! grep -q '^DEMO_ACCOUNT_PASSWORD=.' .env; then
+       printf 'DEMO_ACCOUNT_PASSWORD=%s\n' "$(openssl rand -hex 8)" >> .env
+     fi
      docker compose up -d --build
      curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
        --connect-timeout 2 --max-time 5 http://127.0.0.1/api/health
      printf '\n'
-     if [ ! -e .starter-accounts-ready ]; then
-       docker compose exec -T backend node src/ops/provision-starter-accounts.js
-       docker compose exec -T backend node src/ops/provision-dev.js
-       touch .starter-accounts-ready
-     fi
+     docker wait "$(docker compose ps -a -q seed)" >/dev/null
+     docker compose logs --no-log-prefix seed
      docker compose ps
    )
    ```
 
-   When the block finishes, open the HTTP URL in a browser.
+   When the block finishes, open the HTTP URL in a browser. To see the demo
+   password, run `grep DEMO_ACCOUNT_PASSWORD .env` in `~/clubspace-pg19`.
 
-### Starter accounts
+### Demo accounts and data
 
-Both accounts belong to Photography Society. Use the initial password shared
-with the group.
+On an empty database the one-shot `seed` service
+([`backend-beta/src/ops/demo_seed.js`](backend-beta/src/ops/demo_seed.js))
+creates 5 clubs, 5 venues and 25 events through the real API: 6 past events
+with check-ins (for the reports), 15 upcoming events (one full with a
+waitlist, members-only events with pending requests), one cancelled event and
+three still in the approval workflow. Every account uses the password in
+`DEMO_ACCOUNT_PASSWORD`; the names are fictional and the addresses use the
+reserved `.example` domain. Leave `DEMO_ACCOUNT_PASSWORD` empty to deploy
+without demo data.
 
-| Account | Club role |
+| Account | Role |
 | --- | --- |
-| `member@clubspace.test` | Regular member |
-| `committee@clubspace.test` | Committee member with Organizer access |
+| `admin@clubspace.example` | Venue administrator (approves venue requests) |
+| `president.<club>@clubspace.example` | President |
+| `committee1.<club>@clubspace.example`, `committee2.<club>@…` | Committee |
+| `member1.<club>@clubspace.example` to `member3.<club>@…` | Member |
+| `student1@clubspace.example` to `student6@…` | Student with no club (1 to 3 have a pending join request) |
+
+`<club>` is `photo` (Photography Society), `film` (Film Society), `debate`
+(Debate Club), `hiking` (Hiking Club) or `robotics` (Robotics Lab). Good
+places to start: `president.photo` has an event awaiting sign-off,
+`committee1.debate` has one waiting for the president to publish,
+`admin` has a venue request to decide, and the Hiking Club's Lion Rock
+Sunrise Hike is full with two people on the waitlist.
 
 ### Give another account organizer access
 
@@ -147,8 +163,9 @@ users open, because the v1 API rejects other origins.
 ### Worker, provisioning and testing
 
 The `worker` Compose service sends reminders and daily club digests, and keeps a
-heartbeat in `worker_heartbeats`; run exactly one. After migrating, give every
-club without a president a generated fictional one with
+heartbeat in `worker_heartbeats`; run exactly one. The demo data covers
+accounts on a fresh database. For a database without it, give every club
+without a president a generated fictional one with
 `docker compose exec backend node src/ops/provision-dev.js` (set
 `DEV_ACCOUNT_PASSWORD` or note the generated password it prints once). The first
 migration of a database with legacy bookings needs
@@ -214,12 +231,11 @@ session:
       > "$HOME/clubspace-backups/clubspace-before-reset-$(date -u +%Y%m%dT%H%M%SZ).sql"
   fi
   docker compose down -v
-  rm -f .starter-accounts-ready
 )
 ```
 
 Then run step 2 above again. It rebuilds the images, creates the schema and
-catalog, runs the migrations and provisions the accounts.
+catalog, runs the migrations and creates the demo accounts and events.
 
 ### Redeploy an updated archive
 
