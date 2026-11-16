@@ -7,6 +7,8 @@ import { Button, ButtonLink, StatusChip, TextField, useToast } from '../componen
 import { useAction, useResource } from '../hooks/resources'
 import { timeLine } from '../lib/format'
 import { lifecycle } from '../lib/lifecycle'
+import { CoverUploader } from '../components/CoverUploader'
+import { coverForm } from '../lib/cover'
 
 const TABS = [{ id: 'overview', label: 'Overview' }, { id: 'edit', label: 'Edit' }, { id: 'people', label: 'People' }]
 const hkLocal = value => (value
@@ -54,6 +56,14 @@ export function ManageEventEditor({ id }) {
     }
     const result = await action.run(`/events/${id}`, 'PATCH', body)
     if (result) toast.show({ message: 'Changes saved.' })
+  }
+  async function uploadCover({ file, alt }) {
+    const result = await action.run(`/events/${id}/cover`, 'PUT', coverForm({ file, alt, expectedVersion: e.version }))
+    if (result) toast.show({ message: 'Cover saved.' })
+  }
+  async function removeCover() {
+    const result = await action.run(`/events/${id}/cover`, 'DELETE', { expected_version: e.version })
+    if (result) toast.show({ message: 'Cover removed.', tone: 'info' })
   }
   async function publish() {
     const result = await action.run(`/events/${id}/publish`, 'POST', { expected_version: e.version })
@@ -133,6 +143,9 @@ export function ManageEventEditor({ id }) {
                       </>
                     )}
                     {e.state === 'published' && <p className="cs-hint">After publishing, only the title and description can change.</p>}
+                    {!usesMainBackend && e.state !== 'cancelled' && (
+                      <CoverUploader title={e.title} current={e.cover} busy={action.busy} serverError={action.error?.fields?.file || (action.error && /cover|image|5 MB/i.test(action.error.message) ? action.error.message : '')} onSave={uploadCover} onRemove={removeCover} />
+                    )}
                     <Feedback action={{ ...action, error: null }} />
                     <div className="step-actions"><Button variant="primary" type="submit" busy={action.busy}>Save changes</Button></div>
                   </form>

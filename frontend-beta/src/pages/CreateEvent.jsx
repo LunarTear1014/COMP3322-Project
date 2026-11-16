@@ -1,7 +1,9 @@
 import { CircleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
-import { addDays, campusDate, campusInstant, query, usesMainBackend } from '../api'
+import { addDays, campusDate, campusInstant, query, request, usesMainBackend } from '../api'
+import { CoverUploader } from '../components/CoverUploader'
+import { coverForm } from '../lib/cover'
 import { ErrorNotice, PageHeading, Resource } from '../components/common'
 import { SlotPicker } from '../components/SlotPicker'
 import { Button, TextField, useToast } from '../components/ui'
@@ -35,6 +37,7 @@ export function CreateEvent({ session }) {
   const [tick, setTick] = useState(0)
   const [conflict, setConflict] = useState('')
   const [errors, setErrors] = useState({})
+  const [cover, setCover] = useState(null)
   const [form, setForm] = useState({
     club_id: copy?.club_id ? String(copy.club_id) : clubs.length === 1 ? String(clubs[0].club_id) : '',
     title: copy?.title || '',
@@ -136,6 +139,15 @@ export function CreateEvent({ session }) {
     if (usesMainBackend) delete body.capacity
     const result = await action.run('/events', 'POST', body)
     if (result) {
+      if (cover && !usesMainBackend) {
+        try {
+          await request(`/events/${result.data.id}/cover`, { method: 'PUT', body: coverForm({ file: cover.file, alt: cover.alt, expectedVersion: result.data.version ?? 1 }) })
+        } catch (error) {
+          toast.show({ message: `Request sent, but the cover wasn’t uploaded: ${error.message} Add it from Manage event.`, tone: 'error' })
+          navigate(`/organizer/events/${result.data.id}?tab=edit`, { state: { created: true } })
+          return
+        }
+      }
       toast.show({ message: usesMainBackend ? 'Venue booked and event published.' : 'Request sent. We’ll let you know when it’s reviewed.' })
       navigate(`/organizer/events/${result.data.id}`, { state: { created: true } })
     }
@@ -235,6 +247,7 @@ export function CreateEvent({ session }) {
                 <TextField label="Registration deadline (Hong Kong time)" optional name="registration_closes_at" type="datetime-local" value={form.registration_closes_at} error={errors.registration_closes_at} hint="Leave empty to close registration when the event starts." onChange={update} />
               </>
             )}
+            {!usesMainBackend && <CoverUploader title={form.title} onChange={setCover} />}
             <div className="step-actions">
               <Button onClick={() => goTo('venue')}>Back</Button>
               <Button variant="primary" onClick={() => advance('details', 'review')}>Next: review</Button>
@@ -248,6 +261,7 @@ export function CreateEvent({ session }) {
               <div><dt>Venue and time</dt><dd>{venue?.name} · {date && slot ? `${dayLabel(campusInstant(date, slot.start))} · ${slotLabel(slot)}` : ''} Hong Kong time</dd></div>
               <div><dt>Title</dt><dd>{form.title}</dd></div>
               <div><dt>Description</dt><dd className="pre">{form.description}</dd></div>
+              {cover && <div><dt>Cover</dt><dd>{cover.file.name}</dd></div>}
               <div><dt>Who can join</dt><dd>{form.visibility === 'members_only' ? 'Members only' : 'Open to everyone'}</dd></div>
               {!usesMainBackend && <div><dt>Capacity</dt><dd>{form.capacity}</dd></div>}
             </dl>

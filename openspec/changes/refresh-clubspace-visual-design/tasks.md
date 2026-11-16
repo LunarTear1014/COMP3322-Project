@@ -41,8 +41,8 @@
 
 ## 6. Event covers (frontend)
 
-- [ ] 6.1 Add `CoverUploader` to request step 2 and Manage event › Edit: client-side type, size and dimension checks, alt text defaulting to the title, progress, Replace and Remove.
-- [ ] 6.2 Render covers as `<img>` with width, height and alt text, and lazy loading below the first screen.
+- [x] 6.1 Add `CoverUploader` to request step 2 and Manage event › Edit: client-side type, size and dimension checks, alt text defaulting to the title, progress, Replace and Remove.
+- [x] 6.2 Render covers as `<img>` with width, height and alt text, and lazy loading below the first screen.
 
 ## 7. Acceptance
 

@@ -18,7 +18,8 @@ export async function request(path, { method = 'GET', body, signal } = {}) {
   const headers = { Accept: 'application/json' }
   if (method !== 'GET') {
     if (!csrfToken) { const result = await request('/auth/csrf'); csrfToken = result.data.csrf_token }
-    headers['Content-Type'] = 'application/json'
+    // Multipart bodies (event covers) set their own boundary header.
+    if (!(body instanceof FormData)) headers['Content-Type'] = 'application/json'
     headers['X-CSRF-Token'] = csrfToken
   }
   let requestPath = path
@@ -29,7 +30,7 @@ export async function request(path, { method = 'GET', body, signal } = {}) {
     }
   }
   let response
-  try { response = await fetch(`/api/v1${requestPath}`, { method, credentials: 'same-origin', headers, signal, ...(method !== 'GET' ? { body: JSON.stringify(body ?? {}) } : {}) }) }
+  try { response = await fetch(`/api/v1${requestPath}`, { method, credentials: 'same-origin', headers, signal, ...(method !== 'GET' ? { body: body instanceof FormData ? body : JSON.stringify(body ?? {}) } : {}) }) }
   catch (error) { if (error.name === 'AbortError') throw error; throw new ApiError('Unable to reach the server. The outcome may be unknown; refresh before trying again.', 0, 'NETWORK_ERROR') }
   if (response.status === 204) return { data: null }
   let result
