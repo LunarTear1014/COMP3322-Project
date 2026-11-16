@@ -1,47 +1,267 @@
-# COMP3322 Project
+# ClubSpace
 
-The ClubSpace workspace contains the beta frontend, the original frontend, and the backend:
+**University club event and venue management platform.** COMP3322 Group
+Project, Group 19 (PG19).
+
+| | |
+| --- | --- |
+| **Live deployment** | **http://c3322-pg19.cs.hku.hk** (connect to HKUVPN first) |
+| Demo password | `clubspacetest123` for every [demo account](#demo-accounts) |
+| Source | https://github.com/LunarTear1014/COMP3322-Project (`main` is what is deployed) |
+| Proposal | [`proposal/Proposal.md`](proposal/Proposal.md) |
+| Architecture and ER diagram | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+
+**Contents:**
+[Overview](#overview) ·
+[Course requirements](#how-clubspace-meets-the-course-requirements) ·
+[Architecture](#architecture) ·
+[Demo accounts](#demo-accounts) ·
+[Rebuild from scratch (TAs)](#rebuild-from-scratch-for-tas-and-examiners) ·
+[Group 19 server](#deploy-to-the-group-19-server) ·
+[Operations](#operations) ·
+[Local development](#local-development) ·
+[Tests](#tests) ·
+[API](#api) ·
+[Credits](#credits-and-academic-integrity)
+
+## Overview
+
+ClubSpace coordinates university club events, venue requests and student
+participation. Club committee members prepare events and request venues; the
+club president signs off; a venue administrator approves the booking without
+double-booking a room; the event is then published. Students browse events,
+register (or join a waitlist when an event is full), check in on the day, and
+get live notifications. Club leaders see attendance and effectiveness
+reports.
+
+Team (details in the [proposal](proposal/Proposal.md)): Chan Ka Ho Charlie,
+Lucien Balthazar Neale, Chan Ka Hei Aubrey.
+
+### Features
+
+- **Accounts:** register, sign in, edit a profile, delete an account. Sessions
+  are cookies stored in MySQL, with CSRF tokens and origin checks on every
+  change.
+- **Clubs and roles:** members, committee and one president per club. Joining
+  a club is a request that the committee accepts or rejects. The president
+  promotes committee members and can hand over the presidency.
+- **Venues and bookings:** weekly venue calendars with three campus slots
+  (10:00–12:00, 13:00–15:00, 16:00–18:00 HKT). A venue administrator approves or
+  rejects requests; one confirmed booking per venue and slot is enforced in the
+  database, and an administrator cannot decide their own club's request.
+- **Event workflow:** draft → president sign-off → venue approval → publish,
+  with edit, cancel, cover images (JPEG/WebP up to 5 MB), campus and club tags,
+  and public or members-only visibility.
+- **Participation:** registration with capacity limits and an automatically
+  promoted waitlist; requests to join members-only events; check-in codes
+  during the event window; "My registrations".
+- **Real-time updates:** Server-Sent Events push notifications, seat counts,
+  waitlist changes and check-ins to open pages without a reload.
+- **Background worker:** event reminders, daily club digests and clean-up jobs,
+  with retries and a heartbeat.
+- **Reports:** attendance and effectiveness charts per club (fill rate,
+  turnout, drop-outs, view-to-join).
+- **Club action log:** a history of committee actions with undo.
+- **Credits page** at `/credits` for third-party libraries and assets.
+
+## How ClubSpace meets the course requirements
+
+| Requirement | ClubSpace |
+| --- | --- |
+| SPA with React, Angular or Vue 3; responsive | React 19 + React Router 7 + MUI, built with Vite ([`frontend-beta/`](frontend-beta/)); layouts adapt from phone to desktop with bottom tabs on small screens |
+| Node.js + Express RESTful API with correct status codes | Express 5 ([`backend-beta/`](backend-beta/)), versioned REST API under `/api/v1` using 200, 201, 202, 204, 400, 401, 403, 404, 409, 413, 415, 422, 429, 500 and 503 (see [API](#api)) |
+| MySQL only | MySQL 8.4; schema in [`backend-beta/db/schema.sql`](backend-beta/db/schema.sql) plus ordered migrations in [`backend-beta/db/migrations/`](backend-beta/db/migrations/) |
+| Docker Compose on a Linux VM | [`compose.yaml`](compose.yaml) with [`frontend-beta/Dockerfile`](frontend-beta/Dockerfile) and [`backend-beta/Dockerfile`](backend-beta/Dockerfile); starts with `docker compose up -d --build`; MySQL port 3306 is not published |
+| No real secrets committed | `.env` is git-ignored; [`.env.example`](.env.example) is the template and the deployment steps generate random passwords |
+| README with the public deployment URL and deployment instructions | This file: [live URL](#clubspace), [rebuild guide](#rebuild-from-scratch-for-tas-and-examiners) |
+| Credits page for third-party code | `/credits` in the app ([`Credits.jsx`](frontend-beta/src/pages/Credits.jsx)) |
+
+## Architecture
 
 ```text
-frontend-beta/   Latest React + Vite application
-frontend-alpha/  Original React + Vite application
-backend-beta/    Express API and MySQL schema/demo data
+Browser ──HTTP :80──▶ web (nginx: built React SPA, proxies /api/)
+                           │
+                           ▼
+                      backend (Express, /api/v1, SSE stream) ──▶ db (MySQL 8.4, volume db_data)
+                      worker  (reminders, digests, clean-up)  ──▶ db
+                      migrate (one-shot: applies schema migrations)
+                      seed    (one-shot: demo data on an empty database)
 ```
 
-The local request flow is:
+Cover images live on the `cover_data` volume shared by `backend` and `worker`.
+The ER diagram and design notes are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ```text
-React frontend (port 5173) → Vite /api proxy → Express API (port 3000) → MySQL
+frontend-beta/   React + Vite SPA, its Dockerfile and nginx.conf
+backend-beta/    Express API, worker, ops scripts, MySQL schema, migrations, tests
+openspec/        Specifications and the v1 API contract
+proposal/        Project proposal
+compose.yaml     Docker Compose deployment (all six services)
+.env.example     Template for the untracked .env
 ```
+
+## Demo accounts
+
+On an empty database the one-shot `seed` service
+([`backend-beta/src/ops/demo_seed.js`](backend-beta/src/ops/demo_seed.js))
+creates 5 clubs, 5 venues, 37 accounts and 25 events through the real API:
+6 past events with check-ins (for the reports), 15 upcoming events (one full
+with a waitlist, members-only events with pending requests), one cancelled
+event and three still in the approval workflow. Every account uses the
+password **`clubspacetest123`**; the names are fictional and the addresses use
+the reserved `.example` domain.
+
+**Password for every account: `clubspacetest123`**
+
+**Venue administrator:** `admin@clubspace.example` (approves or rejects venue
+requests).
+
+**Club accounts.** Each club has one president, two committee members and
+three members:
+
+| Club | President | Committee | Members |
+| --- | --- | --- | --- |
+| Photography Society | `president.photo@clubspace.example` | `committee1.photo@clubspace.example`<br>`committee2.photo@clubspace.example` | `member1.photo@clubspace.example`<br>`member2.photo@clubspace.example`<br>`member3.photo@clubspace.example` |
+| Film Society | `president.film@clubspace.example` | `committee1.film@clubspace.example`<br>`committee2.film@clubspace.example` | `member1.film@clubspace.example`<br>`member2.film@clubspace.example`<br>`member3.film@clubspace.example` |
+| Debate Club | `president.debate@clubspace.example` | `committee1.debate@clubspace.example`<br>`committee2.debate@clubspace.example` | `member1.debate@clubspace.example`<br>`member2.debate@clubspace.example`<br>`member3.debate@clubspace.example` |
+| Hiking Club | `president.hiking@clubspace.example` | `committee1.hiking@clubspace.example`<br>`committee2.hiking@clubspace.example` | `member1.hiking@clubspace.example`<br>`member2.hiking@clubspace.example`<br>`member3.hiking@clubspace.example` |
+| Robotics Lab | `president.robotics@clubspace.example` | `committee1.robotics@clubspace.example`<br>`committee2.robotics@clubspace.example` | `member1.robotics@clubspace.example`<br>`member2.robotics@clubspace.example`<br>`member3.robotics@clubspace.example` |
+
+Some members belong to a second club: `member1.photo` is also in Film
+Society, `member2.hiking` in Robotics Lab, `member3.debate` in Photography
+Society, and `student4` in Hiking Club.
+
+**Students:** `student1@clubspace.example` to `student6@clubspace.example`.
+`student1`, `student2` and `student3` have pending requests to join
+Photography Society, Robotics Lab and Hiking Club; `student5` and `student6`
+belong to no club.
+
+**What to try with each role:**
+
+| Sign in as | Try |
+| --- | --- |
+| `admin@clubspace.example` | Admin → approve or reject the pending venue request for Film Society's Animation Night |
+| `president.photo@clubspace.example` | Organizer → sign off the venue request for the Exhibition Planning Meeting that `committee1.photo` drafted; accept `student1`'s join request; promote a member to committee |
+| `president.debate@clubspace.example` | Publish Debate Workshop: Rebuttals, which `committee1.debate` sent for approval |
+| `committee1.debate@clubspace.example` | Create an event and request a venue; review the join requests for the members-only Inter-Hall Debate Trials |
+| `member1.hiking@clubspace.example` | Events → Lion Rock Sunrise Hike is full with two people on the waitlist; My registrations lists your events |
+| `student1@clubspace.example` | Browse events, register for a public event, watch the seat count update live in a second browser |
+
+To use another password, put `DEMO_ACCOUNT_PASSWORD=...` (12+ characters) in
+`.env` before the first start; `DEMO_ACCOUNT_PASSWORD=` with no value starts
+without demo data. The repository is public, so anyone on HKUVPN who reads
+this can sign in to the demo accounts, including the venue administrator.
+
+## Rebuild from scratch (for TAs and examiners)
+
+These steps rebuild the whole project, including a new MySQL database with the
+demo data, from the public repository. They work on the Group 19 server and on
+any other Linux machine (or macOS with Docker Desktop).
+
+**You need:** Docker Engine with the Compose v2 plugin (`docker compose
+version`), `git` and `openssl`; about 4 GB of RAM and 4 GB of free disk; and
+internet access to GitHub, Docker Hub and npm during the build. Nothing else
+(no Node.js or MySQL) is installed on the host.
+
+1. **Get the code.**
+
+   ```bash
+   git clone https://github.com/LunarTear1014/COMP3322-Project.git clubspace
+   cd clubspace
+   ```
+
+2. **Create `.env` with random secrets.** Compose refuses to start without
+   it; it is git-ignored and never committed.
+
+   ```bash
+   (umask 077; printf 'MYSQL_ROOT_PASSWORD=%s\nMYSQL_PASSWORD=%s\nSESSION_SECRET=%s\n' \
+     "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > .env)
+   ```
+
+   **Only if you are not on c3322-pg19.cs.hku.hk**, also tell the app which
+   address you will open, because the API rejects requests from any other
+   origin. For example, to use http://localhost:8080:
+
+   ```bash
+   printf 'APP_ORIGIN=http://localhost:8080\nWEB_PORT=8080\n' >> .env
+   ```
+
+   `APP_ORIGIN` must match the browser's address bar exactly (scheme, host and
+   port; no trailing slash). Leave out `WEB_PORT` to serve on port 80, in which
+   case use `APP_ORIGIN=http://localhost`.
+
+3. **Build and start.**
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+   The first build takes about 3–5 minutes. Compose starts MySQL, applies the
+   schema and migrations (`migrate`), starts the API and worker, serves the
+   site on port 80 (or `WEB_PORT`) and loads the demo data (`seed`).
+
+4. **Check it.**
+
+   ```bash
+   curl -fsS http://127.0.0.1:${WEB_PORT:-80}/api/health; echo
+   docker wait "$(docker compose ps -a -q seed)" >/dev/null
+   docker compose logs --no-log-prefix seed
+   docker compose ps -a
+   ```
+
+   Expected: `{"status":"ok"}`; the seed log ends with the list of 37 demo
+   accounts; `db`, `backend`, `worker` and `web` are running (healthy);
+   `migrate` and `seed` show `Exited (0)`, which is correct for one-shot jobs.
+   If you set `WEB_PORT` in `.env`, run `export WEB_PORT=8080` first so the
+   `curl` line uses the same port.
+
+5. **Open the site** at http://c3322-pg19.cs.hku.hk (or your `APP_ORIGIN`)
+   and sign in with a [demo account](#demo-accounts).
+
+**Start again from an empty database** (deletes all data and uploaded covers,
+then rebuilds and re-seeds):
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
+**Stop without deleting data:** `docker compose down`. **Free disk space**
+from old builds: `docker image prune -f` and `docker builder prune -f`.
+
+### Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `Set MYSQL_PASSWORD in .env` (Compose stops before starting) | `.env` is missing; do step 2 in the repository folder. |
+| Pages load but sign-in or any change fails with "origin" or 403 | `APP_ORIGIN` does not match the address in the browser. Fix `.env`, then `docker compose up -d`. |
+| `bind: address already in use` on port 80 | Another service uses port 80. Set `WEB_PORT` and `APP_ORIGIN` as in step 2. |
+| `backend` and `worker` never start | `migrate` failed: read `docker compose logs migrate`. |
+| Seed log says `Skipping demo data: The database already has events.` | The database volume is not empty. Use `docker compose down -v` to start again. |
+| Changed the MySQL passwords in `.env` after the first start | MySQL keeps the passwords it was created with. Restore the old `.env` or start again with `down -v`. |
 
 ## Deploy to the Group 19 server
 
-Open **http://c3322-pg19.cs.hku.hk** over HKUVPN after deployment.
-The server runs the `main` branch of
-[the GitHub repository](https://github.com/LunarTear1014/COMP3322-Project),
-cloned to `~/clubspace-pg19`; nothing is edited or uploaded by hand, so the
-deployed code always matches GitHub. Compose builds the beta frontend and
-Express backend on the Ubuntu server and runs them with MySQL. Only HTTP on
-port 80 is published. The MySQL data lives in the Compose `db_data` volume.
-The frontend talks only to `/api/v1`. On every `docker compose up`, a one-shot
-`migrate` service applies the tracked migrations before the API and worker
-start; on an empty database it builds the full v1 schema on top of
-`schema.sql`.
+The server runs `main` of the GitHub repository, cloned to `~/clubspace-pg19`.
+Nothing is edited or uploaded by hand, so the deployed code always matches
+GitHub. Only HTTP on port 80 is published (Option B of the course server
+guide). The server allows Docker only, so everything runs in containers.
 
 1. Push the commits you want to deploy to `main` on GitHub. Connect to
-   HKUVPN, then open an SSH session on the Group 19 server from your Mac:
+   HKUVPN, then open an SSH session with the group's private key:
 
    ```bash
-   workspace='/Volumes/Crucial P510 Gen 5 2TB NVMe 2280 M.2/Development/ClubSpace'
-   ssh -i "$workspace/.ssh/id_rsa" -o IdentitiesOnly=yes \
-     -o "UserKnownHostsFile=$workspace/.ssh/known_hosts" ubuntu@c3322-pg19.cs.hku.hk
+   ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes ubuntu@c3322-pg19.cs.hku.hk
    ```
+
+   The first time, type `yes` to trust the server.
 
 2. Paste this block into the SSH session. Use the same block for the first
    deployment and for every update. It:
    - clones the repository on the first run, or pulls the latest `main`
      (fast-forward only) on later runs. If `~/clubspace-pg19` holds an older
-     archive deployment, it is moved aside and its `.env` is kept;
+     deployment that is not a git clone, it is moved aside and its `.env` is
+     kept;
    - refuses to deploy if tracked files were edited on the server;
    - generates `.env` (database passwords and session secret) if it is
      missing;
@@ -104,125 +324,100 @@ start; on an empty database it builds the full v1 schema on top of
    )
    ```
 
-   When the block finishes, open the HTTP URL in a browser and sign in with a
-   demo account below. The block needs `git` on the server (`git --version`); Ubuntu server images
-   include it. Run `docker image prune -f` and `docker builder prune -f` now and
-   then to free disk space from old images and builds.
+   When the block finishes, open http://c3322-pg19.cs.hku.hk and sign in with
+   a demo account. Run `docker image prune -f` and `docker builder prune -f`
+   now and then; the server has 8.6 GB of disk.
 
-### Demo accounts and data
+### Update the deployment
 
-On an empty database the one-shot `seed` service
-([`backend-beta/src/ops/demo_seed.js`](backend-beta/src/ops/demo_seed.js))
-creates 5 clubs, 5 venues and 25 events through the real API: 6 past events
-with check-ins (for the reports), 15 upcoming events (one full with a
-waitlist, members-only events with pending requests), one cancelled event and
-three still in the approval workflow. Every account uses the password
-**`clubspacetest123`**; the names are fictional and the addresses use the
-reserved `.example` domain. To use another password, add
-`DEMO_ACCOUNT_PASSWORD=...` (12+ characters) to `.env` before the first
-deployment; `DEMO_ACCOUNT_PASSWORD=` with no value deploys without demo data.
-The repository is public, so anyone on HKUVPN who reads this can sign in to
-the demo accounts, including the venue administrator.
+Push to `main` on GitHub, then run step 2 again. It backs up the database,
+pulls the new commits and rebuilds; the `migrate` service applies any new
+migrations before the API and worker start, and existing data (including the
+demo data) is left alone.
 
-| Account | Role |
-| --- | --- |
-| `admin@clubspace.example` | Venue administrator (approves venue requests) |
-| `president.<club>@clubspace.example` | President |
-| `committee1.<club>@clubspace.example`, `committee2.<club>@…` | Committee |
-| `member1.<club>@clubspace.example` to `member3.<club>@…` | Member |
-| `student1@clubspace.example` to `student6@…` | Student with no club (1 to 3 have a pending join request) |
+If `migrate` exits with an error, the API and worker do not start; read
+`docker compose logs migrate`. The runner refuses a changed checksum or an
+interrupted migration; do not blindly retry. Restore the backup or inspect
+the partial schema before continuing.
 
-`<club>` is `photo` (Photography Society), `film` (Film Society), `debate`
-(Debate Club), `hiking` (Hiking Club) or `robotics` (Robotics Lab). Good
-places to start: `president.photo` has an event awaiting sign-off,
-`committee1.debate` has one waiting for the president to publish,
-`admin` has a venue request to decide, and the Hiking Club's Lion Rock
-Sunrise Hike is full with two people on the waitlist.
+### Start over with a fresh database
 
-### Give another account organizer access
-
-Normally the club's president appoints committee members in the app
-(Organizer → Your clubs → Members and roles). For an operator override,
-register an account on the website, then paste this block in the SSH session
-and enter the account's email when prompted. Sign out and back in to see
-Organizer.
+This deletes every account, club, event, notification and uploaded cover on
+the server, after saving a backup. Then run step 2 again; it recreates the
+schema and the demo data.
 
 ```bash
 (
   set -eu
   cd "$HOME/clubspace-pg19"
-  printf 'Registered organizer email: '
-  IFS= read -r organizer_email
-  docker compose exec -T -e ORGANIZER_EMAIL="$organizer_email" \
-    backend node --input-type=module - <<'NODE'
-import pool from './src/config/db.js';
-
-try {
-  const email = process.env.ORGANIZER_EMAIL.trim().toLowerCase();
-  const [[target]] = await pool.execute(
-    "SELECT u.id AS user_id, c.id AS club_id FROM users u CROSS JOIN clubs c WHERE u.email = ? AND c.name = 'Photography Society'",
-    [email],
-  );
-  if (!target) throw new Error('Register this email on the website first.');
-  await pool.execute(
-    "INSERT INTO memberships (user_id, club_id, role) VALUES (?, ?, 'committee') ON DUPLICATE KEY UPDATE role = IF(role = 'president', 'president', 'committee')",
-    [target.user_id, target.club_id],
-  );
-  console.log('Organizer access is ready for Photography Society.');
-} finally {
-  await pool.end();
-}
-NODE
+  mkdir -p "$HOME/clubspace-backups"
+  if docker compose ps --status running db | grep -q db; then
+    umask 077
+    docker compose exec -T db sh -c 'exec mysqldump --single-transaction --routines --triggers -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' \
+      > "$HOME/clubspace-backups/clubspace-before-reset-$(date -u +%Y%m%dT%H%M%SZ).sql"
+  fi
+  docker compose down -v
 )
 ```
 
-Use `docker compose up -d --build` again for code updates. Keep the
-`db_data` volume and back it up before schema changes. The initialization
-scripts run only for an empty database.
+### Restore a backup
 
-### Event cover images and migrations
+Backups are plain SQL dumps in `~/clubspace-backups`. To load one into the
+running database (this replaces the tables it contains):
+
+```bash
+cd ~/clubspace-pg19
+docker compose exec -T db sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' < ~/clubspace-backups/FILE.sql
+```
+
+## Operations
+
+All commands run in `~/clubspace-pg19` on the server (or the repository
+folder of a rebuild).
+
+### Cover images, migrations and environment
 
 Event cover images are stored under `COVER_DIR` (`/app/data/covers` in the
-backend container) on the named Docker volume `cover_data`. Back it up with
-the database volume: `docker run --rm -v clubspace-pg19_cover_data:/data -v
-"$PWD":/backup alpine tar -czf /backup/covers.tgz -C /data .`. A scheduled
-sweep removes files that no event references.
+backend container) on the `cover_data` volume. Back it up with the database:
+`docker run --rm -v clubspace-pg19_cover_data:/data -v "$PWD":/backup alpine
+tar -czf /backup/covers.tgz -C /data .`. A scheduled sweep removes files that
+no event references.
 
-Schema changes after the beta baseline are ordered migrations in
-`backend-beta/db/migrations`. The `migrate` Compose service runs them on every
-`docker compose up`, before the API and worker start; back up the database
-before deploying a release that adds one. The runner takes a
+Schema changes after the baseline are ordered migrations in
+`backend-beta/db/migrations`. The `migrate` service runs them on every
+`docker compose up`, before the API and worker start. The runner takes a
 database lock, verifies the checksum of each applied file, and records each
-version only after it finishes. Set `MIGRATION_DB_USER` and
-`MIGRATION_DB_PASSWORD` when the application account has no DDL rights.
-`APP_ORIGIN` (default `http://c3322-pg19.cs.hku.hk`) must match the address
-users open, because the v1 API rejects other origins.
+version only after it finishes.
 
-### Worker, provisioning and testing
+| `.env` variable | Purpose |
+| --- | --- |
+| `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` | MySQL root and application passwords (required) |
+| `SESSION_SECRET` | Signs session cookies (required) |
+| `APP_ORIGIN` | Exact site address; default `http://c3322-pg19.cs.hku.hk` |
+| `WEB_PORT` | Host port for the website; default `80` |
+| `DEMO_ACCOUNT_PASSWORD` | Demo account password; default `clubspacetest123`, empty to skip demo data |
+| `LEGACY_DATETIME_TIMEZONE` | Only for migrating a pre-v1 database that stored bookings in local time (`Asia/Taipei`) |
 
-The `worker` Compose service sends reminders and daily club digests, and keeps a
-heartbeat in `worker_heartbeats`; run exactly one. The demo data covers
-accounts on a fresh database. For a database without it, give every club
-without a president a generated fictional one with
-`docker compose exec backend node src/ops/provision-dev.js` (set
-`DEV_ACCOUNT_PASSWORD` or note the generated password it prints once). The first
-migration of a database with legacy bookings needs
-`LEGACY_DATETIME_TIMEZONE=Asia/Taipei` to be set to confirm how times were stored.
+### Worker
 
-Backend tests: `cd backend-beta && npm test` runs the unit tests. The database
-tests run only against a disposable database: create one (its name must contain
-`test`), put `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER`, `TEST_DB_PASSWORD`
-and `TEST_DB_NAME` in a file outside the repository, and run
-`TEST_ENV_FILE=/path/to/that/file npm test`. The tests drop and recreate tables
-inside that database only and refuse `DB_NAME` or any name without `test`.
-Frontend tests: `cd frontend-beta && npm test`, `npm run lint`, `npm run build`.
+The `worker` service sends reminders and daily club digests, and keeps a
+heartbeat in `worker_heartbeats`; run exactly one. A job that used up its
+attempts stays `failed`. After fixing the cause, queue it again (the command
+writes an audit entry with the operator name you give):
+
+```bash
+docker compose exec -T backend node src/ops/retry-notification-job.js JOB_ID "your name"
+```
+
+For a database without demo data, `docker compose exec backend node
+src/ops/provision-dev.js` gives every club without a president a generated
+fictional one (set `DEV_ACCOUNT_PASSWORD` or note the password it prints once).
 
 ### Assign a venue administrator
 
-Register a separate account on the website first. An administrator who is also
-committee for a club cannot decide that club's requests. Run this after the
-migrations, because they add `platform_role`. In the server SSH session, paste
-this block and enter the registered administrator's email:
+Register the account on the website first. An administrator who is also
+committee for a club cannot decide that club's requests. Paste this block and
+enter the registered email:
 
 ```bash
 (
@@ -242,308 +437,124 @@ NODE
 )
 ```
 
-### Retry a failed notification job
-
-A job that used up its attempts stays `failed` and is never retried on its own.
-After fixing the cause, queue it again; the command writes an audit entry with
-the operator name you give:
-
-```bash
-docker compose exec -T backend node src/ops/retry-notification-job.js JOB_ID "your name"
-```
-
-### Start over with a fresh database
-
-This deletes every account, club, event, notification and uploaded cover on
-the server. Back up first if anything should be kept. In the server SSH
-session:
-
-```bash
-(
-  set -eu
-  cd "$HOME/clubspace-pg19"
-  mkdir -p "$HOME/clubspace-backups"
-  if docker compose ps --status running db | grep -q db; then
-    umask 077
-    docker compose exec -T db sh -c 'exec mysqldump --single-transaction --routines --triggers -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' \
-      > "$HOME/clubspace-backups/clubspace-before-reset-$(date -u +%Y%m%dT%H%M%SZ).sql"
-  fi
-  docker compose down -v
-)
-```
-
-Then run step 2 above again. It rebuilds the images, creates the schema and
-catalog, runs the migrations and creates the demo accounts and events.
-
-### Update the deployment
-
-Push to `main` on GitHub, then run step 2 again. It backs up the database,
-pulls the new commits and rebuilds; the `migrate` service applies any new
-migrations before the API and worker start, and the demo data is left alone.
-
-If `migrate` exits with an error, the API and worker do not start; read
-`docker compose logs migrate`. The runner refuses a changed checksum or an
-interrupted migration; do not blindly retry. Restore the backup or inspect
-the partial schema before continuing. A database that still holds beta-era
-bookings (stored as UTC+8 local time) needs `LEGACY_DATETIME_TIMEZONE=Asia/Taipei`
-in `.env` for its first migration; a fresh database needs nothing.
-
-## Beta interview submission
-
-The course guideline requires the beta source code as a ZIP file in the
-Moodle submission box before the interview starts. It also requires the beta
-source to be committed and pushed to the team GitHub repository using a tag.
-
-Prepare the ZIP from the final, tagged beta source so it contains the
-proposal, frontend, backend, database schema, Dockerfiles, Compose file, and
-README. Keep generated dependencies, database volumes, SSH keys, and real
-secrets out of the ZIP. The server deploys straight from GitHub (see
-"Deploy to the Group 19 server").
+Club roles are normally managed in the app: the president appoints committee
+members under Organizer → Your clubs → Members and roles.
 
 ## Local development
 
-## Prerequisites
+For hot reload while developing. To run the whole stack locally without
+installing anything but Docker, follow the
+[rebuild guide](#rebuild-from-scratch-for-tas-and-examiners) with
+`APP_ORIGIN=http://localhost` instead.
 
-- Node.js 22 or later
-- MySQL running locally on port `3306`
-- A MySQL client, such as the `mysql` command-line client, MySQL Workbench, or
-  Sequel Ace
+**Prerequisites:** Node.js 22 or later, MySQL 8.4 on port 3306, and a MySQL
+client (the `mysql` CLI, MySQL Workbench or Sequel Ace). On macOS:
+`brew install mysql && brew services start mysql`.
 
-If MySQL is not installed yet, install and start it using your operating
-system's preferred package manager or installer. For example, on macOS with
-Homebrew:
-
-```bash
-brew install mysql
-brew services start mysql
-```
-
-## First-time database setup
-
-1. Connect to your local MySQL server with an administrative account. This can
-   be done through any SQL client. With the MySQL command-line client, for
-   example:
-
-   ```bash
-   mysql -u root -p
-   ```
-
-   Use your installation's host, port, and root-password settings. A fresh
-   Homebrew MySQL installation commonly starts with an empty root password.
-
-2. Create the project database and its application user. Replace
-   `choose-a-local-password` with a private local password.
+1. **Create the database and user** as a MySQL administrator (for example
+   `mysql -u root -p`). Replace `choose-a-local-password`:
 
    ```sql
-   CREATE DATABASE IF NOT EXISTS clubspace
-     CHARACTER SET utf8mb4
-     COLLATE utf8mb4_unicode_ci;
-
-   CREATE USER IF NOT EXISTS 'clubspace_app'@'localhost'
-     IDENTIFIED BY 'choose-a-local-password';
-
-   CREATE USER IF NOT EXISTS 'clubspace_app'@'127.0.0.1'
-     IDENTIFIED BY 'choose-a-local-password';
-
+   CREATE DATABASE IF NOT EXISTS clubspace CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER IF NOT EXISTS 'clubspace_app'@'localhost' IDENTIFIED BY 'choose-a-local-password';
+   CREATE USER IF NOT EXISTS 'clubspace_app'@'127.0.0.1' IDENTIFIED BY 'choose-a-local-password';
    GRANT ALL PRIVILEGES ON clubspace.* TO 'clubspace_app'@'localhost';
    GRANT ALL PRIVILEGES ON clubspace.* TO 'clubspace_app'@'127.0.0.1';
-   FLUSH PRIVILEGES;
    ```
 
-3. Run [`backend-beta/db/schema.sql`](backend-beta/db/schema.sql), then
-   [`backend-beta/db/seed.sql`](backend-beta/db/seed.sql), against the `clubspace` database. In a
-   GUI client, open each file and execute all queries. With the MySQL CLI:
-
-   ```bash
-   mysql -u clubspace_app -p clubspace < backend-beta/db/schema.sql
-   mysql -u clubspace_app -p clubspace < backend-beta/db/seed.sql
-   ```
-
-   > `schema.sql` drops and recreates the project tables. Use it only when you
-   > intentionally want to reset local development data.
-
-   For an existing beta database, first apply the legacy SQL files in order; they preserve
-   existing records, add club join-request notifications, notify organizers
-   about any join requests already pending, and create the club action log.
-   The action log records actions from the time migration 004 is applied. With
-   the MySQL CLI:
-
-   ```bash
-   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/001-normalize-event-registration-statuses.sql
-   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/002-club-join-request-notifications.sql
-   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/003-backfill-pending-join-request-notifications.sql
-   mysql -u clubspace_app -p clubspace < backend-beta/db/legacy-sql/004-club-action-log.sql
-   ```
-
-   Then apply the tracked migrations, after a backup, with
-   `cd backend-beta && LEGACY_DATETIME_TIMEZONE=Asia/Taipei node src/ops/migrate.js`.
-
-4. Create the untracked local backend configuration:
+2. **Configure the backend.** `.env` is git-ignored; never commit it.
 
    ```bash
    cd backend-beta
-   cp .env.example .env
+   cp .env.example .env    # then set DB_PASSWORD and a random SESSION_SECRET
+   npm ci
    ```
 
-   Update the password in `.env` to match the one used for `clubspace_app`:
+3. **Build the schema and demo data** in the empty database (from
+   `backend-beta`, with the values from `.env`):
 
-   ```env
-   DB_HOST=127.0.0.1
-   DB_PORT=3306
-   DB_NAME=clubspace
-   DB_USER=clubspace_app
-   DB_PASSWORD=choose-a-local-password
-   SESSION_SECRET=choose-a-random-local-secret
+   ```bash
+   mysql -u clubspace_app -p clubspace < db/schema.sql
+   mysql -u clubspace_app -p clubspace < db/deployment-seed.sql
+   node --env-file=.env src/ops/migrate.js
+   DEMO_ACCOUNT_PASSWORD=clubspacetest123 node --env-file=.env src/ops/seed-demo.js
    ```
 
-   `.env` is ignored by Git and must never be committed.
+   `schema.sql` drops and recreates the baseline tables. To reset local data,
+   drop and recreate the `clubspace` database, then repeat this step.
 
-## Run locally
+4. **Run** in two terminals from the repository root:
 
-Open two terminals from the repository root.
+   ```bash
+   cd backend-beta && npm run dev
+   ```
 
-### Terminal 1 — API
+   ```bash
+   cd frontend-beta && npm ci && npm run dev
+   ```
 
-```bash
-cd backend-beta
-npm install
-npm run dev
-```
+   Open http://localhost:5173. Vite proxies `/api` to `http://localhost:3000`
+   (set `CLUBSPACE_API_TARGET` to change it). `http://localhost:3000/api/health`
+   returns `{"status":"ok"}` when the API can reach MySQL. The local
+   `APP_ORIGIN` in `backend-beta/.env.example` is already
+   `http://localhost:5173`.
 
-The API is ready when the terminal prints:
+## Tests
 
-```text
-API on http://localhost:3000
-```
+- **Backend:** `cd backend-beta && npm test` runs the unit tests. Database
+  tests run only against a disposable database whose name contains `test`:
+  put `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER`, `TEST_DB_PASSWORD` and
+  `TEST_DB_NAME` in a file outside the repository and run
+  `TEST_ENV_FILE=/path/to/that/file npm test`. They refuse `DB_NAME` or any
+  name without `test`.
+- **Frontend:** `cd frontend-beta && npm test`, `npm run lint`, `npm run build`.
 
-Verify the database connection at:
+## API
 
-```text
-http://localhost:3000/api/health
-```
-
-Expected response:
-
-```json
-{ "status": "ok" }
-```
-
-### Terminal 2 — frontend
-
-```bash
-cd frontend-beta
-npm ci
-npm run dev
-```
-
-Open the URL printed by Vite, normally `http://localhost:5173`.
-
-The beta frontend proxies `/api` to `http://localhost:3000` for development and
-build preview. Set `CLUBSPACE_API_TARGET` before starting Vite if the backend runs
-elsewhere. The beta's live client uses the API provided by `backend-beta`.
-Creating an event books the venue and publishes immediately on this provider.
-See the [beta integration notes](frontend-beta/INTEGRATION.md) for fixture
-preview and the planned v1 workflows.
-
-## API routes
-
-The frontend uses only the versioned API under `/api/v1`; its contract is in
+The SPA uses only the versioned REST API under **`/api/v1`**. The full
+contract (DTOs, filters, every error code) is in
 [`handoff/api.md`](openspec/changes/expand-clubspace-workflows/handoff/api.md)
-and [`handoff/beta-feedback.md`](openspec/changes/expand-clubspace-workflows/handoff/beta-feedback.md).
-The unversioned beta routes below stay mounted for compatibility only; no page
-calls them, and new features exist only on `/api/v1`.
+with the additions in
+[`handoff/beta-feedback.md`](openspec/changes/expand-clubspace-workflows/handoff/beta-feedback.md).
 
-| Method | Route                         | Purpose                                    |
-| ------ | ----------------------------- | ------------------------------------------ |
-| `GET`  | `/api/health`                 | Confirm API-to-MySQL connectivity          |
-| `GET`  | `/api/events`                 | Browse saved events                        |
-| `GET`  | `/api/events/mine`             | List your joined, waitlisted, and past event participation (signed-in users) |
-| `GET` | `/api/events/:event_id/participants` | List joined and waitlisted participants (organizing club committee or president) |
-| `POST` | `/api/events`                 | Create an event and venue booking together (committee or president of the club) |
-| `PATCH` | `/api/events/:event_id` | Edit an event and its booking (organizing club committee or president; notifies signups) |
-| `DELETE` | `/api/events/:event_id` | Cancel an event (organizing club committee or president; notifies signups) |
-| `GET` | `/api/notifications` | List signed-in user's notifications |
-| `PATCH` | `/api/notifications/:notification_id/read` | Mark a notification as read |
-| `GET`  | `/api/venues?date=YYYY-MM-DD` | Show venue availability for a date         |
-| `GET`  | `/api/clubs`                  | Browse clubs and your membership roles     |
-| `POST` | `/api/clubs`                  | Create a club (creator becomes president)   |
-| `GET`  | `/api/memberships`            | List your club memberships                 |
-| `POST` | `/api/clubs/:club_id/membership` | Request to join a club                   |
-| `GET`  | `/api/clubs/:club_id/join-requests` | List pending requests (committee or president) |
-| `POST` | `/api/clubs/:club_id/join-requests/:request_id/review` | Accept or reject a request |
-| `DELETE` | `/api/clubs/:club_id/membership` | Leave a club                            |
-| `DELETE` | `/api/clubs/:club_id/committee` | Leave the committee but remain a member |
-| `GET`  | `/api/clubs/:club_id/members` | List club members (committee only)          |
-| `POST` | `/api/clubs/:club_id/members/:user_id/committee` | Promote a member to committee (committee or president) |
-| `DELETE` | `/api/clubs/:club_id/members/:user_id/committee` | President demotes committee member to regular member |
-| `POST` | `/api/clubs/:club_id/presidency` | Transfer presidency to an existing committee member (requires typing the club name) |
-| `DELETE` | `/api/clubs/:club_id`       | Delete a club and its events/bookings (president only; requires typing the club name) |
-| `POST` | `/api/auth/register`          | Create an account with name, email, student ID, and password |
-| `POST` | `/api/auth/login`             | Log in with email and password             |
-| `GET`  | `/api/auth/me`                | Return the currently logged-in account     |
-| `PUT`  | `/api/auth/me`                | Update name/email; password changes require current password |
-| `DELETE` | `/api/auth/me`              | Delete the account and its memberships and event signups (requires password) |
-| `POST` | `/api/auth/logout`            | Log out                                    |
+**Conventions.** JSON bodies; success is `{ "data": ..., "meta": ... }` and
+errors are `{ "error": { "code", "message", "fields", "request_id" } }`. The
+session is an HttpOnly cookie; every change also needs the `X-CSRF-Token`
+header (from `GET /auth/csrf` or the sign-in response) and an `Origin` equal
+to `APP_ORIGIN`. Times are ISO 8601 UTC.
 
-Passwords are stored as salted scrypt hashes. Login state uses a local
-in-memory session and is cleared when the API restarts; account records remain
-in MySQL. Logged-in committee members and presidents can view their club's
-roster or promote members to committee. Club creators become president;
-presidents can transfer the role to a committee member or delete their club.
-Both destructive actions require typing the exact club name. Registration and password changes
-require matching confirmation fields. Changing a password and deleting an
-account require the current password; editing a name or email does not.
-Deleting an account also removes its memberships and event signups through the
-database foreign-key cascades. Committee members can leave their committee
-role while remaining ordinary club members; the roster is loaded on demand
-inside a collapsible list and can be filtered by member name.
-Joining a club requires a signed-in user to request membership. Requests are
-stored in `club_join_requests`; club committee members and presidents receive
-an in-app pending-request count and can accept or reject requests. Accepting
-creates a regular membership, while a rejected user can request again.
+| Status | Used for |
+| --- | --- |
+| `200` / `201` / `202` / `204` | Read or update / created / request queued for approval (join requests) / no body |
+| `400` | Malformed JSON |
+| `401` | Not signed in, or wrong credentials |
+| `403` | Not allowed, bad CSRF token or origin, deciding your own club's request |
+| `404` | Missing, or hidden from this user |
+| `409` | Conflicts: venue slot taken, event full, stale version, invalid state |
+| `413` / `415` / `422` | Upload too large / not JPEG or WebP / validation failed |
+| `429` | Rate limited (with `Retry-After`) |
+| `500` / `503` | Unexpected error / database unavailable |
 
-The API validates requests and returns `422` for invalid input and `409` when a
-venue time slot is already booked.
-Only signed-in committee members and presidents can book venues and create
-events for clubs where they hold those roles. A user with those roles in
-multiple clubs can book for any of them; regular members can still join events
-but cannot make venue bookings.
-Event signups are capped at the venue capacity recorded for the event. Full
-events show an `Event full` label and allow users to join the waitlist. When a
-joined participant leaves, the earliest waitlisted participant is promoted
-automatically. Waitlist order is based on signup time, and users can leave the
-waitlist at any time. Joining an event or its waitlist requires signing in.
-Organizing club committee members and presidents can cancel their events.
-Cancellation releases the venue booking and creates persistent in-app
-notifications for all current participants and waitlisted users. Signed-in
-users can see and mark notifications as read on the Events page.
-Organizing club committee members and presidents can also edit event details.
-Edits update the event and venue booking together, reject conflicting venue
-times, update the event capacity to match the selected venue, and notify
-participants and waitlisted users. They can view event participants, including
-waitlisted users, from the event details.
+| Area | Endpoints (relative to `/api/v1`) |
+| --- | --- |
+| Auth and profile | `GET /auth/csrf`, `POST /auth/register`, `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`, `GET`/`PATCH /profile` |
+| Clubs | `GET /clubs`, `GET /me/memberships`, `PUT`/`DELETE /clubs/:id/membership`, `GET /clubs/:id/join-requests`, `POST /clubs/:id/join-requests/:request_id/review`, `GET /clubs/:id/members`, `PATCH /clubs/:id/members/:user_id`, `POST /clubs/:id/presidency` |
+| Venues and bookings | `GET /venues`, `GET /venues/:id/calendar`, `GET /bookings`, `POST /bookings/:id/decision`, `POST /bookings/:id/signoff` |
+| Events | `GET`/`POST /events`, `GET`/`PATCH /events/:id`, `POST /events/:id/publish`, `POST /events/:id/signoff`, `POST /events/:id/cancel`, `PUT`/`DELETE /events/:id/cover`, `GET /me/events`, `GET /me/signoffs` |
+| Participation | `POST`/`DELETE /events/:id/registration`, `GET /me/registrations`, `GET /events/:id/participants`, `GET /events/:id/join-requests`, `POST /events/:id/join-requests/:user_id/decision` |
+| Check-in | `POST /events/:id/checkin`, `POST /events/:id/attendance`, `GET /events/:id/attendance`, `PUT`/`DELETE /events/:id/attendance/:user_id` |
+| Tags | `GET`/`POST /tags`, `PATCH /tags/:id`, `GET`/`POST /clubs/:id/tags`, `DELETE /clubs/:id/tags/:tag_id` |
+| Notifications | `GET /notifications`, `PATCH /notifications/:id/read`, `GET /notifications/stream` (Server-Sent Events) |
+| Reports | `GET /clubs/:id/reports`, `GET /clubs/:id/reports/effectiveness`, `POST /events/:id/views` |
 
-## Verify the end-to-end flow
+`GET /api/health` (outside v1) returns `{"status":"ok"}` or `503`. The older
+unversioned beta routes (documented in
+[`backend-beta/API.md`](backend-beta/API.md)) are still mounted for
+compatibility, but no page uses them.
 
-1. Start MySQL, the API, and the frontend.
-2. In the frontend, choose an available venue and time slot.
-3. Create an event with a future date.
-4. Refresh the Events and Venues pages.
-5. In any SQL client, confirm the saved rows:
+## Credits and academic integrity
 
-   ```sql
-   SELECT e.id, e.title, c.name AS club, v.name AS venue, e.start_time
-   FROM events e
-   JOIN clubs c ON c.id = e.club_id
-   JOIN bookings b ON b.id = e.booking_id
-   JOIN venues v ON v.id = b.venue_id
-   ORDER BY e.id;
-   ```
-
-This demonstrates the React → Express → MySQL → React path.
-
-## Reset local demo data
-
-To reset local project data, stop the API and run `schema.sql` followed by
-`seed.sql` again using your MySQL client. This permanently removes local rows
-created after the last seed, including test bookings and events.
+Third-party libraries, UI components and assets are credited on the in-app
+[credits page](http://c3322-pg19.cs.hku.hk/credits) (`/credits`). All project
+code was written by the team members listed above, with AI tools used as
+allowed by the course policy.
