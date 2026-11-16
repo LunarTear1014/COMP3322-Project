@@ -17,7 +17,7 @@ const LOGIN = {
 };
 const PROFILE = {
   name: { kind: "string", min: 1, max: 100 },
-  email: REGISTER.email,
+  email: { ...REGISTER.email, required: false },
 };
 
 const ip_of = (req) => req.ip || req.socket?.remoteAddress || "unknown";

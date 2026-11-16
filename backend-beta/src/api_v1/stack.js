@@ -1,6 +1,9 @@
 import { create_password_hasher, create_throttle } from "../features/users/password_hasher.js";
 import { create_auth_router } from "./auth.js";
 import { identify } from "./common.js";
+import { create_clubs_router } from "./clubs.js";
+import { create_events_router } from "./events.js";
+import { create_registration_router } from "./registration.js";
 
 // Assembles every v1 router for create_app({ v1_routers }). `clock()` returns
 // the current Date (injectable for tests). Route modules are added here as they
@@ -20,7 +23,7 @@ function create_v1_stack({
     register_throttle: create_throttle({ limit: throttle_limits.register, window_ms }),
     ip_throttle: create_throttle({ limit: throttle_limits.ip, window_ms }),
   };
-  const routers = [identify(pool), create_auth_router(deps)];
+  const routers = [identify(pool), create_auth_router(deps), create_clubs_router(deps), create_events_router(deps), create_registration_router(deps)];
   return { deps, routers, is_multipart_route: () => false };
 }
 

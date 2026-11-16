@@ -63,6 +63,12 @@ function check_field(spec, value) {
       return spec.values.includes(value) ? { value } : { error: `Use one of: ${spec.values.join(", ")}.` };
     case "bool":
       return typeof value === "boolean" ? { value } : { error: "Use true or false." };
+    case "id_array": {
+      if (!Array.isArray(value) || !value.every((item) => Number.isSafeInteger(item) && item > 0)) return { error: "Send a list of IDs." };
+      if (new Set(value).size !== value.length) return { error: "Each item can appear once." };
+      if (value.length < (spec.min ?? 0) || value.length > (spec.max ?? 50)) return { error: `Choose ${spec.min ?? 0} to ${spec.max ?? 50}.` };
+      return { value };
+    }
     case "date": {
       const date = parse_campus_date(value);
       return date ? { value } : { error: "Use a real date as YYYY-MM-DD." };
