@@ -21,7 +21,19 @@ async function enqueue(conn, { action_key, type, event_id = null, booking_id = n
 
 // Claims due jobs (and expired leases that still have attempts left) and commits
 // the claim before any domain lock is taken.
-async function claim_due(pool, { now, limit = 1 }) {
+// Two workers can deadlock on the expired-lease update; the loser simply retries.
+async function claim_due(pool, options) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await claim_once(pool, options);
+    } catch (error) {
+      if (![1213, 1205].includes(error?.errno) || attempt >= 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10 * attempt + Math.random() * 40));
+    }
+  }
+}
+
+async function claim_once(pool, { now, limit = 1 }) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();

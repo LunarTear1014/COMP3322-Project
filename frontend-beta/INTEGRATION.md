@@ -33,9 +33,12 @@ Fixture preview (`npm run dev:fixtures`, sample data, read-only), 2026-11-16:
 - Screens were looked at in the fixture preview at desktop and 390 px. A full screenshot set against the key-screens
   canvas, a keyboard-only walk with 200% zoom, and reduced-motion checks in a real browser were not recorded.
 
-Real provider: **not verified.** The legacy `/api` provider (`backend-beta`) was not run against MySQL in this
-session, and the v1 cover, calendar, booking review and registration routes are not implemented there yet.
-Covers, the admin queue, reports, SSE and tags therefore work only against the fixtures. The request flow's
-multipart upload and the notification stream client are covered by unit tests with stubbed `fetch`.
+Real v1 provider (second run): `backend-beta/scripts/serve-dev-db.mjs` boots the real API on the disposable MySQL with demo accounts, and
+`CLUBSPACE_API_TARGET=http://127.0.0.1:3300 npx vite --mode v1 --port 5199` serves the frontend against it (`APP_ORIGIN` must equal the Vite origin).
+Checked by hand in the browser pane: sign-in through the form (CSRF, session cookie, redirect to Explore), Explore, the organizer home after creating
+a request through the API, and the tab bar at phone width. The backend itself is covered by 164 DB tests (events, registration, sign-off, tags,
+check-in, report, covers, worker). Not done against the real provider: the full UI walk of request, approval, publication, registration, check-in
+and report, the cover upload from the browser, and the live SSE toast. Those flows are proven by the UI tests with stubs and by the API tests, not
+end to end in a browser.
 
 Navigation changed: Clubs is a directory at `/clubs` (join and leave); club management moved to `/organizer/clubs`.

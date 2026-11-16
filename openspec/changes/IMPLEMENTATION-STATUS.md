@@ -54,7 +54,7 @@ DB tests are skipped. Last full run: 164 tests pass.
 | 7.1 calendar | done | `engagement.db.test.js`: confirmed only, anonymous drafts, 31-day bound, cross-midnight legacy interval | |
 | 7.2 club report | done | zero-filled Hong Kong days, clipped hours, no attendance fields, committee-only | |
 | 7.3 frozen contract fixtures | missing | | |
-| 8.1-8.8 frontend integration | partial | the frontend already speaks v1 in fixtures mode (see refresh); `--mode v1` against the real backend is not walked through in a browser | 8.8 coordinated cutover not done, by decision |
+| 8.1-8.8 frontend integration | partial | the frontend already speaks v1 in fixtures mode (see refresh); `--mode v1` against the real backend was smoke-tested by hand (sign-in, Explore, organizer home; see INTEGRATION.md) but the full UI walk was not done | 8.8 coordinated cutover not done, by decision |
 | 9.1 full MySQL suite | done | 164 tests on MySQL 8.4.13 incl. R1-R9 and migration and restart; command above | |
 | 9.2 production Compose and gate | partial | `compose.yaml` worker and `cover_data`, schema gate in `index.js` and `worker.js`, `APP_ORIGIN` | migration account and runtime privilege split, secrets template |
 | 9.3-9.5 | missing | | needs a Linux VM |
