@@ -80,7 +80,8 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 | 7.1 screens at five widths, both themes | partial | contrast test `tests/contrast.test.js`; browser measurement: no horizontal overflow at 320/390/768/1024/1440 on 11 routes (fixed a table `.cs-sr` overflow); spot screenshots at desktop and 390 px | no stored screenshot set, no canvas comparison, dark mode checked only as the browser pane's scheme |
 | 7.2 keyboard walk, 200% zoom, reduced motion | partial | focus order, Escape, focus return, arrow keys covered by UI tests; reduced-motion rules in `components.css` and `app.css` | no manual keyboard and zoom walk recorded |
 | 7.3 run builds, record results | done | `frontend-beta/INTEGRATION.md` "Verification record"; backend 79 and frontend 45 node plus 79 vitest tests pass, build ok, lint 0 errors | real-provider run not possible (B1), recorded as such; there was no "missing filters" note in the beta to remove |
-| 8.1-8.6 | missing | | |
+| 8.1 notification stream client | done | `src/hooks/useLiveInbox.js`, `src/App.jsx`; `tests/liveInbox.ui.test.jsx` (5: stream URL, badge and toast from pushed events, refetch event, 60 s fallback on error and stop on reopen, close on unmount, 60 s poll without EventSource); `Last-Event-ID` is sent by the browser on reconnect; inbox page refresh is 60 s | against a fake EventSource only; the real stream route is not mounted in the API (needs v1 auth, B1). The legacy `/api` provider (production mode) has no stream, so it keeps its 30 s poll |
+| 8.2-8.6 | missing | | |
 
 ## Base commits from teammates
 
@@ -91,5 +92,12 @@ Legend: done = code and a passing test prove it (ticked). partial = some code ex
 (none yet)
 
 ## Deviations
+
+- Legacy `/api` routes stay mounted and used by the beta frontend (`mainBackend.js` adapter); v1 currently serves only `/config` and `/auth/csrf`. No 410 retirement of old URLs yet.
+- Club management moved to `/organizer/clubs` and `/clubs` became the directory (tab destinations still an open review decision).
+- Migration numbering: workflow migrations 002, 003 plus 010-015 (feedback and covers); 001, 004-006 (tracking is in the runner; backfill, constraints, cutover marker) are not written. Legacy loose SQL moved to `db/legacy-sql/`.
+- Beta `participations` keeps its `pending`/`unsuccessful` vocabulary next to the spec's `waitlisted`/`left`/`cancelled` (superset enum in 002) until a cutover mapping migration exists.
+- `bookings.status` and `events.status` keep legacy defaults (`confirmed`/`published`) in 002 so the beta API keeps working.
+- Mark all as read sends one PATCH per message (no bulk endpoint). Club cards show counts only if the API supplies them.
 
 (none yet)

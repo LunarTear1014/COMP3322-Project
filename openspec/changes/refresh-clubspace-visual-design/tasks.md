@@ -52,7 +52,7 @@
 
 ## 8. Beta feedback screens (backend in expand-clubspace-workflows section 10)
 
-- [ ] 8.1 Notification stream client: SSE with Last-Event-ID, badge and toast updates, and 60 s polling fallback. Remove the 30 s polling.
+- [x] 8.1 Notification stream client: SSE with Last-Event-ID, badge and toast updates, and 60 s polling fallback. Remove the 30 s polling.
 - [ ] 8.2 Role-aware organizer UI: role chips, the president's sign-off queue on Organizer home, "Waiting for the president" and returned-reason states, the members page (appoint, remove, transfer with confirmation), and president-only Cancel event.
 - [ ] 8.3 Tags: campus tag chips in filters (`tag` in the URL), tags on cards, the event page and the club page, and a tag picker in request step 2 and Edit, with create-club-tag.
 - [ ] 8.4 Check-in: Open check-in, the large code and attendee list with mark and unmark on Manage event, and a student Check in action in the sticky bar with code entry.

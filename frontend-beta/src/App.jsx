@@ -21,13 +21,14 @@ import { Organizer } from './pages/Organizer'
 import { ManageEvent } from './pages/ManageEvent'
 import { Admin } from './pages/Admin'
 import { Notifications } from './pages/Notifications'
-import { ToastProvider } from './components/ui'
+import { ToastProvider, useToast } from './components/ui'
+import { useLiveInbox } from './hooks/useLiveInbox'
 import { usePhone } from './hooks/useMediaQuery'
 import './App.css'
 
 const INBOX_POLL_MS = 30000
 
-function Shell() {
+function Shell({ streamOverride }) {
   const [session, setSession] = useState(null)
   const [boot, setBoot] = useState(true)
   const [bootError, setBootError] = useState(null)
@@ -71,8 +72,18 @@ function Shell() {
     }
   }, [session])
 
+  // The v1 provider streams notifications (SSE) with a 60 s polling fallback.
+  // The legacy beta provider has no stream, so it keeps polling every 30 s.
+  const toast = useToast()
+  useLiveInbox({
+    enabled: Boolean(session) && !usesMainBackend,
+    refreshInbox,
+    onUnread: setUnread,
+    onNotification: notification => toast.show({ message: notification.title, tone: 'info', action: { label: 'View', onClick: () => navigate('/notifications') } }),
+    streamFactory: streamOverride,
+  })
   useEffect(() => {
-    if (!session) return undefined
+    if (!session || !usesMainBackend) return undefined
     refreshInbox()
     const id = setInterval(refreshInbox, INBOX_POLL_MS)
     const onFocus = () => { if (!document.hidden) refreshInbox() }
@@ -148,6 +159,6 @@ function Shell() {
   )
 }
 
-export default function App() {
-  return <BrowserRouter><ToastProvider><Shell /></ToastProvider></BrowserRouter>
+export default function App({ streamFactory }) {
+  return <BrowserRouter><ToastProvider><Shell streamOverride={streamFactory} /></ToastProvider></BrowserRouter>
 }

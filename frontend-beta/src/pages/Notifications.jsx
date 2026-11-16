@@ -8,7 +8,7 @@ import { useResource, useAction } from '../hooks/resources'
 import { timeLine } from '../lib/format'
 import { groupByDay, notificationMeta } from '../lib/notificationTypes'
 
-const REFRESH_MS = 30000
+const REFRESH_MS = 60000
 
 function NotificationRow({ item, action }) {
   const { icon: Icon, label } = notificationMeta(item.type)
