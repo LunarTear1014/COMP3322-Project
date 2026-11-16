@@ -7,6 +7,7 @@ import { ErrorNotice } from './components/common'
 import { AppHeader } from './components/nav/AppHeader'
 import { TabBar } from './components/nav/TabBar'
 import { AuthForm } from './pages/AuthPage'
+import { Credits } from './pages/Credits'
 import { ClubMembers, ClubTools } from './pages/ClubTools'
 import { Effectiveness } from './pages/Effectiveness'
 import { ClubsDirectory } from './pages/ClubsDirectory'
@@ -104,6 +105,8 @@ function Shell({ streamOverride }) {
   if (bootError && !session) {
     return <main><ErrorNotice error={bootError} /><button className="cs-btn" onClick={refreshSession}>Retry session</button></main>
   }
+  // The credits page is public: it is linked from the sign-in footer.
+  if (!session && location.pathname === '/credits') return <Credits signedIn={false} />
   const publicPage = location.pathname === '/login' || location.pathname === '/register'
   if (!session && !publicPage) {
     return <Navigate to={`/login?return=${encodeURIComponent(location.pathname + location.search)}`} replace />
@@ -138,6 +141,7 @@ function Shell({ streamOverride }) {
           <Route path="/organizer/events/:id" element={<ManageEvent session={session} />} />
           <Route path="/admin/bookings" element={<Admin session={session} />} />
           <Route path="/notifications" element={<Notifications refreshInbox={refreshInbox} />} />
+          <Route path="/credits" element={<Credits signedIn />} />
           <Route path="/organizer/clubs/:id/reports" element={<Reports />} />
           <Route path="*" element={<main><h1>Page not found</h1></main>} />
         </Routes>
