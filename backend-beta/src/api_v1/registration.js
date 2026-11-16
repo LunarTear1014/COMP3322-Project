@@ -5,11 +5,21 @@ import { ApiError } from "../shared/errors.js";
 import { PAGE_QUERY, pagination, validate_body, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
 import { id_param, iso, notify, page_meta, require_user, to_db, wrap } from "./common.js";
+import { enqueue } from "../jobs/queue.js";
 import { QUEUE_LIMIT, event_dto, event_rows, load_event, normalize_status, tags_for } from "./event_model.js";
 
 const REGISTER = { allow_waitlist: { kind: "bool", required: true } };
 const asDate = (text) => new Date(`${String(text).replace(" ", "T")}Z`);
 const WAITING = ["waitlisted", "pending"];
+const DAY_MS = 86_400_000;
+
+// A student who becomes joined inside the 24 hour window gets their own reminder job (shared visible key).
+async function late_reminder(conn, event, user_id, now) {
+  const start = asDate(event.start_time);
+  if (start > now && start - now <= DAY_MS) {
+    await enqueue(conn, { action_key: `reminder-user:${event.id}:${user_id}`, type: "event_reminder", event_id: event.id, payload: { event_id: event.id, user_id }, now });
+  }
+}
 
 async function history(conn, { event_id, user_id, actor, action_id, action, from, to, reason = null, now }) {
   await conn.query(
@@ -40,6 +50,7 @@ async function promote_locked(conn, event, { actor, now, action_id }) {
     await conn.query("UPDATE participations SET status = 'joined', confirmed_at = ?, left_at = NULL WHERE user_id = ? AND event_id = ?", [to_db(now), row.user_id, event.id]);
     await history(conn, { event_id: event.id, user_id: row.user_id, actor, action_id, action: "promoted", from: "waitlisted", to: "joined", now });
     promoted.push(row.user_id);
+    await late_reminder(conn, event, row.user_id, now);
     free -= 1;
   }
   return promoted;
@@ -104,6 +115,7 @@ function create_registration_router({ pool, clock }) {
             `INSERT INTO participations (user_id, event_id, status, last_registered_at, queued_at, confirmed_at) VALUES (?, ?, ?, ?, ?, ?)`,
             [req.user.id, id, to, t, to === "waitlisted" ? t : null, to === "joined" ? t : null]);
         }
+        if (to === "joined") await late_reminder(conn, event, req.user.id, now);
         await history(conn, { event_id: id, user_id: req.user.id, actor: req.user.id, action_id, action: to, from: mine ? (current === "none" ? null : current) : null, to, now });
         await notify(conn, { users: [req.user.id], type: "registration_changed", event_id: id, club_id: event.club_id, now, key: `registration:${action_id}`, title: to === "joined" ? `You’re going to ${event.title}` : `You’re on the waitlist for ${event.title}`, body: to === "joined" ? "Your seat is confirmed." : "We’ll tell you if a seat opens." });
         for (const user_id of promoted) {

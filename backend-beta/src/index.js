@@ -1,6 +1,10 @@
 import { randomBytes } from "node:crypto";
 import pool from "./config/db.js";
 import { create_app } from "./app.js";
+import { assert_schema_version } from "./db/migrate.js";
+import { create_utc_pool } from "./db/pool.js";
+import { MysqlSessionStore } from "./api_v1/session_store.js";
+import { create_v1_stack } from "./api_v1/stack.js";
 import health_routes from "./features/health/health.routes.js";
 import events_routes from "./features/events/events.routes.js";
 import venues_routes from "./features/venues/venues.routes.js";
@@ -22,7 +26,18 @@ if (production && !process.env.APP_ORIGIN) {
   );
 }
 
+// v1 runs on its own UTC pool and a MySQL session store; the legacy routes
+// share the same session (and cookie), so signing in on either authenticates both.
+const v1_pool = create_utc_pool({
+  host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 3306), database: process.env.DB_NAME,
+  user: process.env.DB_USER, password: process.env.DB_PASSWORD,
+});
+const stack = create_v1_stack({ pool: v1_pool });
+
 const app = create_app({
+  session_store: new MysqlSessionStore({ pool: v1_pool }),
+  v1_routers: stack.routers,
+  is_multipart_route: stack.is_multipart_route,
   session_secret,
   app_origin: process.env.APP_ORIGIN || (production ? undefined : "http://localhost:5173"),
   cookie_secure: production && process.env.SESSION_COOKIE_SECURE !== "false",
@@ -41,6 +56,8 @@ const port = Number(process.env.PORT || 3000);
 async function start() {
   try {
     await pool.query("SELECT 1");
+    await assert_schema_version(v1_pool, "015_events_cover");
+    await stack.start();
     app.listen(port, () => console.log(`API on http://localhost:${port}`));
   } catch (error) {
     console.error("Could not connect to MySQL. Check .env and start MySQL.");

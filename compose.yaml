@@ -38,6 +38,24 @@ services:
       retries: 6
     restart: unless-stopped
 
+  worker:
+    build: ./backend-beta
+    command: ["node", "src/worker.js"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: clubspace
+      DB_USER: clubspace_app
+      DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      COVER_DIR: /app/data/covers
+    volumes:
+      - cover_data:/app/data/covers
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   db:
     image: mysql:8.4
     command:
