@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router'
-import { query, campusInstant, usesMainBackend } from '../api'
+import { query, campusInstant } from '../api'
 import { ErrorNotice, Feedback, PageHeading, Pagination, Resource } from '../components/common'
 import { LifecycleStepper } from '../components/LifecycleStepper'
 import { Button, ButtonLink, StatusChip, TextField, useToast } from '../components/ui'
@@ -41,8 +41,8 @@ export function ManageEventEditor({ id, session }) {
   const role = session?.memberships.find(item => item.club_id === e?.club?.id)?.role
   const admin = session?.user.platform_role === 'venue_admin'
   // Only the president (or a venue admin) cancels a published event; committee may cancel drafts.
-  const mayCancel = usesMainBackend || !session || admin || role === 'president' || (role === 'committee' && e?.state !== 'published')
-  const canManage = !usesMainBackend || e?.can_cancel
+  const mayCancel = !session || admin || role === 'president' || (role === 'committee' && e?.state !== 'published')
+  const canManage = true
   const participants = useResource(canManage && e ? `/events/${id}/participants${query({ status, page })}` : null)
   const action = useAction(event.refresh)
 
@@ -59,11 +59,11 @@ export function ManageEventEditor({ id, session }) {
 
   async function save(ev) {
     ev.preventDefault()
-    const body = usesMainBackend ? { title: form.title, description: form.description } : { expected_version: e.version, title: form.title, description: form.description }
+    const body = { expected_version: e.version, title: form.title, description: form.description }
     if (e.state === 'draft') {
       Object.assign(body, { capacity: Number(form.capacity), visibility: form.visibility, registration_closes_at: campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16)) })
     }
-    if (!usesMainBackend && tags) Object.assign(body, tags.campus.length ? { campus_tag_ids: tags.campus } : {}, { club_tag_ids: tags.club })
+    if (tags) Object.assign(body, tags.campus.length ? { campus_tag_ids: tags.campus } : {}, { club_tag_ids: tags.club })
     const result = await action.run(`/events/${id}`, 'PATCH', body)
     if (result) toast.show({ message: 'Changes saved.' })
   }
@@ -93,7 +93,7 @@ export function ManageEventEditor({ id, session }) {
         {e && form && (
           <>
             <PageHeading title={e.title} description={`${e.club?.name} · ${timeLine(e.start_at, e.end_at)} · ${e.venue?.name} (Hong Kong time)`} />
-            {location.state?.created && <p role="status" className="notice notice-info">{usesMainBackend ? 'Venue booked and event published.' : 'Request submitted; venue approval pending.'}</p>}
+            {location.state?.created && <p role="status" className="notice notice-info">Request submitted; venue approval pending.</p>}
             <div className="cs-row status-row">
               <StatusChip state={e.state} label={`Event: ${e.state}`} />
               {e.booking?.status && <StatusChip state={e.booking.status} label={`Booking: ${e.booking.status}`} />}
@@ -101,7 +101,7 @@ export function ManageEventEditor({ id, session }) {
             <ErrorNotice error={action.error} />
 
             <div className="tabs" role="tablist" aria-label="Manage event">
-              {TABS.filter(item => (item.id !== 'people' || canManage) && (item.id !== 'checkin' || (!usesMainBackend && e.state === 'published'))).map(item => (
+              {TABS.filter(item => (item.id !== 'people' || canManage) && (item.id !== 'checkin' || e.state === 'published')).map(item => (
                 <button key={item.id} type="button" role="tab" className="tab-link" aria-selected={tab === item.id} aria-controls="manage-panel" onClick={() => select(item.id)}>{item.label}{item.id === 'people' && e.pending_join_requests > 0 && <span className="tab-count" aria-label={`${e.pending_join_requests} join requests`}>{e.pending_join_requests}</span>}</button>
               ))}
             </div>
@@ -123,12 +123,12 @@ export function ManageEventEditor({ id, session }) {
                   {e.state === 'published' && !mayCancel && <p className="cs-hint">Only the president can cancel a published event.</p>}
                   <p>To reschedule, start a new request. Creating a new event does not cancel this event.</p>
                   {canManage && <Link to="/bookings/new" state={copyState}>Copy details to a new request</Link>}
-                  {e.state !== 'cancelled' && canManage && mayCancel && (!usesMainBackend || e.phase !== 'past') && (
+                  {e.state !== 'cancelled' && canManage && mayCancel && (
                     confirming ? (
                       <form className="inline-confirm" onSubmit={cancel}>
                         <h2>Cancel this event?</h2>
                         <p>Cancellation affects the booking and every active registration. This can’t be undone.</p>
-                        {!usesMainBackend && <TextField as="textarea" label="Reason" required maxLength={500} value={reason} onChange={x => setReason(x.target.value)} />}
+                        <TextField as="textarea" label="Reason" required maxLength={500} value={reason} onChange={x => setReason(x.target.value)} />
                         <div className="cs-row">
                           <Button variant="danger" type="submit" busy={action.busy}>Cancel event</Button>
                           <Button onClick={() => setConfirming(false)}>Keep event</Button>
@@ -140,7 +140,7 @@ export function ManageEventEditor({ id, session }) {
               )}
 
               {tab === 'edit' && (
-                e.state === 'cancelled' || (usesMainBackend && !e.can_cancel) ? <p className="cs-meta">This event can’t be edited.</p> : (
+                e.state === 'cancelled' ? <p className="cs-meta">This event can’t be edited.</p> : (
                   <form className="request-form" onSubmit={save}>
                     <h2 className="section-title">Edit event</h2>
                     <TextField label="Title" required maxLength={255} {...field('title')} />
@@ -156,8 +156,8 @@ export function ManageEventEditor({ id, session }) {
                       </>
                     )}
                     {e.state === 'published' && <p className="cs-hint">After publishing, only the title and description can change.</p>}
-                    {!usesMainBackend && tags && <TagPicker clubId={e.club?.id} campus={tags.campus} club={tags.club} onCampus={campus => setTags({ ...tags, campus })} onClub={club => setTags({ ...tags, club })} />}
-                    {!usesMainBackend && e.state !== 'cancelled' && (
+                    {tags && <TagPicker clubId={e.club?.id} campus={tags.campus} club={tags.club} onCampus={campus => setTags({ ...tags, campus })} onClub={club => setTags({ ...tags, club })} />}
+                    {e.state !== 'cancelled' && (
                       <CoverUploader title={e.title} current={e.cover} busy={action.busy} serverError={action.error?.fields?.file || (action.error && /cover|image|5 MB/i.test(action.error.message) ? action.error.message : '')} onSave={uploadCover} onRemove={removeCover} />
                     )}
                     <Feedback action={{ ...action, error: null }} />
@@ -166,28 +166,28 @@ export function ManageEventEditor({ id, session }) {
                 )
               )}
 
-              {tab === 'checkin' && !usesMainBackend && e.state === 'published' && <CheckinPanel event={e} />}
+              {tab === 'checkin' && e.state === 'published' && <CheckinPanel event={e} />}
 
-              {tab === 'people' && canManage && !usesMainBackend && e.visibility === 'members_only' && e.state === 'published' && (
+              {tab === 'people' && canManage && e.visibility === 'members_only' && e.state === 'published' && (
                 <JoinRequestsPanel event={e} onDecided={() => { event.refresh(); participants.refresh() }} />
               )}
               {tab === 'people' && canManage && (
                 <section>
                   <h2 className="section-title">Participants</h2>
                   <TextField as="select" label="Filter" value={status} onChange={ev => { setStatus(ev.target.value); setPage(1) }}>
-                    {(usesMainBackend ? ['joined', 'waitlisted'] : ['joined', 'waitlisted', 'left', 'cancelled']).map(x => <option key={x}>{x}</option>)}
+                    {['joined', 'waitlisted', 'left', 'cancelled'].map(x => <option key={x}>{x}</option>)}
                   </TextField>
                   <Resource value={participants} empty="No participants in this state.">
                     <div className="cs-tablewrap" role="region" aria-label="Participants" tabIndex={0}>
                       <table className="cs-table">
-                        <thead><tr><th>Name</th>{!usesMainBackend && <><th>Email</th><th>Student ID</th></>}<th>Status</th>{!usesMainBackend && <th>Queue position</th>}</tr></thead>
+                        <thead><tr><th>Name</th><th>Email</th><th>Student ID</th><th>Status</th><th>Queue position</th></tr></thead>
                         <tbody>
                           {participants.data?.map(p => (
                             <tr key={p.user.id}>
                               <td>{p.user.name}</td>
-                              {!usesMainBackend && <><td>{p.user.email}</td><td>{p.user.student_id}</td></>}
+                              <td>{p.user.email}</td><td>{p.user.student_id}</td>
                               <td>{p.status}</td>
-                              {!usesMainBackend && <td>{p.queue_position ?? '—'}</td>}
+                              <td>{p.queue_position ?? '—'}</td>
                             </tr>
                           ))}
                         </tbody>

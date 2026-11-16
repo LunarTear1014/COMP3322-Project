@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { usesMainBackend } from '../api'
 import { PageHeading, Resource } from '../components/common'
 import { SignoffQueue } from '../components/SignoffQueue'
 import { EventCard } from '../components/EventCard'
@@ -46,8 +45,8 @@ export function Organizer({ session }) {
     <main className="page">
       <PageHeading title="Organizer" description="Manage your club events and requests." />
       <div className="cs-row organizer-tools">
-        <ButtonLink variant="primary" to="/bookings/new">{usesMainBackend ? 'Book a venue and publish an event' : 'Request a venue and create a draft'}</ButtonLink>
-        <ButtonLink to={usesMainBackend ? "/organizer/clubs" : "/organizer/club-tools"}>Club members and reports</ButtonLink>
+        <ButtonLink variant="primary" to="/bookings/new">Request a venue and create a draft</ButtonLink>
+        <ButtonLink to="/organizer/clubs">Club members and reports</ButtonLink>
       </div>
       <div className="cs-field organizer-club">
         <label htmlFor="organizer-club">Club</label>
@@ -57,8 +56,8 @@ export function Organizer({ session }) {
         </select>
       </div>
       <ul className="cs-row role-chips" aria-label="Your roles">{committeeClubs.map(item => <li key={item.club_id}><span className="cs-chip cs-chip-neutral">{item.club_name}: {item.role === 'president' ? 'President' : 'Committee'}</span></li>)}</ul>
-      {!usesMainBackend && <p>Reports: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/reports`}>{item.club_name}</Link> </span>)}</p>}
-      {president && !usesMainBackend && <SignoffQueue onChange={events.refresh} />}
+      <p>Reports: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/reports`}>{item.club_name}</Link> </span>)}</p>
+      {president && <SignoffQueue onChange={events.refresh} />}
       <Resource value={events} allowEmpty>
         {events.data?.length === 0 ? (
           <EmptyState title="No managed events yet" actions={<ButtonLink variant="primary" to="/bookings/new">Request a venue</ButtonLink>}>Request a venue to create your first event.</EmptyState>

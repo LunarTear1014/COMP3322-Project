@@ -1,20 +1,9 @@
 import { ApiError } from './apiShared.js'
-import { requestMainBackend } from './mainBackend.js'
 export * from './apiShared.js'
-
-export const usesMainBackend = ['development', 'production'].includes(import.meta.env?.MODE)
 
 let csrfToken = null
 export function setCsrf(token) { csrfToken = token }
 export async function request(path, { method = 'GET', body, signal } = {}) {
-  if (usesMainBackend) {
-    try {
-      return await requestMainBackend(path, { method, body, signal })
-    } catch (error) {
-      if (error.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('clubspace:unauthorized'))
-      throw error
-    }
-  }
   const headers = { Accept: 'application/json' }
   if (method !== 'GET') {
     if (!csrfToken) { const result = await request('/auth/csrf'); csrfToken = result.data.csrf_token }

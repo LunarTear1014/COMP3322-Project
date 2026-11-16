@@ -1,7 +1,7 @@
 import { CheckCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { request, query, usesMainBackend } from '../api'
+import { request, query } from '../api'
 import { PageHeading, Resource, Pagination, Feedback } from '../components/common'
 import { Button, EmptyState, useToast } from '../components/ui'
 import { useResource, useAction } from '../hooks/resources'
@@ -81,11 +81,11 @@ export function Notifications({ refreshInbox }) {
   const groups = groupByDay(list.data || [])
   return (
     <main className="page">
-      <PageHeading title="Inbox" description={usesMainBackend ? undefined : 'Messages can arrive a moment after the action that caused them.'} />
+      <PageHeading title="Inbox" description="Messages can arrive a moment after the action that caused them." />
       <div className="cs-row inbox-tools">
         <button className="cs-chip-filter" type="button" aria-pressed={unreadOnly} onClick={() => { setUnreadOnly(value => !value); setPage(1) }}>Unread only</button>
         <Button disabled={!unread.length || marking} busy={marking} onClick={markAll}><CheckCheck className="cs-icon" aria-hidden="true" />Mark all as read</Button>
-        {list.meta && <span className="cs-meta cs-nums" role="status">{list.meta.unread_count} unread {usesMainBackend ? 'in recent notifications' : 'in total'}</span>}
+        {list.meta && <span className="cs-meta cs-nums" role="status">{list.meta.unread_count} unread in total</span>}
       </div>
       <Feedback action={action} />
       <Resource

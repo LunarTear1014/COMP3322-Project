@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { query, usesMainBackend } from '../api'
+import { query } from '../api'
 import { PageHeading, ErrorNotice, Resource, Pagination } from '../components/common'
 import { EventCard } from '../components/EventCard'
 import { FilterChips } from '../components/FilterChips'
@@ -22,7 +22,7 @@ export function Events() {
   const [draft, setDraft] = useState(filters)
   const clubs = useAllOptions('/clubs')
   const venues = useAllOptions('/venues')
-  const campusTags = useResource(usesMainBackend ? null : '/tags')
+  const campusTags = useResource('/tags')
 
   const problem = rangeProblem(filters)
   const apiQuery = query(toApiQuery(filters))

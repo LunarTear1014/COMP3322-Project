@@ -94,7 +94,7 @@ describe('president sign-off and roles (8.2)', () => {
     window.history.replaceState({}, '', '/organizer/clubs/1/members')
     vi.stubGlobal('fetch', fixtureFetch(asCommittee))
     render(<App />)
-    expect(await screen.findByText('Only the president can change roles.')).toBeTruthy()
+    expect(await screen.findByText(/Only the president can change roles./)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Appoint|Make .* president/ })).toBeNull()
   })
 })

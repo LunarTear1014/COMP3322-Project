@@ -7,7 +7,7 @@ import { buildWeek, weekLabel, weekWindow } from '../src/lib/slots.js'
 import { fixtureFetch, json } from './support/fixtureFetch.js'
 
 beforeEach(() => setCsrf(null))
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState({}, '', '/') })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); window.history.replaceState({}, '', '/') })
 
 const slots = [{ id: 'morning', start: '10:00', end: '12:00' }, { id: 'afternoon', start: '13:00', end: '15:00' }, { id: 'evening', start: '16:00', end: '18:00' }]
 
@@ -31,7 +31,12 @@ describe('request flow', () => {
   }
 
   it('disables booked and past slots with their reason, and keeps the week and slot in the URL', async () => {
-    window.history.replaceState({}, '', '/bookings/new?venue_id=1')
+    // Pin the clock to a Tuesday morning in Hong Kong and open that day: with
+    // the real clock, every slot of the first day is past after 18:00, which
+    // made this test fail every evening. Only Date is faked, so waitFor runs.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-17T01:00:00Z')) // Tue 09:00 Hong Kong
+    window.history.replaceState({}, '', '/bookings/new?venue_id=1&date=2026-11-17')
     vi.stubGlobal('fetch', fixtureFetch())
     render(<App />)
     const picker = await screen.findByRole('group', { name: /^Slots on/ })
@@ -43,6 +48,7 @@ describe('request flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
     expect(window.location.search).toContain('week=')
     expect((await screen.findByRole('button', { name: 'Previous week' })).disabled).toBe(false)
+    vi.useRealTimers()
   })
 
   it('shows a 409 above the slots, refreshes them and keeps the other fields', async () => {

@@ -33,41 +33,24 @@ function previewFetch(scenario = '') {
       resolve(new Response(JSON.stringify({ data: { message: 'Join request approved.' } }), { status: 200 }))
       return
     }
-    if (scenario === 'club-members' && url.pathname === '/api/v1/clubs/1/members' && options.method !== 'POST') {
-      resolve(new Response(JSON.stringify({ data: [
-        { user_id: 1, name: 'Alex Chan', role: 'committee' },
-        { user_id: 3, name: 'Riley Chen', role: 'member' },
-        { user_id: 4, name: 'Zara Wong', role: 'member' },
-      ] }), { status: 200 }))
+    if (scenario === 'president-log' && url.pathname === '/api/v1/auth/session') {
+      resolve(new Response(JSON.stringify({ data: {
+        user: { id: 1, name: 'Alex Chan', email: 'preview@clubspace.test', student_id: 'PREVIEW-01', platform_role: 'student' },
+        memberships: [{ club_id: 1, club_name: 'Photography Society', role: 'president', version: 3, joined_at: '2026-01-01T00:00:00Z' }],
+        csrf_token: 'local-preview-token',
+      } }), { status: 200 }))
       return
     }
-    if (scenario === 'club-members' && url.pathname === '/api/v1/clubs/1/members/3/committee') {
-      resolve(new Response(JSON.stringify({ data: { message: 'Member promoted to committee.' } }), { status: 200 }))
-      return
-    }
-    if (scenario === 'club-members' && url.pathname === '/api/v1/clubs/1/members/3' && options.method === 'DELETE') {
-      resolve(new Response(JSON.stringify({ data: { message: 'Member removed from the club.' } }), { status: 200 }))
-      return
-    }
-    if (scenario === 'president' && url.pathname === '/api/v1/clubs/2/members/3/committee' && options.method === 'DELETE') {
-      resolve(new Response(JSON.stringify({ data: { message: 'Member returned to regular member role.' } }), { status: 200 }))
-      return
-    }
-    if (scenario === 'president' && url.pathname === '/api/v1/clubs/2/actions') {
+    if (scenario === 'president-log' && url.pathname === '/api/v1/clubs/1/actions') {
       resolve(new Response(JSON.stringify({ data: [{
-        id: 21,
-        actor_name: 'Morgan Lee',
-        target_name: 'Riley Chen',
-        action_type: 'member_removed',
-        description: 'Removed a regular member from the club.',
-        undoable: true,
-        created_at: new Date().toISOString(),
-        undone_at: null,
-      }] }), { status: 200 }))
+        id: 21, type: 'member_removed', description: 'Removed a regular member from the club.',
+        actor: { id: 4, name: 'Morgan Lee' }, target: { id: 3, name: 'Riley Chen' },
+        undoable: true, created_at: new Date().toISOString(), undone_at: null,
+      }], meta: { page: 1, page_size: 20, total: 1 } }), { status: 200 }))
       return
     }
-    if (scenario === 'president' && url.pathname === '/api/v1/clubs/2/actions/21/undo') {
-      resolve(new Response(JSON.stringify({ data: { message: 'Action undone. Affected members have been notified.' } }), { status: 200 }))
+    if (url.pathname === '/api/v1/clubs/1/actions/21/undo' || (url.pathname === '/api/v1/clubs/1/members/3' && options.method === 'DELETE') || (url.pathname === '/api/v1/clubs/1/committee' && options.method === 'DELETE')) {
+      resolve(new Response(options.method === 'DELETE' && url.pathname.endsWith('/members/3') ? null : JSON.stringify({ data: {} }), { status: options.method === 'DELETE' && url.pathname.endsWith('/members/3') ? 204 : 200 }))
       return
     }
     if (scenario === 'student' && url.pathname === '/api/v1/auth/session') {
@@ -98,11 +81,6 @@ function previewFetch(scenario = '') {
       setHeader(name, value) { headers.set(name, value) },
       end(payload) {
         let responsePayload = payload
-        if (scenario === 'president' && request.url.startsWith('/me/memberships')) {
-          const result = JSON.parse(payload)
-          result.data.push({ club_id: 2, name: 'Film Society', description: 'Screenings and conversations for film lovers.', role: 'president' })
-          responsePayload = JSON.stringify(result)
-        }
         resolve({
           status: this.statusCode,
           ok: this.statusCode >= 200 && this.statusCode < 300,
@@ -126,53 +104,41 @@ afterEach(() => {
 
 describe('frontend preview workflows', () => {
 
-  it('shows the clubs page to committee members', async () => {
+  it('shows the clubs page to committee members and confirms leaving the committee in the page', async () => {
     window.history.replaceState({}, '', '/organizer/clubs')
-    vi.stubGlobal('fetch', previewFetch())
+    const fetch = previewFetch()
+    vi.stubGlobal('fetch', fetch)
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Your clubs' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Clubs' })).toBeTruthy()
     expect(await screen.findByRole('heading', { name: 'Photography Society' })).toBeTruthy()
-    expect(await screen.findByRole('button', { name: 'Leave committee' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Leave committee' }))
+    expect(fetch.mock.calls.some(([url, o]) => String(url).endsWith('/clubs/1/committee') && o?.method === 'DELETE')).toBe(false)
+    const confirm = screen.getByRole('group', { name: 'Leave the Photography Society committee' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Leave committee' }))
+    await waitFor(() => expect(fetch.mock.calls.some(([url, o]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/committee' && o.method === 'DELETE')).toBe(true))
   })
 
-  it('lets committee members see the roster and promote a member', async () => {
-    window.history.replaceState({}, '', '/organizer/clubs')
-    const fetch = previewFetch('club-members')
+  it('lets a committee member search the roster and remove a plain member after confirming', async () => {
+    window.history.replaceState({}, '', '/organizer/clubs/1/members')
+    const fetch = previewFetch()
     vi.stubGlobal('fetch', fetch)
     render(<App />)
 
-    fireEvent.click(await screen.findByText('Club members (3)'))
-    const search = await screen.findByRole('searchbox', { name: 'Search Photography Society members' })
+    const search = await screen.findByRole('searchbox', { name: 'Search members' })
     fireEvent.change(search, { target: { value: 'riley' } })
-    expect(await screen.findByText('Riley Chen · member')).toBeTruthy()
-    expect(screen.queryByText('Zara Wong · member')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Make committee' }))
-
+    expect(screen.getByText('Riley Chen')).toBeTruthy()
+    expect(screen.queryByText('Zara Wong')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Appoint Riley Chen to the committee' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Riley Chen from the club' }))
+    fireEvent.click(within(screen.getByRole('group', { name: 'Remove Riley Chen from the club' })).getByRole('button', { name: 'Remove from club' }))
     await waitFor(() => {
-      const promotion = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/members/3/committee')
-      expect(promotion).toBeTruthy()
-      expect(promotion[1].method).toBe('POST')
-    })
-    expect(await screen.findByText('Riley Chen was promoted to the Photography Society committee.')).toBeTruthy()
-  })
-
-  it('lets a committee member remove a regular member', async () => {
-    window.history.replaceState({}, '', '/organizer/clubs')
-    const fetch = previewFetch('club-members')
-    vi.stubGlobal('fetch', fetch)
-    render(<App />)
-
-    fireEvent.click(await screen.findByText('Club members (3)'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Riley Chen from club' }))
-
-    await waitFor(() => {
-      const removal = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/members/3')
+      const removal = fetch.mock.calls.find(([url, o]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/members/3' && o?.method === 'DELETE')
       expect(removal).toBeTruthy()
-      expect(removal[1].method).toBe('DELETE')
     })
-    expect(await screen.findByText('Riley Chen was removed from Photography Society.')).toBeTruthy()
+    expect(await screen.findByText('Riley Chen was removed from the club.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Club activity log' })).toBeNull()
   })
 
   it('keeps role tools out of a student\'s account menu and sends management links to the directory', async () => {
@@ -190,60 +156,23 @@ describe('frontend preview workflows', () => {
     expect(screen.queryByRole('link', { name: 'Admin' })).toBeNull()
   })
 
-  it('lets a president choose a committee successor and confirm the transfer', async () => {
-    window.history.replaceState({}, '', '/organizer/clubs')
-    const fetch = previewFetch('president')
+  it('shows the president the activity log and undoes an action', async () => {
+    window.history.replaceState({}, '', '/organizer/clubs/1/members')
+    const fetch = previewFetch('president-log')
     vi.stubGlobal('fetch', fetch)
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Film Society' })).toBeTruthy()
-    fireEvent.change(await screen.findByLabelText('New president'), { target: { value: '3' } })
-    fireEvent.change(screen.getByLabelText(/Type.*Film Society.*to confirm/i), { target: { value: 'Film Society' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Transfer presidency' }))
-
+    expect(await screen.findByRole('heading', { name: 'Club activity log' })).toBeTruthy()
+    const entry = (await screen.findByText(/Removed a regular member from the club\./)).closest('li')
+    expect(within(entry).getByText('Morgan Lee')).toBeTruthy()
+    expect(within(entry).getByText(/Affected member: Riley Chen/)).toBeTruthy()
+    fireEvent.click(within(entry).getByRole('button', { name: 'Undo: Removed a regular member from the club.' }))
     await waitFor(() => {
-      const transfer = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/2/presidency')
-      expect(transfer).toBeTruthy()
-      expect(transfer[1].method).toBe('POST')
-      expect(JSON.parse(transfer[1].body)).toEqual({ user_id: 3, confirmation: 'Film Society' })
-    })
-  })
-
-  it('lets a president demote a committee member', async () => {
-    window.history.replaceState({}, '', '/organizer/clubs')
-    const fetch = previewFetch('president')
-    vi.stubGlobal('fetch', fetch)
-    render(<App />)
-
-    fireEvent.click(await screen.findByText('Club members (1)'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Demote Morgan Lee to member' }))
-
-    await waitFor(() => {
-      const demotion = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/2/members/3/committee')
-      expect(demotion).toBeTruthy()
-      expect(demotion[1].method).toBe('DELETE')
-    })
-    expect(await screen.findByText('Morgan Lee was returned to regular member status.')).toBeTruthy()
-  })
-
-  it('shows the president who performed an action and allows undo', async () => {
-    window.history.replaceState({}, '', '/organizer/clubs')
-    const fetch = previewFetch('president')
-    vi.stubGlobal('fetch', fetch)
-    render(<App />)
-
-    fireEvent.click(await screen.findByText('Club activity log'))
-    const description = await screen.findByText((_, element) => element.tagName === 'P' && element.textContent.includes('Removed a regular member from the club.'))
-    expect(within(description.closest('article')).getByText('Morgan Lee')).toBeTruthy()
-    expect(within(description.closest('article')).getByText(/Affected member: Riley Chen/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Undo action' }))
-
-    await waitFor(() => {
-      const undo = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/2/actions/21/undo')
+      const undo = fetch.mock.calls.find(([url]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/actions/21/undo')
       expect(undo).toBeTruthy()
       expect(undo[1].method).toBe('POST')
     })
-    expect(await screen.findByText('Action undone. Affected members have been notified.')).toBeTruthy()
+    expect(await screen.findByText('Action undone. Affected members were notified.')).toBeTruthy()
   })
 
   it('shows join request notifications with approve and reject actions', async () => {

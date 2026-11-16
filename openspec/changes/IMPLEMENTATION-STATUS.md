@@ -126,7 +126,7 @@ DB tests are skipped. Last full run: 164 tests pass.
 - The composite booking/event interval foreign key (database.md section 2) is not added: the legacy edit flow rewrites both rows in two statements. The service layer keeps them equal.
 - Legacy `participations` keep `pending`/`unsuccessful` beside the spec's statuses; v1 reads map them to waitlisted and left.
 
-- Legacy `/api` routes stay mounted and used by the beta frontend (`mainBackend.js` adapter); v1 currently serves only `/config` and `/auth/csrf`. No 410 retirement of old URLs yet.
+- **Frontend cutover to v1 (2026-11-16).** The frontend calls only `/api/v1` in every build mode; the `mainBackend.js` adapter, the legacy club page and `WorkflowUnavailable` are gone. Legacy `/api` routes stay mounted but unused; no 410 yet. The beta's club management (remove a member, leave the committee, the president's action log and undo) moved to v1 (`src/api_v1/club_actions.js`) on the same `club_action_log` table; promotion stays president-only per club-governance, where the beta also let committee promote. Fresh deployments run migrations through the Compose `migrate` service.
 - Club management moved to `/organizer/clubs` and `/clubs` became the directory (tab destinations still an open review decision).
 - Migration numbering: workflow migrations 002, 003 plus 010-015 (feedback and covers); 001, 004-006 (tracking is in the runner; backfill, constraints, cutover marker) are not written. Legacy loose SQL moved to `db/legacy-sql/`.
 - Beta `participations` keeps its `pending`/`unsuccessful` vocabulary next to the spec's `waitlisted`/`left`/`cancelled` (superset enum in 002) until a cutover mapping migration exists.

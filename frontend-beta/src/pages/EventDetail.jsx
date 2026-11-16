@@ -1,7 +1,7 @@
 import { CalendarPlus, ChevronLeft, MapPin, CalendarDays } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { request, usesMainBackend } from '../api'
+import { request } from '../api'
 import { ErrorNotice, Resource } from '../components/common'
 import { EventCover } from '../components/EventCard'
 import { StickyActionBar } from '../components/StickyActionBar'
@@ -38,7 +38,7 @@ export function EventDetail() {
   useEffect(() => () => clearTimeout(goingTimer.current), [])
   // One view per page open (the API also deduplicates per 30 minutes). Direct links count as shares.
   useEffect(() => {
-    if (usesMainBackend || !event.data || viewed.current === id) return
+    if (!event.data || viewed.current === id) return
     viewed.current = id
     request(`/events/${id}/views`, { method: 'POST', body: { source } }).catch(() => {})
   }, [id, event.data, source])
@@ -146,7 +146,7 @@ function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, detail
 }
 
 function EventBody({ details, view, phone, going, leaving, busy, error, onRegister, onLeave, checkingIn, setCheckingIn }) {
-  const canCheckIn = !usesMainBackend && view.kind === 'leave' && details.state === 'published' && checkinOpen(details)
+  const canCheckIn = view.kind === 'leave' && details.state === 'published' && checkinOpen(details)
   const colour = clubColour(details.club?.id)
   const tile = dateTile(details.start_at)
   const seats = seatSummary(details)

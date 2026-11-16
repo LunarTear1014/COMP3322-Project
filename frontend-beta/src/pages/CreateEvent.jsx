@@ -1,7 +1,7 @@
 import { CircleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
-import { addDays, campusDate, campusInstant, query, request, usesMainBackend } from '../api'
+import { addDays, campusDate, campusInstant, query, request } from '../api'
 import { CoverUploader } from '../components/CoverUploader'
 import { TagPicker } from '../components/TagPicker'
 import { coverForm } from '../lib/cover'
@@ -107,14 +107,12 @@ export function CreateEvent({ session }) {
     const found = {}
     if (!form.title.trim()) found.title = 'Give the event a title.'
     if (!form.description.trim()) found.description = 'Say what people will do.'
-    if (!usesMainBackend) {
-      const capacity = Number(form.capacity)
-      const limit = Math.min(500, venue?.capacity ?? 500)
-      if (!Number.isInteger(capacity) || capacity < 1) found.capacity = 'Enter a whole number of 1 or more.'
-      else if (capacity > limit) found.capacity = `${venue?.name || 'This venue'} holds up to ${limit} people. Enter ${limit} or fewer.`
-      if (form.registration_closes_at && slot && new Date(campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16))) > new Date(campusInstant(date, slot.start))) {
-        found.registration_closes_at = 'Registration must close before the event starts.'
-      }
+    const capacity = Number(form.capacity)
+    const limit = Math.min(500, venue?.capacity ?? 500)
+    if (!Number.isInteger(capacity) || capacity < 1) found.capacity = 'Enter a whole number of 1 or more.'
+    else if (capacity > limit) found.capacity = `${venue?.name || 'This venue'} holds up to ${limit} people. Enter ${limit} or fewer.`
+    if (form.registration_closes_at && slot && new Date(campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16))) > new Date(campusInstant(date, slot.start))) {
+      found.registration_closes_at = 'Registration must close before the event starts.'
     }
     return found
   }
@@ -138,14 +136,11 @@ export function CreateEvent({ session }) {
       date, slot_id: slotId, visibility: form.visibility, capacity: Number(form.capacity),
     }
     if (form.registration_closes_at) body.registration_closes_at = campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16))
-    if (usesMainBackend) delete body.capacity
-    else {
-      if (tags.campus.length) body.campus_tag_ids = tags.campus
-      if (tags.club.length) body.club_tag_ids = tags.club
-    }
+    if (tags.campus.length) body.campus_tag_ids = tags.campus
+    if (tags.club.length) body.club_tag_ids = tags.club
     const result = await action.run('/events', 'POST', body)
     if (result) {
-      if (cover && !usesMainBackend) {
+      if (cover) {
         try {
           await request(`/events/${result.data.id}/cover`, { method: 'PUT', body: coverForm({ file: cover.file, alt: cover.alt, expectedVersion: result.data.version ?? 1 }) })
         } catch (error) {
@@ -154,7 +149,7 @@ export function CreateEvent({ session }) {
           return
         }
       }
-      toast.show({ message: usesMainBackend ? 'Venue booked and event published.' : 'Request sent. We’ll let you know when it’s reviewed.' })
+      toast.show({ message: 'Request sent. We’ll let you know when it’s reviewed.' })
       navigate(`/organizer/events/${result.data.id}`, { state: { created: true } })
     }
   }
@@ -178,8 +173,8 @@ export function CreateEvent({ session }) {
   return (
     <main className="page request-page">
       <PageHeading
-        title={usesMainBackend ? 'Book a venue for an event' : 'Request a venue for an event'}
-        description={`${usesMainBackend ? 'Booking a venue publishes the event immediately.' : 'Approval and publication are separate.'} Times are Hong Kong time.`}
+        title="Request a venue for an event"
+        description="Approval and publication are separate. Times are Hong Kong time."
       />
       {copy && <p className="notice notice-info">Details copied. Choose a new date and time. The original event remains unchanged.</p>}
       {!clubs.length && <p className="notice notice-error" role="alert">Committee or president membership is required.</p>}
@@ -247,14 +242,10 @@ export function CreateEvent({ session }) {
               <option value="public">Public</option>
               <option value="members_only">Members only</option>
             </TextField>
-            {usesMainBackend ? <p className="cs-meta">Event capacity follows the selected venue.</p> : (
-              <>
-                <TextField label="Capacity" name="capacity" type="number" inputMode="numeric" min="1" max="500" autoComplete="off" value={form.capacity} error={errors.capacity} hint={venue ? `${venue.name} holds up to ${venue.capacity}.` : undefined} onChange={update} />
-                <TextField label="Registration deadline (Hong Kong time)" optional name="registration_closes_at" type="datetime-local" value={form.registration_closes_at} error={errors.registration_closes_at} hint="Leave empty to close registration when the event starts." onChange={update} />
-              </>
-            )}
-            {!usesMainBackend && <TagPicker clubId={form.club_id} campus={tags.campus} club={tags.club} onCampus={campus => setTags({ ...tags, campus })} onClub={club => setTags({ ...tags, club })} />}
-            {!usesMainBackend && <CoverUploader title={form.title} onChange={setCover} />}
+            <TextField label="Capacity" name="capacity" type="number" inputMode="numeric" min="1" max="500" autoComplete="off" value={form.capacity} error={errors.capacity} hint={venue ? `${venue.name} holds up to ${venue.capacity}.` : undefined} onChange={update} />
+            <TextField label="Registration deadline (Hong Kong time)" optional name="registration_closes_at" type="datetime-local" value={form.registration_closes_at} error={errors.registration_closes_at} hint="Leave empty to close registration when the event starts." onChange={update} />
+            <TagPicker clubId={form.club_id} campus={tags.campus} club={tags.club} onCampus={campus => setTags({ ...tags, campus })} onClub={club => setTags({ ...tags, club })} />
+            <CoverUploader title={form.title} onChange={setCover} />
             <div className="step-actions">
               <Button onClick={() => goTo('venue')}>Back</Button>
               <Button variant="primary" onClick={() => advance('details', 'review')}>Next: review</Button>
@@ -270,13 +261,13 @@ export function CreateEvent({ session }) {
               <div><dt>Description</dt><dd className="pre">{form.description}</dd></div>
               {cover && <div><dt>Cover</dt><dd>{cover.file.name}</dd></div>}
               <div><dt>Who can join</dt><dd>{form.visibility === 'members_only' ? 'Members only' : 'Open to everyone'}</dd></div>
-              {!usesMainBackend && <div><dt>Capacity</dt><dd>{form.capacity}</dd></div>}
+              <div><dt>Capacity</dt><dd>{form.capacity}</dd></div>
             </dl>
-            <p className="cs-meta">{usesMainBackend ? 'Booking publishes the event immediately.' : 'Your request goes to a venue administrator. The event stays a draft until you publish it.'}</p>
+            <p className="cs-meta">Your request goes to a venue administrator. The event stays a draft until you publish it.</p>
             {action.error && !conflict && <ErrorNotice error={action.error} />}
             <div className="step-actions">
               <Button onClick={() => goTo('details')}>Back</Button>
-              <Button variant="primary" type="submit" busy={action.busy} disabled={!clubs.length}>{action.busy ? 'Sending…' : usesMainBackend ? 'Book venue and publish' : 'Submit request'}</Button>
+              <Button variant="primary" type="submit" busy={action.busy} disabled={!clubs.length}>{action.busy ? 'Sending…' : 'Submit request'}</Button>
             </div>
           </section>
         </form>

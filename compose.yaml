@@ -13,6 +13,25 @@ services:
       retries: 6
     restart: unless-stopped
 
+  # One-shot: applies the tracked migrations (001-016) before the API and the
+  # worker start. On a fresh database it builds the v1 schema on top of the
+  # baseline from schema.sql; on later deploys it applies only new files.
+  migrate:
+    build: ./backend-beta
+    command: ["node", "src/ops/migrate.js"]
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: clubspace
+      DB_USER: clubspace_app
+      DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      LEGACY_DATETIME_TIMEZONE: ${LEGACY_DATETIME_TIMEZONE:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build: ./backend-beta
     environment:
@@ -31,6 +50,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
@@ -54,6 +75,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "src/jobs/worker-health.js"]
       interval: 30s

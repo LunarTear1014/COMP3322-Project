@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { query, campusDate, campusInstant, addDays, weekStart, slotAvailability, usesMainBackend } from '../api'
+import { query, campusDate, campusInstant, addDays, weekStart, slotAvailability } from '../api'
 import { PageHeading, Resource } from '../components/common'
 import { useResource, useAllOptions } from '../hooks/resources'
 
@@ -37,7 +37,7 @@ export function Calendar({ canBook }) {
   const config = useResource('/config')
   const venues = useAllOptions('/venues')
   const calendar = useResource(`/venues/${id}/calendar${query({ from: campusInstant(week), to: campusInstant(addDays(week, 7)) })}`)
-  const showBookingLinks = !usesMainBackend || canBook
+  const showBookingLinks = true
   const venueName = venues.data?.find(venue => String(venue.id) === id)?.name || 'Venue'
   const dayClass = date => `calendar-day${date === day ? ' is-selected' : ''}${date === today ? ' is-today' : ''}`
   function navigateWeek(offset) {
@@ -48,7 +48,7 @@ export function Calendar({ canBook }) {
 
   return <main>
     <p><Link to="/venues">← All venues</Link></p>
-    <PageHeading title={`${venueName} calendar`} description={`Hong Kong time${!usesMainBackend ? ' · Pending requests do not reserve slots.' : ''}`}/>
+    <PageHeading title={`${venueName} calendar`} description="Hong Kong time · Pending requests do not reserve slots."/>
     <section className="calendar-layout" aria-label="Venue availability">
       <div className="calendar-toolbar">
         <h2 aria-live="polite">{calendarRange.formatRange(days[0].instant, days[6].instant)}</h2>

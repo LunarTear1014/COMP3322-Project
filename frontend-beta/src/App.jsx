@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
-import { request, setCsrf, usesMainBackend } from './api'
+import { request, setCsrf } from './api'
 import { Reports } from './pages/Reports'
 import { isOrganizer } from './lib/roles'
 import { ErrorNotice } from './components/common'
 import { AppHeader } from './components/nav/AppHeader'
 import { TabBar } from './components/nav/TabBar'
 import { AuthForm } from './pages/AuthPage'
-import { WorkflowUnavailable } from './pages/WorkflowUnavailable'
-import { Clubs } from './pages/Clubs'
 import { ClubMembers, ClubTools } from './pages/ClubTools'
 import { Effectiveness } from './pages/Effectiveness'
 import { ClubsDirectory } from './pages/ClubsDirectory'
@@ -28,7 +26,6 @@ import { useLiveInbox } from './hooks/useLiveInbox'
 import { usePhone } from './hooks/useMediaQuery'
 import './App.css'
 
-const INBOX_POLL_MS = 30000
 
 function Shell({ streamOverride }) {
   const [session, setSession] = useState(null)
@@ -74,29 +71,15 @@ function Shell({ streamOverride }) {
     }
   }, [session])
 
-  // The v1 provider streams notifications (SSE) with a 60 s polling fallback.
-  // The legacy beta provider has no stream, so it keeps polling every 30 s.
+  // Notifications stream over SSE with a 60 s polling fallback.
   const toast = useToast()
   useLiveInbox({
-    enabled: Boolean(session) && !usesMainBackend,
+    enabled: Boolean(session),
     refreshInbox,
     onUnread: setUnread,
     onNotification: notification => toast.show({ message: notification.title, tone: 'info', action: { label: 'View', onClick: () => navigate('/notifications') } }),
     streamFactory: streamOverride,
   })
-  useEffect(() => {
-    if (!session || !usesMainBackend) return undefined
-    refreshInbox()
-    const id = setInterval(refreshInbox, INBOX_POLL_MS)
-    const onFocus = () => { if (!document.hidden) refreshInbox() }
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('visibilitychange', onFocus)
-    return () => {
-      clearInterval(id)
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onFocus)
-    }
-  }, [session, refreshInbox])
 
   // Bars that float over the page: pages read this for scroll-padding and the
   // toast position, so focused fields are never hidden under them.
@@ -146,16 +129,16 @@ function Shell({ streamOverride }) {
           <Route path="/venues" element={<Venues />} />
           <Route path="/venues/:id/calendar" element={<Calendar canBook={organizer} />} />
           <Route path="/clubs" element={<ClubsDirectory session={session} refreshSession={refreshSession} />} />
-          <Route path="/organizer/clubs" element={organizer ? <Clubs refreshSession={refreshSession} /> : <Navigate to="/clubs" replace />} />
-          <Route path="/organizer/club-tools" element={organizer && !usesMainBackend ? <ClubTools session={session} /> : <Navigate to="/clubs" replace />} />
-          <Route path="/organizer/clubs/:id/members" element={organizer && !usesMainBackend ? <ClubMembers session={session} refreshSession={refreshSession} /> : <Navigate to="/clubs" replace />} />
-          <Route path="/organizer/clubs/:id/reports/effectiveness" element={organizer && !usesMainBackend ? <Effectiveness /> : <Navigate to="/clubs" replace />} />
+          <Route path="/organizer/clubs" element={organizer ? <ClubTools session={session} refreshSession={refreshSession} /> : <Navigate to="/clubs" replace />} />
+          <Route path="/organizer/club-tools" element={<Navigate to="/organizer/clubs" replace />} />
+          <Route path="/organizer/clubs/:id/members" element={organizer ? <ClubMembers session={session} refreshSession={refreshSession} /> : <Navigate to="/clubs" replace />} />
+          <Route path="/organizer/clubs/:id/reports/effectiveness" element={organizer ? <Effectiveness /> : <Navigate to="/clubs" replace />} />
           <Route path="/bookings/new" element={<CreateEvent session={session} />} />
           <Route path="/organizer" element={<Organizer session={session} />} />
           <Route path="/organizer/events/:id" element={<ManageEvent session={session} />} />
-          <Route path="/admin/bookings" element={usesMainBackend ? <WorkflowUnavailable title="Booking review" /> : <Admin session={session} />} />
+          <Route path="/admin/bookings" element={<Admin session={session} />} />
           <Route path="/notifications" element={<Notifications refreshInbox={refreshInbox} />} />
-          <Route path="/organizer/clubs/:id/reports" element={usesMainBackend ? <WorkflowUnavailable title="Club reports" /> : <Reports />} />
+          <Route path="/organizer/clubs/:id/reports" element={<Reports />} />
           <Route path="*" element={<main><h1>Page not found</h1></main>} />
         </Routes>
       </div>

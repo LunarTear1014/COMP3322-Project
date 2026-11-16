@@ -147,3 +147,9 @@ body { padding: 0; }
 .join-requests { margin-block-end: var(--space-6); }
 .join-request { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; padding-block: var(--space-3); border-block-end: 1px solid var(--line); }
 .join-request p { margin: 0; }
+
+/* President's club activity log (Members and roles). */
+.action-log { margin-block-start: var(--space-6); }
+.action-log-entry { display: flex; flex-direction: column; gap: var(--space-1); padding-block: var(--space-3); border-block-end: 1px solid var(--line); }
+.action-log-entry p { margin: 0; }
+.action-log-entry .cs-btn { align-self: flex-start; }

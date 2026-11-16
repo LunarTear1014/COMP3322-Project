@@ -64,3 +64,21 @@ Only the club's president SHALL cancel a published event. Committee members SHAL
 #### Scenario: President cancels a published event
 - **WHEN** the president cancels a published event with a reason and the current version
 - **THEN** the existing atomic cancellation runs, and participants and committee are notified
+
+### Requirement: Member removal and committee step-down
+The committee and president SHALL be able to remove a plain member from the club, which ends that student's upcoming members-only registrations (promoting waiters as usual) and closes their pending event requests. A committee member SHALL be able to step down to member themselves. Neither action SHALL apply to the president.
+
+#### Scenario: Remove a member with a members-only seat
+- **WHEN** a committee member removes a plain member who holds a seat at an upcoming members-only event
+- **THEN** the membership is deleted, the seat is released to the first eligible waiter, and the removed student is notified
+
+#### Scenario: Committee member steps down
+- **WHEN** a committee member leaves the committee
+- **THEN** their role becomes member with a new version, and the rest of the committee is notified
+
+### Requirement: President's action log and undo
+Role changes, presidency transfers, member removals, step-downs and join-request decisions SHALL be recorded in the club's action log, which only the president can read. The president SHALL be able to undo a recorded action once, only while no later action affects the same member and the state still matches.
+
+#### Scenario: Undo blocked by a later action
+- **WHEN** the president undoes a promotion that was followed by a demotion of the same member
+- **THEN** the request returns 409 INVALID_STATE and nothing changes

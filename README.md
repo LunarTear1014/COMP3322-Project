@@ -19,7 +19,10 @@ React frontend (port 5173) → Vite /api proxy → Express API (port 3000) → M
 Open **http://c3322-pg19.cs.hku.hk** over HKUVPN after deployment.
 Compose builds the beta frontend and Express backend on the Ubuntu server and
 runs them with MySQL. Only HTTP on port 80 is published. The MySQL data lives
-in the Compose `db_data` volume.
+in the Compose `db_data` volume. The frontend talks only to `/api/v1`. On every
+`docker compose up`, a one-shot `migrate` service applies the tracked
+migrations before the API and worker start; on an empty database it builds the
+full v1 schema on top of `schema.sql`.
 
 1. Connect to HKUVPN, then paste this block on your Mac. It uploads the
    archive and opens an SSH session on the Group 19 server.
@@ -35,8 +38,10 @@ in the Compose `db_data` volume.
 
 2. Paste this block into the SSH session. It unpacks the archive, generates
    the deployment credentials, starts Compose, and provisions a regular
-   member and a committee account. Later runs reuse the existing `.env`
-   and starter accounts.
+   member, a committee account and a generated president for each club. Later
+   runs reuse the existing `.env` and accounts. The president provisioning
+   prints its generated password once; save it in the group's password
+   manager.
 
    ```bash
    (
@@ -61,6 +66,7 @@ in the Compose `db_data` volume.
      printf '\n'
      if [ ! -e .starter-accounts-ready ]; then
        docker compose exec -T backend node src/ops/provision-starter-accounts.js
+       docker compose exec -T backend node src/ops/provision-dev.js
        touch .starter-accounts-ready
      fi
      docker compose ps
@@ -81,9 +87,11 @@ with the group.
 
 ### Give another account organizer access
 
-The first boot creates the tables and starter clubs and venues. Register an
-account on the website, then paste this block in the SSH session and enter
-the account's email when prompted. Sign out and back in to see Organizer.
+Normally the club's president appoints committee members in the app
+(Organizer → Your clubs → Members and roles). For an operator override,
+register an account on the website, then paste this block in the SSH session
+and enter the account's email when prompted. Sign out and back in to see
+Organizer.
 
 ```bash
 (
@@ -127,8 +135,9 @@ the database volume: `docker run --rm -v clubspace-pg19_cover_data:/data -v
 sweep removes files that no event references.
 
 Schema changes after the beta baseline are ordered migrations in
-`backend-beta/db/migrations`. Back up the database, then run
-`docker compose exec backend node src/ops/migrate.js`. The runner takes a
+`backend-beta/db/migrations`. The `migrate` Compose service runs them on every
+`docker compose up`, before the API and worker start; back up the database
+before deploying a release that adds one. The runner takes a
 database lock, verifies the checksum of each applied file, and records each
 version only after it finishes. Set `MIGRATION_DB_USER` and
 `MIGRATION_DB_PASSWORD` when the application account has no DDL rights.
@@ -188,15 +197,36 @@ the operator name you give:
 docker compose exec -T backend node src/ops/retry-notification-job.js JOB_ID "your name"
 ```
 
+### Start over with a fresh database
+
+This deletes every account, club, event, notification and uploaded cover on
+the server. Back up first if anything should be kept. In the server SSH
+session:
+
+```bash
+(
+  set -eu
+  cd "$HOME/clubspace-pg19"
+  mkdir -p "$HOME/clubspace-backups"
+  if docker compose ps --status running db | grep -q db; then
+    umask 077
+    docker compose exec -T db sh -c 'exec mysqldump --single-transaction --routines --triggers -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' \
+      > "$HOME/clubspace-backups/clubspace-before-reset-$(date -u +%Y%m%dT%H%M%SZ).sql"
+  fi
+  docker compose down -v
+  rm -f .starter-accounts-ready
+)
+```
+
+Then run step 2 above again. It rebuilds the images, creates the schema and
+catalog, runs the migrations and provisions the accounts.
+
 ### Redeploy an updated archive
 
 Upload the updated `clubspace-pg19-server.tar.gz` using the Mac commands
-above. This procedure stops the application, saves a database backup, runs
-the tracked migrations, then starts everything again. The first migration of a
-database with legacy bookings needs `LEGACY_DATETIME_TIMEZONE=Asia/Taipei`: the
-beta stored event times as UTC+8 local time, and migration 004 converts them
-to UTC once. If that is not true for your database, stop and investigate
-before running it. In the server SSH session, paste:
+above. This procedure stops the application, saves a database backup, then
+starts everything again; the `migrate` service applies any new migrations
+before the API and worker start. In the server SSH session, paste:
 
 ```bash
 (
@@ -219,32 +249,21 @@ before running it. In the server SSH session, paste:
   umask 077
   docker compose exec -T db sh -c 'exec mysqldump --single-transaction --routines --triggers -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' > "$backup"
   test -s "$backup"
-  docker compose build backend
-  docker compose run --rm --no-deps -e LEGACY_DATETIME_TIMEZONE=Asia/Taipei \
-    backend node src/ops/migrate.js
   docker compose up -d --build
   curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
     --connect-timeout 2 --max-time 5 http://127.0.0.1/api/health
   printf '\n'
-  docker compose exec -T backend node src/ops/provision-dev.js
-  docker compose ps
+  docker compose ps -a
   printf 'Database backup: %s\n' "$backup"
 )
 ```
 
-The server's existing `.env` and database volume supply its credentials and
-data. If the MySQL recovery setup uses `compose.override.yaml` and the
-`db_recovery` volume, keep that override in the project directory for
-subsequent deployments. The migration runner refuses a changed checksum or an
-interrupted migration; do not blindly retry after such an error. Restore the
-backup or inspect the partial schema before continuing.
-
-Before applying the first migration to an older database, the runner checks
-relationships, booking overlaps, capacities, waitlist size, normalized
-identities and event and booking states. If it reports records that need
-repair, keep the application stopped and resolve them with the backup at hand.
-`provision-dev.js` gives every club without a president a generated fictional
-one; it prints a generated password once unless `DEV_ACCOUNT_PASSWORD` is set.
+If `migrate` exits with an error, the API and worker do not start; read
+`docker compose logs migrate`. The runner refuses a changed checksum or an
+interrupted migration; do not blindly retry. Restore the backup or inspect
+the partial schema before continuing. A database that still holds beta-era
+bookings (stored as UTC+8 local time) needs `LEGACY_DATETIME_TIMEZONE=Asia/Taipei`
+in `.env` for its first migration; a fresh database needs nothing.
 
 ## Beta interview submission
 
@@ -404,6 +423,12 @@ See the [beta integration notes](frontend-beta/INTEGRATION.md) for fixture
 preview and the planned v1 workflows.
 
 ## API routes
+
+The frontend uses only the versioned API under `/api/v1`; its contract is in
+[`handoff/api.md`](openspec/changes/expand-clubspace-workflows/handoff/api.md)
+and [`handoff/beta-feedback.md`](openspec/changes/expand-clubspace-workflows/handoff/beta-feedback.md).
+The unversioned beta routes below stay mounted for compatibility only; no page
+calls them, and new features exist only on `/api/v1`.
 
 | Method | Route                         | Purpose                                    |
 | ------ | ----------------------------- | ------------------------------------------ |

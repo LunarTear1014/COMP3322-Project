@@ -71,7 +71,7 @@ Reference implementation plan: recipients may use their own development and trac
 - [ ] 8.5 Implement admin pending-review queue/rejection reasons/conflict behavior with no self-decision UX.
 - [ ] 8.6 Implement weekly campus-time calendar and slot-to-request flow, including private blocks and keyboard alternative.
 - [ ] 8.7 Implement inbox/unread polling and report charts/tables with history cutoff and honest metric labels.
-- [ ] 8.8 Update every Alpha fetch in one coordinated v1 cutover, then retire legacy routes with 410 (legacy routes stay mounted until then); test401/403/404/409/410/422/429/503, mobile/keyboard/deep links and stale requests.
+- [ ] 8.8 Update every Alpha fetch in one coordinated v1 cutover, then retire legacy routes with 410 (legacy routes stay mounted until then); test401/403/404/409/410/422/429/503, mobile/keyboard/deep links and stale requests. Progress (2026-11-16): every frontend fetch now goes to `/api/v1` (adapter removed; real-stack smoke test on a fresh Compose database covered register, sign-in, club request and review, members-only request and accept, the action log, and live inbox updates over SSE). Open: 410 retirement of the legacy routes and the full error-status walk.
 
 ## 9. Release and handoff verification
 
@@ -91,3 +91,7 @@ Reference implementation plan: recipients may use their own development and trac
 - [x] 10.6 Implement check-in (open, code, mark and unmark, window, rate limit, joined-only) and view tracking (sources, 30-minute dedup, 180-day purge).
 - [x] 10.7 Implement `GET /clubs/:id/reports/effectiveness` with named SQL. Verify against hand-built fixtures: join, leave and rejoin; a promoted no-show; no check-in; a group under 3; and views by source.
 - [ ] 10.8 Frontend parts of these features are tracked in `refresh-clubspace-visual-design` (section 8).
+
+## 11. Club management on v1 (beta parity)
+
+- [x] 11.1 Port the beta's remove-member, leave-committee and president action log with undo to v1 on `club_action_log`; v1 role, presidency and join-request decisions write log entries. Evidence: `src/api_v1/club_actions.db.test.js` (removal ends members-only places and promotes, undo of removal, step-down, version bumps, later-action block, president-only log, join-request undo, presidency undo).

@@ -3,6 +3,8 @@ import { with_transaction } from "../db/transaction.js";
 import { ApiError } from "../shared/errors.js";
 import { PAGE_QUERY, pagination, validate_body, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
+import { end_members_only_places, list_actions, log_action, undo_action } from "./club_actions.js";
+import { promote_locked } from "./registration.js";
 import { audit, id_param, iso, membership_dto, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
 
 const WAITING = "('waitlisted', 'pending')";
@@ -153,6 +155,8 @@ function create_clubs_router({ pool, clock }) {
           await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "member.joined", details: { user_id: request.user_id, request_id }, now });
         }
         await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: accepted ? "request.accepted" : "request.rejected", details: { user_id: request.user_id, request_id }, now });
+        await log_action(conn, { club, actor_id: req.user.id, target_id: request.user_id, type: accepted ? "join_request_accepted" : "join_request_rejected",
+          description: `${accepted ? "Accepted" : "Rejected"} a membership request.`, details: { request_id, decision: body.decision } });
         // The other committee members' Approve and Reject buttons would be stale.
         await conn.query("DELETE FROM notifications WHERE club_join_request_id = ?", [request_id]);
         await notify(conn, { users: [request.user_id], type: "club_membership", club_id, now, key: `club-request-decided:${request_id}`,
@@ -198,6 +202,9 @@ function create_clubs_router({ pool, clock }) {
           await conn.query("UPDATE memberships SET role = ?, version = version + 1 WHERE user_id = ? AND club_id = ?", [body.role, target_id, club_id]);
           const now = clock();
           await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "role.changed", details: { user_id: target_id, from: target.role, to: body.role }, now });
+          await log_action(conn, body.role === "committee"
+            ? { club, actor_id: req.user.id, target_id, type: "member_promoted", description: "Promoted a regular member to committee." }
+            : { club, actor_id: req.user.id, target_id, type: "member_demoted", description: "Demoted a committee member to regular member status." });
           const committee = await committee_ids(conn, club_id);
           await notify(conn, {
             users: [target_id, ...committee], type: "role_changed", club_id, now, exclude: req.user.id,
@@ -210,6 +217,82 @@ function create_clubs_router({ pool, clock }) {
         return membership_dto(row);
       });
       res.json({ data: result });
+    })],
+    // Committee and president remove a plain member (beta "kick"). Their
+    // upcoming members-only places end and pending requests close.
+    delete: [require_user, wrap(async (req, res) => {
+      const club_id = id_param(req, "club_id");
+      const target_id = id_param(req, "user_id");
+      const now = clock();
+      await with_transaction(pool, async (conn) => {
+        const [[club]] = await conn.query("SELECT id, name FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
+        const actor = club && await committee_of(conn, req.user.id, club_id, { lock: true });
+        if (!club || !actor) throw new ApiError("NOT_FOUND", "That club does not exist.");
+        if (!is_committee(actor)) throw new ApiError("FORBIDDEN", "Only the committee can remove members.");
+        if (target_id === req.user.id) throw new ApiError("INVALID_STATE", "You can’t remove yourself.");
+        const target = await committee_of(conn, target_id, club_id, { lock: true });
+        if (!target) throw new ApiError("NOT_FOUND", "That person is not a member.");
+        if (target.role !== "member") throw new ApiError("FORBIDDEN", "Only plain members can be removed. Ask the president to change their role first.");
+        await end_members_only_places(conn, { club_id, user_id: target_id, actor: req.user.id, now, promote_locked });
+        await conn.query("DELETE FROM memberships WHERE user_id = ? AND club_id = ?", [target_id, club_id]);
+        await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "member.left", details: { user_id: target_id, removed: true }, now });
+        await log_action(conn, { club, actor_id: req.user.id, target_id, type: "member_removed", description: "Removed a regular member from the club." });
+        await notify(conn, { users: [target_id], type: "club_membership", club_id, now, key: `removed:${club_id}:${target_id}:${to_db(now)}`,
+          title: `You were removed from ${club.name}`, body: "A committee member removed you from the club. Its members-only events are closed to you." });
+      });
+      res.status(204).end();
+    })],
+  });
+
+  // A committee member steps down to member (beta "leave committee").
+  define_route(router, "/clubs/:club_id/committee", {
+    delete: [require_user, wrap(async (req, res) => {
+      const club_id = id_param(req, "club_id");
+      const now = clock();
+      const data = await with_transaction(pool, async (conn) => {
+        const [[club]] = await conn.query("SELECT id, name FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
+        const mine = club && await committee_of(conn, req.user.id, club_id, { lock: true });
+        if (!club || !mine) throw new ApiError("NOT_FOUND", "That club does not exist.");
+        if (mine.role === "president") throw new ApiError("PRESIDENT_TRANSFER_REQUIRED", "Transfer the presidency before leaving the committee.");
+        if (mine.role !== "committee") throw new ApiError("INVALID_STATE", "You are not on the committee.");
+        await conn.query("UPDATE memberships SET role = 'member', version = version + 1 WHERE user_id = ? AND club_id = ?", [req.user.id, club_id]);
+        await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "role.changed", details: { user_id: req.user.id, from: "committee", to: "member", self: true }, now });
+        await log_action(conn, { club, actor_id: req.user.id, target_id: req.user.id, type: "committee_left", description: "Left the committee and returned to regular member status." });
+        await notify(conn, { users: await committee_ids(conn, club_id), type: "role_changed", club_id, now, exclude: req.user.id,
+          key: `committee_left:${club_id}:${req.user.id}:${to_db(now)}`, title: `Role change in ${club.name}`, body: `${req.user.name} left the committee and is now a member.` });
+        const [[row]] = await conn.query("SELECT m.club_id, c.name AS club_name, m.role, m.version, m.joined_at FROM memberships m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ? AND m.club_id = ?", [req.user.id, club_id]);
+        return membership_dto(row);
+      });
+      res.json({ data });
+    })],
+  });
+
+  // The president's action log and undo.
+  define_route(router, "/clubs/:club_id/actions", {
+    get: [require_user, wrap(async (req, res) => {
+      const club_id = id_param(req, "club_id");
+      const query = pagination(validate_query(req.query, PAGE_QUERY));
+      const mine = await committee_of(pool, req.user.id, club_id);
+      if (!mine) throw new ApiError("NOT_FOUND", "That club does not exist.");
+      if (mine.role !== "president") throw new ApiError("FORBIDDEN", "Only the president can see the club’s action log.");
+      const { rows, total } = await list_actions(pool, club_id, query);
+      res.json({ data: rows, meta: page_meta(total, query) });
+    })],
+  });
+
+  define_route(router, "/clubs/:club_id/actions/:action_id/undo", {
+    post: [require_user, wrap(async (req, res) => {
+      const club_id = id_param(req, "club_id");
+      const action_id = id_param(req, "action_id");
+      await with_transaction(pool, async (conn) => {
+        const [[club]] = await conn.query("SELECT id, name FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
+        const mine = club && await committee_of(conn, req.user.id, club_id, { lock: true });
+        if (!club || !mine) throw new ApiError("NOT_FOUND", "That club does not exist.");
+        if (mine.role !== "president") throw new ApiError("FORBIDDEN", "Only the president can undo club actions.");
+        await undo_action(conn, { club, action_id, actor_id: req.user.id, now: clock(), committee_ids, promote_locked });
+      });
+      const { rows } = await list_actions(pool, club_id, { page: 1, page_size: 1 });
+      res.json({ data: { undone: action_id, latest: rows[0] ?? null } });
     })],
   });
 
@@ -234,6 +317,8 @@ function create_clubs_router({ pool, clock }) {
         await conn.query("UPDATE memberships SET role = 'president', version = version + 1 WHERE user_id = ? AND club_id = ?", [to.user_id, club_id]);
         const now = clock();
         await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "presidency.transferred", details: { from: req.user.id, to: to.user_id }, now });
+        await log_action(conn, { club, actor_id: req.user.id, target_id: to.user_id, type: "presidency_transferred",
+          description: "Transferred the presidency to another committee member.", details: { previous_president_id: req.user.id, new_president_id: to.user_id } });
         await notify(conn, {
           users: await committee_ids(conn, club_id), type: "role_changed", club_id, now, exclude: req.user.id,
           key: `presidency:${club_id}:${to.user_id}:${Number(to.version) + 1}`, title: `New president of ${club.name}`, body: "The presidency was transferred.",
