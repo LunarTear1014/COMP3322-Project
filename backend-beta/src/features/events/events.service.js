@@ -57,9 +57,9 @@ async function list_events(user_id = null, { event_id = null, managed = false } 
         e.id,
         e.title,
         e.description,
-        DATE_FORMAT(e.start_time, '%Y-%m-%d') AS date,
-        TIME_FORMAT(e.start_time, '%H:%i') AS start_time,
-        TIME_FORMAT(e.end_time, '%H:%i') AS end_time,
+        DATE_FORMAT(e.start_time + INTERVAL 8 HOUR, '%Y-%m-%d') AS date,
+        TIME_FORMAT(e.start_time + INTERVAL 8 HOUR, '%H:%i') AS start_time,
+        TIME_FORMAT(e.end_time + INTERVAL 8 HOUR, '%H:%i') AS end_time,
         e.visibility,
         e.capacity,
         e.status AS event_status,
@@ -100,9 +100,9 @@ async function list_my_participations(user_id) {
        e.id AS event_id,
        e.title,
        e.description,
-       DATE_FORMAT(e.start_time, '%Y-%m-%d') AS date,
-       TIME_FORMAT(e.start_time, '%H:%i') AS start_time,
-       TIME_FORMAT(e.end_time, '%H:%i') AS end_time,
+       DATE_FORMAT(e.start_time + INTERVAL 8 HOUR, '%Y-%m-%d') AS date,
+       TIME_FORMAT(e.start_time + INTERVAL 8 HOUR, '%H:%i') AS start_time,
+       TIME_FORMAT(e.end_time + INTERVAL 8 HOUR, '%H:%i') AS end_time,
        e.status AS event_status,
        e.visibility,
        c.name AS club,
@@ -483,13 +483,14 @@ async function edit_event(
       await connection.query(
         `UPDATE events
          SET title = ?, description = ?, start_time = ?, end_time = ?,
-             visibility = ?, capacity = ?
+             registration_closes_at = ?, visibility = ?, capacity = ?
          WHERE id = ?`,
         [
           title.trim(),
           description.trim(),
           bounds.start,
           bounds.end,
+          bounds.start,
           database_visibility(visibility),
           venue_row.capacity,
           event_id,
@@ -636,8 +637,9 @@ async function create_event({
     );
     const [event_result] = await connection.query(
       `INSERT INTO events
-        (booking_id, club_id, title, description, start_time, end_time, visibility, capacity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (booking_id, club_id, title, description, start_time, end_time, visibility, capacity,
+         registration_closes_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         booking_result.insertId,
         club_row.id,
@@ -647,6 +649,7 @@ async function create_event({
         bounds.end,
         database_visibility(visibility),
         venue_row.capacity,
+        bounds.start,
       ],
     );
     await record_club_action(connection, {

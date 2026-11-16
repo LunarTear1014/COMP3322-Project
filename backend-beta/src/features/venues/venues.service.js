@@ -1,5 +1,5 @@
 import pool from "../../config/db.js";
-import { TIMESLOTS, timeslot_bounds } from "../../shared/timeslots.js";
+import { TIMESLOTS, local_to_utc, timeslot_bounds } from "../../shared/timeslots.js";
 
 async function list_venues_with_availability(date) {
   const day_end = new Date(`${date}T00:00:00Z`);
@@ -13,7 +13,7 @@ async function list_venues_with_availability(date) {
     `SELECT venue_id, start_time, end_time
      FROM bookings
      WHERE status = 'confirmed' AND start_time < ? AND end_time > ?`,
-    [`${next_date} 00:00:00`, `${date} 00:00:00`],
+    [local_to_utc(next_date, "00:00:00"), local_to_utc(date, "00:00:00")],
   );
 
   return venues.map((venue) => ({
@@ -23,8 +23,8 @@ async function list_venues_with_availability(date) {
       const available = !bookings.some(
         (booking) =>
           booking.venue_id === venue.id &&
-          booking.start_time < slot.end &&
-          booking.end_time > slot.start,
+          String(booking.start_time).slice(0, 19) < slot.end &&
+          String(booking.end_time).slice(0, 19) > slot.start,
       );
       return { time, available };
     }),
