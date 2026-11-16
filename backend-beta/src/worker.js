@@ -57,7 +57,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { default: dotenv } = await import("dotenv");
   dotenv.config({ path: new URL("../../.env", import.meta.url), quiet: true });
   const pool = create_utc_pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 3306), database: process.env.DB_NAME, user: process.env.DB_USER, password: process.env.DB_PASSWORD, connection_limit: 4 });
-  await assert_schema_version(pool, "015_events_cover");
+  await assert_schema_version(pool, "016_join_requests");
   await run_worker({ pool });
   await pool.end();
 }

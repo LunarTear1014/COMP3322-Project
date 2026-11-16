@@ -20,6 +20,7 @@ Decisions confirmed by the product owner: the president alone manages roles and 
 | `011_signoff_states` | `bookings.status` adds `awaiting_president` and `returned`; `events.status` adds `awaiting_president`. Add `signoff_requested_by INT NULL`, `signoff_decided_by INT NULL`, `signoff_decided_at DATETIME(6) NULL` and `signoff_reason VARCHAR(500) NULL` to both tables. `awaiting_president` and `returned` bookings never count as busy. |
 | `012_tags` | `campus_tags(id, slug VARCHAR(32) UNIQUE, name VARCHAR(40), retired_at NULL)`; `club_tags(id, club_id FK, name VARCHAR(24), name_key VARCHAR(24) AS (LOWER(name)) STORED, UNIQUE(club_id, name_key))`; `event_campus_tags(event_id, campus_tag_id, PK both)`; `event_club_tags(event_id, club_tag_id, PK both)`. Seed the campus tags Academic, Arts, Career, Culture, Free food, Music, Social, Sports, Tech, Volunteering. Backfill existing events with Social. |
 | `013_attendance_views` | `events`: `checkin_code CHAR(4) NULL`, `checkin_opened_at DATETIME(6) NULL`. `event_attendance(event_id, user_id, method ENUM('code','marked'), checked_in_at, marked_by NULL, PK(event_id,user_id))`. `event_views(id, event_id, user_id, source ENUM('explore','club','inbox','my_events','share','other'), viewed_at, bucket DATETIME(6), UNIQUE(event_id,user_id,bucket))`, where `bucket` = `viewed_at` floored to 30 minutes. Add `INDEX(event_id, viewed_at)`. |
+| `016_join_requests` | `event_join_requests(event_id, user_id PK, status ENUM('pending','accepted','rejected','withdrawn','cancelled'), allow_waitlist, requested_at DATETIME(6), reviewed_by, reviewed_at, reason VARCHAR(500))`. Creates `club_join_requests` and `notifications.club_join_request_id` only where the legacy SQL 002 never ran. |
 | `014_notifications_live` | Extend `notifications.type` with the new types in section 3. Add `club_id INT NULL`. `activity_digests(club_id, campus_date, PRIMARY KEY(club_id, campus_date))` records digests already sent. |
 
 Purge `event_views` older than 180 days in the worker's daily maintenance. `participation_history` already supplies joined-at-start, drop-outs and promotions; don't add counters.
@@ -76,6 +77,10 @@ The actor is never a recipient, except where noted. D = immediate (written in th
 | Promotion caused by another's withdrawal | `registration_changed` | promoted student | D |
 | Role changed / presidency transferred | `role_changed` | affected user(s) + rest of committee | D |
 | Club tags changed | `club_updated` | committee + president | D |
+| Student asks to join a club | `club_join_request` (with `join_request_id`) | committee + president | D |
+| Club join request accepted / rejected | `club_membership` | requester; other reviewers' request items are removed | D |
+| Member asks to join a members-only event | `event_join_request` | committee + president | D |
+| Event join request sent / accepted / rejected | `registration_changed` | requester | D |
 | Joins, leaves, new and departed members | `activity_digest` | committee + president, 09:00 HKT, only if activity | J |
 | Check-in opened | `checkin_opened` | joined students | D |
 | 24h reminder | `event_reminder` | joined students | J |

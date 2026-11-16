@@ -28,6 +28,8 @@ Reference implementation plan: recipients may use their own development and trac
 - [ ] 3.5 Implement password hashing/verification, normalized registration/login, dummy path, hash queue and throttling; benchmark target memory/latency.
 - [x] 3.6 Implement current-user profile/session/config endpoints and DB-backed identity/permission helpers; verify no DEMO_USER_ID bypass.
 - [x] 3.7 Implement persistent club membership endpoints with protected committee/active-registration leave rules; pass scoped access and membership race tests.
+- [x] 3.8 Implement committee-scoped club join requests with approval/rejection and pending state in the member and organizer interfaces (requested 2026-11-06, ported from `beta-interview` 1da6a47 into v1). Evidence: `src/api_v1/join_requests.db.test.js` (202 request, committee-only list, concurrent review, digest audit, withdrawal); frontend `myEvents.ui.test.jsx`.
+- [x] 3.9 Implement committee approval/rejection for members-only event join requests, preserving capacity, waitlist ordering, withdrawal and notifications; public event joins remain automatic. Evidence: `join_requests.db.test.js` (requested state, committee direct registration, EVENT_FULL keeps the request, accept to joined and waitlisted, promotion, withdraw/leave/cancel close requests, closed on lost membership); frontend `joinRequests.ui.test.jsx`, `registration.test.js`.
 
 ## 4. Booking/event backend
 

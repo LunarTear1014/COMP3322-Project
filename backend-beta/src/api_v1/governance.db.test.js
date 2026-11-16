@@ -94,9 +94,12 @@ describe("club governance and versions", { skip }, () => {
     assert.equal((await outsider.get("/clubs/1/members")).status, 404);
     assert.equal((await outsider.get("/clubs/999/members")).status, 404);
     assert.equal((await outsider.get("/clubs?page_size=1")).body.meta.page_size, 1);
-    const mine = (await outsider.put("/clubs/1/membership", {})).body.data;
-    assert.equal(mine.role, "member");
-    assert.equal((await outsider.get("/me/memberships")).body.data.length, 1);
-    assert.equal((await outsider.delete("/clubs/1/membership")).status, 204);
+    const asked = await outsider.put("/clubs/1/membership", {});
+    assert.equal(asked.status, 202);
+    assert.equal(asked.body.data.status, "pending");
+    assert.equal((await outsider.get("/me/memberships")).body.data.length, 0, "a request is not a membership");
+    assert.equal((await outsider.delete("/clubs/1/membership")).status, 204, "withdraws the request");
+    const [[{ n }]] = await app.admin.query("SELECT COUNT(*) AS n FROM club_join_requests WHERE user_id = ? AND status = 'pending'", [ids.s1]);
+    assert.equal(Number(n), 0);
   });
 });

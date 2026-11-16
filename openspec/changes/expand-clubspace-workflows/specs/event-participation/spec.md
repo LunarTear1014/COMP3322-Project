@@ -58,3 +58,18 @@ The system SHALL restrict participant identities to club committee and append hi
 #### Scenario: Persisted state
 - **WHEN** a student reloads or logs in on another browser
 - **THEN** their actual database registration is returned
+
+### Requirement: Members-only registration approval
+A plain member registering for a members-only event SHALL create a pending join request that allocates no seat or waitlist place. Committee members and the president of the event's club SHALL register directly, and public events SHALL stay automatic. The committee SHALL accept or reject each request; accepting SHALL apply the current capacity and waitlist rules with the student's own `allow_waitlist` choice.
+
+#### Scenario: Member requests a members-only event
+- **WHEN** a plain member registers for a published members-only event before the deadline
+- **THEN** 202 returns status `requested`, the committee and president are notified, and joined and waitlisted counts are unchanged
+
+#### Scenario: Accept into a full event
+- **WHEN** the committee accepts a request for a full event whose student did not allow the waitlist
+- **THEN** 409 EVENT_FULL is returned and the request stays pending
+
+#### Scenario: Requests close with the event
+- **WHEN** an event with pending requests is cancelled, or a requester leaves the club or withdraws
+- **THEN** each pending request is closed and none can be accepted afterwards

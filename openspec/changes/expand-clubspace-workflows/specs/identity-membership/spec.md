@@ -38,11 +38,15 @@ The system SHALL derive committee and president permissions from current members
 - **THEN** the request returns403
 
 ### Requirement: Persistent membership lifecycle
-The system SHALL persist idempotent membership join/leave, allow role changes only by an operator or the club's president, and serialize eligibility-sensitive membership writes with registrations.
+The system SHALL persist club membership through committee-approved join requests and idempotent leave, allow role changes only by an operator or the club's president, and serialize eligibility-sensitive membership writes with registrations.
 
 #### Scenario: Repeated join
 - **WHEN** a committee member or president joins the same club again
 - **THEN** the original role is returned without downgrade
+
+#### Scenario: Club membership request
+- **WHEN** a nonmember asks to join a club
+- **THEN** 202 returns one pending join request, the committee and president are notified immediately, and the student is not a member until a committee member accepts it
 
 #### Scenario: Self-appointment
 - **WHEN** a member sends a request that would raise their own role
@@ -66,3 +70,14 @@ The system SHALL expose only the current user profile, hash passwords using the 
 #### Scenario: Legacy placeholder
 - **WHEN** login is attempted using a seeded placeholder hash
 - **THEN** the result is generic401 rather than authentication or server failure
+
+### Requirement: Club membership requests
+The committee and president of a club SHALL list its pending join requests and accept or reject each one exactly once. Accepting SHALL create a `member` membership; rejecting SHALL leave the student a nonmember. The requester SHALL be notified of the decision. A nonmember's leave SHALL withdraw their pending request. Joins counted in the daily digest SHALL be accepted requests.
+
+#### Scenario: Concurrent review
+- **WHEN** two committee members decide the same pending request at once
+- **THEN** exactly one decision succeeds and the other returns 409 INVALID_STATE
+
+#### Scenario: Member reviews a request
+- **WHEN** a plain member of the club lists or decides its join requests
+- **THEN** the request returns 403 FORBIDDEN and nothing changes

@@ -4,7 +4,7 @@ import { deadlineLabel, seatSummary } from './format.js'
 // and `my_registration`. The server stays authoritative: every action is
 // re-checked on write, and 409s are shown, not retried.
 //
-// kinds: join | waitlist | leave | leave_waitlist | join_club | none
+// kinds: join | waitlist | leave | leave_waitlist | cancel_request | join_club | none
 const ACTIVE = ['joined', 'pending', 'waitlisted']
 
 export function registrationView(event) {
@@ -32,6 +32,12 @@ export function registrationView(event) {
       detail: 'Your place is approximate and can change. We’ll tell you if a seat opens.', label: 'Leave waitlist',
     }
   }
+  if (status === 'requested') {
+    return {
+      kind: 'cancel_request', chip: 'requested', headline: 'Request sent',
+      detail: 'The committee will accept or reject it. You can cancel until then.', label: 'Cancel request',
+    }
+  }
   if (reason === 'MEMBERSHIP_REQUIRED') {
     return { kind: 'join_club', chip: 'members_only', headline: 'Members only', detail: 'Join the club to register for this event.', label: 'Join club to register' }
   }
@@ -44,17 +50,21 @@ export function registrationView(event) {
   if (reason === 'NOT_PUBLISHED') {
     return { kind: 'none', headline: 'Not published yet', detail: '', label: 'Not open yet', disabled: true }
   }
+  // Members-only events: plain members ask, the committee decides.
+  const approval = Boolean(event.eligibility?.requires_approval)
+  const asks = approval ? 'Members only: the committee approves each request.' : ''
   if (event.eligibility?.can_waitlist) {
-    return { kind: 'waitlist', headline: 'Event full', detail: [waiting || 'Be first on the waitlist', closes].filter(Boolean).join(' · '), label: 'Join waitlist' }
+    return { kind: 'waitlist', ...(approval && { approval }), headline: 'Event full', detail: [waiting || 'Be first on the waitlist', asks, closes].filter(Boolean).join(' · '), label: approval ? 'Request a waitlist place' : 'Join waitlist' }
   }
   if (event.eligibility?.can_register) {
-    return { kind: 'join', headline: seats.caption, detail: closes, label: 'Join event' }
+    return { kind: 'join', ...(approval && { approval }), headline: seats.caption, detail: [asks, closes].filter(Boolean).join(' · '), label: approval ? 'Request to join' : 'Join event' }
   }
   return { kind: 'none', headline: 'Registration unavailable', detail: '', label: 'Unavailable', disabled: true }
 }
 
 // The confirmation a toast gives after a successful registration write.
 export function registrationToast(result) {
+  if (result?.status === 'requested') return 'Request sent. We’ll tell you when the committee decides.'
   if (result?.status === 'waitlisted' || result?.status === 'pending') {
     return result.queue_position ? `You’re #${result.queue_position} on the waitlist.` : 'You’re on the waitlist.'
   }

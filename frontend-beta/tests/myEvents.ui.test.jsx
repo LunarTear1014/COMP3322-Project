@@ -144,7 +144,7 @@ describe('Inbox', () => {
 })
 
 describe('Clubs and Profile', () => {
-  it('joins a club with a confirmation toast and leaves with an in-page confirm', async () => {
+  it('asks to join a club with a confirmation toast and leaves with an in-page confirm', async () => {
     window.history.replaceState({}, '', '/clubs')
     const memberships = [
       { club_id: 1, club_name: 'Photography Society', name: 'Photography Society', role: 'committee' },
@@ -152,7 +152,8 @@ describe('Clubs and Profile', () => {
     ]
     const fetch = fixtureFetch((url, options) => {
       if (url.pathname === '/api/v1/me/memberships') return page(memberships)
-      if (/membership$/.test(url.pathname) && options.method) return json({ data: {} }, options.method === 'PUT' ? 201 : 200)
+      if (/membership$/.test(url.pathname) && options.method === 'PUT') return json({ data: { id: 7, club_id: 2, status: 'pending' } }, 202)
+      if (/membership$/.test(url.pathname) && options.method) return json({ data: {} }, 200)
       return null
     })
     vi.stubGlobal('fetch', fetch)
@@ -163,10 +164,10 @@ describe('Clubs and Profile', () => {
     expect(within(mine).getByText(/Committee members leave from the club management page/)).toBeTruthy()
     expect(within(mine).queryByRole('button', { name: 'Leave' })).toBeTruthy() // the plain member club
     const film = (await screen.findByRole('heading', { name: 'Film Society' })).closest('article')
-    fireEvent.click(within(film).getByRole('button', { name: 'Join club' }))
+    fireEvent.click(within(film).getByRole('button', { name: 'Request to join' }))
     await waitFor(() => expect(calls(fetch, 'PUT').length).toBe(1))
     expect(new URL(calls(fetch, 'PUT')[0][0], 'http://x').pathname).toBe('/api/v1/clubs/2/membership')
-    expect((await screen.findAllByText('You joined Film Society.')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Request sent to Film Society.')).length).toBeGreaterThan(0)
 
     const chess = within(mine).getByRole('button', { name: 'Leave' }).closest('article')
     fireEvent.click(within(chess).getByRole('button', { name: 'Leave' }))

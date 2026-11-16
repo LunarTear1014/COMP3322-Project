@@ -68,6 +68,10 @@ organizerEvents.push(awaitingEvent, returnedEvent, waitingBookingEvent)
 events.push(awaitingEvent, returnedEvent, waitingBookingEvent)
 const checkinEvent = { ...events[0], id: 35, title: 'Gallery walk tonight', start_at: future(0.01), end_at: future(0.09), phase: 'upcoming', cover: null, my_registration: { status: 'joined', queue_position: null }, eligibility: { can_register: false, can_waitlist: false, reason: 'ALREADY_REGISTERED' }, campus_tags: [tagOf('arts')], club_tags: [] }
 events.push(checkinEvent)
+// Members-only event with one member's request waiting for the committee.
+const requestEvent = { ...events[0], id: 36, title: 'Darkroom open night', visibility: 'members_only', capacity: 12, joined_count: 4, pending_join_requests: 1, my_registration: { status: 'none', queue_position: null }, eligibility: { can_register: true, can_waitlist: false, requires_approval: false, reason: null }, campus_tags: [tagOf('arts')], club_tags: [] }
+events.push(requestEvent)
+const joinRequests = [{ user: { id: 5, name: 'Mei Lam', email: 'mei@example.test', student_id: 'S5' }, allow_waitlist: true, requested_at: future(-0.5) }]
 const attendanceRecords = [{ event_id: 35, user_id: 3, method: 'code', checked_in_at: future(-0.01), marked_by: null, user: { id: 3, name: 'Riley Chen' } }]
 const effectiveness = {
   club_id: 1, from: future(-30), to: future(1), campus_timezone: 'Asia/Hong_Kong',
@@ -118,6 +122,7 @@ export function fixturePlugin() {
       }
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
       if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
+      if (url.pathname === '/events/36/join-requests') return send(200, list(joinRequests))
       if (url.pathname === '/events/35/participants') return send(200, list([{ user: { id: 3, name: 'Riley Chen', email: 'riley@example.test', student_id: 'S3' }, status: 'joined', queue_position: null }, { user: { id: 4, name: 'Zara Wong', email: 'zara@example.test', student_id: 'S4' }, status: 'joined', queue_position: null }]))
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
       if (url.pathname === '/clubs/1/members') return send(200, list([

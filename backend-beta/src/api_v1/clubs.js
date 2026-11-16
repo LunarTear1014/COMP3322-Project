@@ -3,7 +3,7 @@ import { with_transaction } from "../db/transaction.js";
 import { ApiError } from "../shared/errors.js";
 import { PAGE_QUERY, pagination, validate_body, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
-import { audit, id_param, membership_dto, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
+import { audit, id_param, iso, membership_dto, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
 
 const WAITING = "('waitlisted', 'pending')";
 
@@ -18,6 +18,9 @@ async function committee_ids(db, club_id) {
   const [rows] = await db.query("SELECT user_id FROM memberships WHERE club_id = ? AND role IN ('committee', 'president')", [club_id]);
   return rows.map((row) => row.user_id);
 }
+
+const REVIEW = { decision: { kind: "enum", values: ["accept", "reject"], required: true } };
+const join_request_dto = (club_id, id) => ({ id, club_id, status: "pending" });
 
 const MEMBER_PATCH = { role: { kind: "enum", values: ["member", "committee"], required: true }, expected_version: { kind: "int", min: 1, required: true } };
 const PRESIDENCY = { to_user_id: { kind: "int", min: 1, required: true }, expected_version: { kind: "int", min: 1, required: true } };
@@ -34,10 +37,12 @@ function create_clubs_router({ pool, clock }) {
       const query = pagination(validate_query(req.query, PAGE_QUERY));
       const [[{ total }]] = await pool.query("SELECT COUNT(*) AS total FROM clubs");
       const [rows] = await pool.query(
-        `SELECT c.id, c.name, c.description, m.role AS my_role FROM clubs c
-         LEFT JOIN memberships m ON m.club_id = c.id AND m.user_id = ? ORDER BY c.id LIMIT ? OFFSET ?`,
-        [req.user.id, query.page_size, (query.page - 1) * query.page_size]);
-      res.json({ data: rows.map((row) => ({ id: row.id, name: row.name, description: row.description, my_role: row.my_role })), meta: page_meta(total, query) });
+        `SELECT c.id, c.name, c.description, m.role AS my_role,
+           EXISTS(SELECT 1 FROM club_join_requests r WHERE r.club_id = c.id AND r.user_id = ? AND r.status = 'pending') AS request_pending
+         FROM clubs c LEFT JOIN memberships m ON m.club_id = c.id AND m.user_id = ? ORDER BY c.id LIMIT ? OFFSET ?`,
+        [req.user.id, req.user.id, query.page_size, (query.page - 1) * query.page_size]);
+      res.json({ data: rows.map((row) => ({ id: row.id, name: row.name, description: row.description, my_role: row.my_role,
+        request_status: !row.my_role && Number(row.request_pending) ? "pending" : null })), meta: page_meta(total, query) });
     })],
   });
 
@@ -52,24 +57,32 @@ function create_clubs_router({ pool, clock }) {
     })],
   });
 
+  // Joining asks the committee. A current member (any role) gets their
+  // membership back unchanged; a pending request is returned as is.
   define_route(router, "/clubs/:club_id/membership", {
     put: [require_user, wrap(async (req, res) => {
       const club_id = id_param(req, "club_id");
+      const now = clock();
       const result = await with_transaction(pool, async (conn) => {
-        const [[club]] = await conn.query("SELECT id FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
+        const [[club]] = await conn.query("SELECT id, name FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
         if (!club) throw new ApiError("NOT_FOUND", "That club does not exist.");
         const existing = await committee_of(conn, req.user.id, club_id, { lock: true });
-        let created = false;
-        if (!existing) {
-          await conn.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, ?, 'member')", [req.user.id, club_id]);
-          await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "member.joined", details: { user_id: req.user.id }, now: clock() });
-          created = true;
+        if (existing) {
+          const [[row]] = await conn.query(
+            `SELECT m.club_id, c.name AS club_name, m.role, m.version, m.joined_at FROM memberships m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ? AND m.club_id = ?`, [req.user.id, club_id]);
+          return { status: 200, data: membership_dto(row) };
         }
-        const [[row]] = await conn.query(
-          `SELECT m.club_id, c.name AS club_name, m.role, m.version, m.joined_at FROM memberships m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ? AND m.club_id = ?`, [req.user.id, club_id]);
-        return { created, membership: membership_dto(row) };
+        const [[pending]] = await conn.query(
+          "SELECT id FROM club_join_requests WHERE user_id = ? AND club_id = ? AND status = 'pending' ORDER BY id LIMIT 1 FOR UPDATE", [req.user.id, club_id]);
+        if (pending) return { status: 200, data: join_request_dto(club_id, pending.id) };
+        const [inserted] = await conn.query("INSERT INTO club_join_requests (user_id, club_id, status, requested_at) VALUES (?, ?, 'pending', ?)", [req.user.id, club_id, to_db(now)]);
+        await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "member.requested", details: { user_id: req.user.id, request_id: inserted.insertId }, now });
+        // Actionable, so immediate rather than in the daily digest.
+        await notify(conn, { users: await committee_ids(conn, club_id), type: "club_join_request", club_id, club_join_request_id: inserted.insertId, now,
+          key: `club-request:${inserted.insertId}`, title: `${req.user.name} wants to join ${club.name}`, body: "Approve or reject the request." });
+        return { status: 202, data: join_request_dto(club_id, inserted.insertId) };
       });
-      res.status(result.created ? 201 : 200).json({ data: result.membership });
+      res.status(result.status).json({ data: result.data });
     })],
     delete: [require_user, wrap(async (req, res) => {
       const club_id = id_param(req, "club_id");
@@ -77,7 +90,11 @@ function create_clubs_router({ pool, clock }) {
         const [[club]] = await conn.query("SELECT id FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
         if (!club) throw new ApiError("NOT_FOUND", "That club does not exist.");
         const membership = await committee_of(conn, req.user.id, club_id, { lock: true });
-        if (!membership) return;
+        if (!membership) {
+          // Withdraws a pending join request, if any (its committee notifications go with it).
+          await conn.query("DELETE FROM club_join_requests WHERE user_id = ? AND club_id = ? AND status = 'pending'", [req.user.id, club_id]);
+          return;
+        }
         if (membership.role === "president") throw new ApiError("PRESIDENT_TRANSFER_REQUIRED", "Transfer the presidency before leaving the club.");
         if (membership.role === "committee") throw new ApiError("COMMITTEE_MEMBERSHIP_PROTECTED", "Committee members can’t leave here. Ask the president to change your role first.");
         const [blocking] = await conn.query(
@@ -86,9 +103,64 @@ function create_clubs_router({ pool, clock }) {
              AND p.status IN ('joined', 'waitlisted', 'pending') LIMIT 1`, [req.user.id, club_id, to_db(clock())]);
         if (blocking.length) throw new ApiError("ACTIVE_MEMBER_REGISTRATIONS", "Withdraw from this club’s members-only events before leaving.");
         await conn.query("DELETE FROM memberships WHERE user_id = ? AND club_id = ?", [req.user.id, club_id]);
+        await conn.query(
+          `UPDATE event_join_requests r JOIN events e ON e.id = r.event_id SET r.status = 'withdrawn'
+           WHERE r.user_id = ? AND e.club_id = ? AND r.status = 'pending'`, [req.user.id, club_id]);
         await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "member.left", details: { user_id: req.user.id }, now: clock() });
       });
       res.status(204).end();
+    })],
+  });
+
+  define_route(router, "/clubs/:club_id/join-requests", {
+    get: [require_user, wrap(async (req, res) => {
+      const club_id = id_param(req, "club_id");
+      const query = pagination(validate_query(req.query, PAGE_QUERY));
+      const mine = await committee_of(pool, req.user.id, club_id);
+      if (!is_committee(mine)) throw new ApiError(mine ? "FORBIDDEN" : "NOT_FOUND", mine ? "Only the committee can review join requests." : "That club does not exist.");
+      const [[{ total }]] = await pool.query("SELECT COUNT(*) AS total FROM club_join_requests WHERE club_id = ? AND status = 'pending'", [club_id]);
+      const [rows] = await pool.query(
+        `SELECT r.id, r.requested_at, u.id AS user_id, u.name, u.email, u.student_id FROM club_join_requests r JOIN users u ON u.id = r.user_id
+         WHERE r.club_id = ? AND r.status = 'pending' ORDER BY r.requested_at, r.id LIMIT ? OFFSET ?`,
+        [club_id, query.page_size, (query.page - 1) * query.page_size]);
+      res.json({ data: rows.map((row) => ({ id: row.id, club_id, status: "pending", requested_at: iso(row.requested_at),
+        user: { id: row.user_id, name: row.name, email: row.email, student_id: row.student_id } })), meta: page_meta(total, query) });
+    })],
+  });
+
+  // Committee decision on a club join request. The path matches the legacy
+  // route so the inbox's Approve and Reject buttons work on both providers.
+  define_route(router, "/clubs/:club_id/join-requests/:request_id/review", {
+    post: [require_user, wrap(async (req, res) => {
+      const club_id = id_param(req, "club_id");
+      const request_id = id_param(req, "request_id");
+      const body = validate_body(req.body, REVIEW);
+      const now = clock();
+      const data = await with_transaction(pool, async (conn) => {
+        const [[club]] = await conn.query("SELECT id, name FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
+        if (!club) throw new ApiError("NOT_FOUND", "That club does not exist.");
+        const mine = await committee_of(conn, req.user.id, club_id);
+        if (!is_committee(mine)) throw new ApiError(mine ? "FORBIDDEN" : "NOT_FOUND", mine ? "Only the committee can review join requests." : "That club does not exist.");
+        const [[request]] = await conn.query("SELECT id, user_id, status FROM club_join_requests WHERE id = ? AND club_id = ? FOR UPDATE", [request_id, club_id]);
+        if (!request) throw new ApiError("NOT_FOUND", "That join request does not exist.");
+        if (request.status !== "pending") throw new ApiError("INVALID_STATE", "Someone has already reviewed this request.");
+        const accepted = body.decision === "accept";
+        await conn.query("UPDATE club_join_requests SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
+          [accepted ? "accepted" : "rejected", req.user.id, to_db(now), request_id]);
+        if (accepted && !(await committee_of(conn, request.user_id, club_id, { lock: true }))) {
+          await conn.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, ?, 'member')", [request.user_id, club_id]);
+          // member.joined feeds the committee's daily digest.
+          await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "member.joined", details: { user_id: request.user_id, request_id }, now });
+        }
+        await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: accepted ? "request.accepted" : "request.rejected", details: { user_id: request.user_id, request_id }, now });
+        // The other committee members' Approve and Reject buttons would be stale.
+        await conn.query("DELETE FROM notifications WHERE club_join_request_id = ?", [request_id]);
+        await notify(conn, { users: [request.user_id], type: "club_membership", club_id, now, key: `club-request-decided:${request_id}`,
+          title: accepted ? `You’re in: ${club.name}` : `${club.name} declined your request`,
+          body: accepted ? "Your join request was approved. Members-only events are open to you now." : "Your join request was not approved." });
+        return { id: request_id, club_id, status: accepted ? "accepted" : "rejected" };
+      });
+      res.json({ data });
     })],
   });
 

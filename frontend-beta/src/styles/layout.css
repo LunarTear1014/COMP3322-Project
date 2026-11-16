@@ -142,3 +142,8 @@ body { padding: 0; }
 
 /* Visually hidden text inside a scrolling region must not widen the page. */
 .cs-tablewrap { position: relative; }
+
+/* Members-only join requests (Manage event > People). */
+.join-requests { margin-block-end: var(--space-6); }
+.join-request { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; padding-block: var(--space-3); border-block-end: 1px solid var(--line); }
+.join-request p { margin: 0; }

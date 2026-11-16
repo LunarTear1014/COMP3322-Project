@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = {
   checkin_opened: { icon: QrCode, label: 'Check-in open' },
   activity_digest: { icon: ChartColumn, label: 'Daily digest' },
   club_join_request: { icon: UserPlus, label: 'Join request' },
+  event_join_request: { icon: UserPlus, label: 'Event request' },
   club_membership: { icon: Users, label: 'Club membership' },
   event: { icon: CalendarClock, label: 'Event' },
 }

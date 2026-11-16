@@ -84,13 +84,17 @@ describe("v1 registration, waitlist and participants", { skip }, () => {
     assert.equal((await join(outsider, event)).body.error.code, "MEMBERSHIP_REQUIRED");
     assert.equal((await outsider.get(`/events/${event.id}`)).body.data.eligibility.reason, "MEMBERSHIP_REQUIRED");
     const mem = await app.client_for("mem@x.test");
-    assert.equal((await join(mem, event)).status, 201);
+    const asked = await join(mem, event);
+    assert.equal(asked.status, 202, "plain members ask the committee first");
+    assert.equal(asked.body.data.status, "requested");
+    const comm = await app.client_for("comm@x.test");
+    assert.equal((await comm.post(`/events/${event.id}/join-requests/${ids.mem}/decision`, { decision: "accept" })).body.data.status, "joined");
     const leave = await mem.delete("/clubs/1/membership");
     assert.equal(leave.body.error.code, "ACTIVE_MEMBER_REGISTRATIONS");
     await mem.delete(`/events/${event.id}/registration`);
     // R5: leaving races registering; the invariant is "no non-member with an active registration".
     const racer = await app.client_for("s2@x.test");
-    await racer.put("/clubs/1/membership", {});
+    await app.admin.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, 1, 'member')", [ids.s2]);
     const [l, j] = await Promise.all([racer.delete("/clubs/1/membership"), join(racer, event)]);
     const [[bad]] = await app.admin.query(
       `SELECT COUNT(*) AS n FROM participations p JOIN events e ON e.id = p.event_id
@@ -104,9 +108,15 @@ describe("v1 registration, waitlist and participants", { skip }, () => {
     const mem = await app.client_for("mem@x.test");
     assert.equal((await mem.delete("/clubs/1/membership")).status, 204);
     assert.equal((await mem.delete("/clubs/1/membership")).status, 204, "absent is idempotent");
-    assert.equal((await mem.put("/clubs/1/membership", {})).status, 201);
-    assert.equal((await mem.put("/clubs/1/membership", {})).status, 200);
+    const asked = await mem.put("/clubs/1/membership", {});
+    assert.equal(asked.status, 202, "rejoining asks the committee");
+    assert.equal(asked.body.data.status, "pending");
+    const again = await mem.put("/clubs/1/membership", {});
+    assert.equal(again.status, 200);
+    assert.equal(again.body.data.id, asked.body.data.id, "one pending request, not two");
     const comm = await app.client_for("comm@x.test");
+    assert.equal((await comm.post(`/clubs/1/join-requests/${asked.body.data.id}/review`, { decision: "accept" })).body.data.status, "accepted");
+    assert.equal((await mem.put("/clubs/1/membership", {})).body.data.role, "member");
     assert.equal((await comm.delete("/clubs/1/membership")).body.error.code, "COMMITTEE_MEMBERSHIP_PROTECTED");
     assert.equal((await comm.put("/clubs/1/membership", {})).body.data.role, "committee", "never downgraded");
     const pres = await app.client_for("pres@x.test");
@@ -134,6 +144,8 @@ describe("v1 registration, waitlist and participants", { skip }, () => {
     const comm = await app.client_for("comm@x.test");
     await join(comm, event);
     await join(mem, event);
+    // Members-only: the committee accepts the member onto the waitlist.
+    assert.equal((await comm.post(`/events/${event.id}/join-requests/${ids.mem}/decision`, { decision: "accept" })).body.data.status, "waitlisted");
     await app.admin.query("INSERT INTO participations (user_id, event_id, status, last_registered_at, queued_at) VALUES (?, ?, 'waitlisted', '2026-11-15 00:00:00', '2026-11-15 00:00:00')", [ids.s1, event.id]);
     await comm.delete(`/events/${event.id}/registration`);
     const state = await rows(event);

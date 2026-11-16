@@ -1,6 +1,7 @@
 // Sorts a student's registrations into the My events tabs.
 //   upcoming: joined, event not started, not cancelled
-//   waitlist: waiting for a seat, event not started, not cancelled
+//   waitlist: waiting for a seat or for the committee to accept a
+//             members-only request, event not started, not cancelled
 //   past:     started, cancelled, or no longer registered (left)
 // Beta providers say 'pending' for the waitlist and 'unsuccessful' for left.
 
@@ -17,7 +18,7 @@ export function tabFor(registration, now = new Date()) {
   const over = event.state === 'cancelled' || new Date(event.start_at) <= now
   if (over) return 'past'
   if (status === 'joined') return 'upcoming'
-  if (WAITING.includes(status)) return 'waitlist'
+  if (WAITING.includes(status) || status === 'requested') return 'waitlist'
   return 'past'
 }
 
@@ -37,5 +38,6 @@ export function chipFor(registration) {
   if (event.state === 'cancelled') return 'cancelled'
   if (status === 'joined') return 'joined'
   if (WAITING.includes(status)) return 'waitlisted'
+  if (status === 'requested') return 'requested'
   return 'left'
 }

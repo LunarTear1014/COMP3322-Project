@@ -49,8 +49,10 @@ Auth: public=anonymous allowed; user=authenticated; committee=committee of targe
 | PATCH /profile | user |{name?,email?}|200 User; duplicate email409 |
 | GET /clubs | user |page,page_size|200 Club[] sorted id ASC |
 | GET /me/memberships | user |page,page_size|200 Membership[] sorted club_id ASC |
-| PUT /clubs/:club_id/membership | user |{}|201 created or200 existing Membership |
-| DELETE /clubs/:club_id/membership | user |{}|204 absent/deleted; protected409 |
+| PUT /clubs/:club_id/membership | user |{}|202 new JoinRequest `{id,club_id,status:"pending"}`, 200 existing pending JoinRequest, or 200 existing Membership |
+| GET /clubs/:club_id/join-requests | committee |page,page_size|200 `{id,club_id,status,requested_at,user:{id,name,email,student_id}}`[] oldest first |
+| POST /clubs/:club_id/join-requests/:request_id/review | committee |`{decision:"accept"|"reject"}`|200 `{id,club_id,status:"accepted"|"rejected"}`; decided 409 INVALID_STATE |
+| DELETE /clubs/:club_id/membership | user |{}|204 absent/deleted (a nonmember's pending request is withdrawn); protected409 |
 | GET /events | user |EventFilters|200 EventSummary[] sorted start_at,id ASC |
 | GET /events/:id | user/scoped draft |none|200 Event |
 | POST /events | committee |CreateEvent|201 Event with pending booking |
@@ -61,8 +63,10 @@ Auth: public=anonymous allowed; user=authenticated; committee=committee of targe
 | DELETE /events/:id/cover | committee |{expected_version}|200 Event with cover null |
 | GET /events/:id/cover/:size | user/scoped draft | size card or full |200 image/webp, private cache, ETag; hidden or no cover 404 |
 | GET /me/events | user |club_id?,state?,page,page_size|200 manageable Event[]; other roles yield empty unless committee |
-| POST /events/:id/registration | user |{allow_waitlist:boolean}|201 new lifecycle or200 existing RegistrationResult |
-| DELETE /events/:id/registration | user |{}|200 RegistrationResult; absent is left |
+| POST /events/:id/registration | user |{allow_waitlist:boolean}|201 new lifecycle or200 existing RegistrationResult; plain member on a members-only event: 202 status `requested` |
+| DELETE /events/:id/registration | user |{}|200 RegistrationResult; withdraws a pending request; absent is left |
+| GET /events/:id/join-requests | committee |page,page_size|200 `{user:{id,name,email,student_id},allow_waitlist,requested_at}`[] oldest first |
+| POST /events/:id/join-requests/:user_id/decision | committee |`{decision:"accept"|"reject",reason?:1..500}`|200 the student's RegistrationResult; full without waitlist consent 409 EVENT_FULL (request stays); student no longer a member 409 MEMBERSHIP_REQUIRED (request closed) |
 | GET /me/registrations | user |status?,page,page_size|200 MyRegistration[] sorted event.start_at,id DESC |
 | GET /events/:id/participants | committee |status?,page,page_size|200 Participant[] sorted last_registered_at,user_id ASC |
 | GET /bookings | admin |status?,venue_id?,page,page_size|200 Booking[] sorted created_at,id ASC |
@@ -106,7 +110,7 @@ Canonical Event (summary omits description/booking decision details, otherwise s
 ```json
 {"data":{"id":12,"club":{"id":1,"name":"Photography Society"},"venue":{"id":1,"name":"Lok Yew Hall","capacity":80},"title":"Photography workshop","description":"Campus photography practice","start_at":"2026-11-12T02:00:00Z","end_at":"2026-11-12T04:00:00Z","registration_closes_at":"2026-11-11T16:00:00Z","visibility":"members_only","state":"draft","phase":"upcoming","version":1,"capacity":30,"joined_count":0,"waitlisted_count":0,"my_registration":{"status":"none","queue_position":null},"eligibility":{"can_register":false,"can_waitlist":false,"reason":"NOT_PUBLISHED"},"booking":{"id":14,"status":"pending","version":1,"expired":false,"decision_reason":null,"decided_at":null}}}
 ```
-Event and EventSummary also carry `cover`: `null` or `{card_url,full_url,alt,width:1200,height:800,updated_at}` (change refresh-clubspace-visual-design). state is persisted lifecycle, phase derived from start_at>=now; frontend must not infer lifecycle from dates. my_registration.status none/joined/waitlisted/left/cancelled, queue_position one-based only waiting. eligibility reasons null/NOT_PUBLISHED/EVENT_CANCELLED/REGISTRATION_CLOSED/MEMBERSHIP_REQUIRED/EVENT_FULL/WAITLIST_FULL/ALREADY_REGISTERED; can_register means direct admission possible (seat available), not eligibility to queue; expose `can_waitlist:boolean` alongside can_register. Actual writes always recheck. Event eligibility/counts are advisory after response.
+Event and EventSummary also carry `cover`: `null` or `{card_url,full_url,alt,width:1200,height:800,updated_at}` (change refresh-clubspace-visual-design). state is persisted lifecycle, phase derived from start_at>=now; frontend must not infer lifecycle from dates. my_registration.status none/requested/joined/waitlisted/left/cancelled (`requested`: a pending members-only join request), queue_position one-based only waiting. eligibility reasons null/NOT_PUBLISHED/EVENT_CANCELLED/REGISTRATION_CLOSED/MEMBERSHIP_REQUIRED/EVENT_FULL/WAITLIST_FULL/ALREADY_REGISTERED/REQUEST_PENDING; `requires_approval:boolean` is true for a plain member on a members-only event; managers also get `pending_join_requests:int`; can_register means direct admission possible (seat available), not eligibility to queue; expose `can_waitlist:boolean` alongside can_register. Actual writes always recheck. Event eligibility/counts are advisory after response.
 
 Booking: `{id,event_id,club_id,venue_id,start_at,end_at,status,version,requested_by,created_at,decided_by,decided_at,decision_reason,expired}`; actor IDs may be null on migrated records. Admin list contains draft title as extra `event_title`. Only authorized recipients get decision details. Public published event responses omit requester/decision actor IDs.
 
@@ -122,7 +126,7 @@ Calendar:
 ```
 Private draft blocks have event_id/title/club_id null; no pending blocks. Client overlays supplied fixed daily slots and uses full intervals for availability, including legacy cross-midnight intervals. Backend accepts only configured date/slot on creation.
 
-Notification: `{id,type,event_id:null|int,booking_id:null|int,title,body,created_at,read_at:null|instant}`. Text is server-generated plain text, never executable HTML. List meta includes global own unread_count independent of unread_only/page. Historic notification can link to cancelled event; target GET handles current visibility.
+Notification: `{id,type,event_id:null|int,booking_id:null|int,club_id:null|int,join_request_id:null|int,title,body,created_at,read_at:null|instant}`; `join_request_id` is set on `club_join_request` items so the inbox can review them. Text is server-generated plain text, never executable HTML. List meta includes global own unread_count independent of unread_only/page. Historic notification can link to cancelled event; target GET handles current visibility.
 
 ClubReport: `{club_id,from,to,campus_timezone,events:[{event_id,title,state,capacity,joined_count,waitlisted_count}],daily_actions:[{date,joined,waitlisted,left,promoted,cancelled}],venue_hours:[{venue_id,venue_name,hours}],history_complete_from}`. Include published/cancelled events starting in report window; daily_actions counts history transitions occurring in window for those events. Fill every Hong Kong calendar day intersecting window with zeros when no actions. Hours are decimal numbers rounded to2dp after summing clipped confirmed intervals for club. history_complete_from is migration cutover; historical action figures before it are not reconstructed. No attendance percentages.
 

@@ -317,9 +317,12 @@ function create_events_router({ pool, clock }) {
             `INSERT INTO participation_history (event_id, user_id, actor_user_id, action_id, action, from_status, to_status, reason, occurred_at)
              VALUES (?, ?, ?, ?, 'cancelled', ?, 'cancelled', 'event_cancelled', ?)`, [id, person.user_id, req.user.id, action_id, from, to_db(now)]);
         }
+        // Pending members-only requests close with the event; those students hear about it too.
+        const [requesters] = await conn.query("SELECT user_id FROM event_join_requests WHERE event_id = ? AND status = 'pending' FOR UPDATE", [id]);
+        await conn.query("UPDATE event_join_requests SET status = 'cancelled' WHERE event_id = ? AND status = 'pending'", [id]);
         await audit(conn, { actor: req.user.id, entity_type: "event", entity_id: id, action: "event.cancelled", details: { reason: body.reason }, now });
         const committee = await committee_ids(conn, event.club_id);
-        await notify(conn, { users: [...people.map((person) => person.user_id), ...committee], type: "event_cancelled", club_id: event.club_id, event_id: id, now, key: `event_cancelled:${id}`, title: `Cancelled: ${event.title}`, body: body.reason });
+        await notify(conn, { users: [...people.map((person) => person.user_id), ...requesters.map((row) => row.user_id), ...committee], type: "event_cancelled", club_id: event.club_id, event_id: id, now, key: `event_cancelled:${id}`, title: `Cancelled: ${event.title}`, body: body.reason });
       });
       res.json({ data: await read_event(pool, req.user, id, now) });
     })],

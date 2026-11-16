@@ -25,7 +25,9 @@ async function event_rows(db, { viewer_id, where = "1 = 1", params = [], order =
             mine.status AS my_status,
             (SELECT COUNT(*) FROM participations q WHERE q.event_id = e.id AND q.status IN ${WAITING}
                AND (q.queued_at < mine.queued_at OR (q.queued_at = mine.queued_at AND q.user_id <= mine.user_id))) AS my_position,
-            mem.role AS my_role
+            mem.role AS my_role,
+            (SELECT r.status FROM event_join_requests r WHERE r.event_id = e.id AND r.user_id = ?) AS my_request,
+            (SELECT COUNT(*) FROM event_join_requests r WHERE r.event_id = e.id AND r.status = 'pending') AS pending_requests
      FROM events e
      JOIN clubs c ON c.id = e.club_id
      JOIN bookings b ON b.id = e.booking_id
@@ -34,7 +36,7 @@ async function event_rows(db, { viewer_id, where = "1 = 1", params = [], order =
      LEFT JOIN memberships mem ON mem.club_id = e.club_id AND mem.user_id = ?
      WHERE ${where}
      ORDER BY ${order}${limit ? " LIMIT ? OFFSET ?" : ""}`,
-    [viewer_id, viewer_id, ...params, ...(limit ? [limit, offset] : [])]);
+    [viewer_id, viewer_id, viewer_id, ...params, ...(limit ? [limit, offset] : [])]);
   return rows;
 }
 
@@ -50,24 +52,38 @@ async function tags_for(db, ids) {
   return map;
 }
 
-function eligibility(row, now) {
+// Members-only events need committee approval for plain members; the club's
+// committee and president register directly (event-participation spec).
+const needs_approval = (visibility, role) => visibility === "members_only" && role === "member";
+
+// The viewer's registration: a pending request shows as "requested" until
+// the committee decides; joined or waitlisted always wins.
+function registration_status(row) {
   const status = normalize_status(row.my_status ?? "none");
+  if (!["joined", "waitlisted"].includes(status) && row.my_request === "pending") return "requested";
+  return status;
+}
+
+function eligibility(row, now) {
+  const status = registration_status(row);
   const joined = Number(row.joined_count);
   const waiting = Number(row.waitlisted_count);
-  const no = (reason) => ({ can_register: false, can_waitlist: false, reason });
+  const requires_approval = needs_approval(row.visibility, row.my_role);
+  const no = (reason) => ({ can_register: false, can_waitlist: false, requires_approval, reason });
   if (row.status === "cancelled") return no("EVENT_CANCELLED");
   if (row.status !== "published" || row.b_status !== "confirmed") return no("NOT_PUBLISHED");
   if (["joined", "waitlisted"].includes(status)) return no("ALREADY_REGISTERED");
+  if (status === "requested") return no("REQUEST_PENDING");
   if (new Date(`${row.registration_closes_at.replace(" ", "T")}Z`) <= now || new Date(`${row.start_time.replace(" ", "T")}Z`) <= now) return no("REGISTRATION_CLOSED");
   if (row.visibility === "members_only" && !row.my_role) return no("MEMBERSHIP_REQUIRED");
-  if (joined < Number(row.capacity)) return { can_register: true, can_waitlist: false, reason: null };
-  if (waiting < QUEUE_LIMIT) return { can_register: false, can_waitlist: true, reason: "EVENT_FULL" };
+  if (joined < Number(row.capacity)) return { can_register: true, can_waitlist: false, requires_approval, reason: null };
+  if (waiting < QUEUE_LIMIT) return { can_register: false, can_waitlist: true, requires_approval, reason: "EVENT_FULL" };
   return no("WAITLIST_FULL");
 }
 
 // Event (detail) or EventSummary shape. `viewer_manages` adds booking detail.
 function event_dto(row, tags, now, { detail = true, manages = false } = {}) {
-  const status = normalize_status(row.my_status ?? "none");
+  const status = registration_status(row);
   const start = new Date(`${row.start_time.replace(" ", "T")}Z`);
   const dto = {
     id: row.id,
@@ -92,6 +108,7 @@ function event_dto(row, tags, now, { detail = true, manages = false } = {}) {
     signoff: row.signoff_requested_by || row.b_signoff_by
       ? { requested_by: row.signoff_requested_by ?? row.b_signoff_by, reason: row.signoff_reason ?? row.b_signoff_reason ?? null } : null,
   };
+  if (manages) dto.pending_join_requests = Number(row.pending_requests ?? 0);
   if (detail) {
     dto.description = row.description;
     dto.booking = {
@@ -121,4 +138,4 @@ async function load_event(db, user, id, now) {
   return { row, dto: event_dto(row, tags, now, { manages }), manages };
 }
 
-export { QUEUE_LIMIT, WAITING, access, eligibility, event_dto, event_rows, load_event, normalize_status, tags_for, to_db };
+export { QUEUE_LIMIT, WAITING, access, eligibility, event_dto, event_rows, load_event, needs_approval, normalize_status, registration_status, tags_for, to_db };

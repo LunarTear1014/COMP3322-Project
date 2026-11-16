@@ -305,7 +305,7 @@ describe('frontend preview workflows', () => {
 
     expect(await screen.findByRole('heading', { name: 'Discover clubs' })).toBeTruthy()
     const club = (await screen.findByRole('heading', { name: 'Film Society' })).closest('article')
-    expect(within(club).getByRole('button', { name: 'Join club' })).toBeTruthy()
+    expect(within(club).getByRole('button', { name: 'Request to join' })).toBeTruthy()
   })
 
   it('shows a recoverable error if the profile refresh fails after a conflict', async () => {

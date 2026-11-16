@@ -10,6 +10,7 @@ import { lifecycle } from '../lib/lifecycle'
 import { CoverUploader } from '../components/CoverUploader'
 import { TagPicker } from '../components/TagPicker'
 import { CheckinPanel } from '../components/CheckinPanel'
+import { JoinRequestsPanel } from '../components/JoinRequestsPanel'
 import { coverForm } from '../lib/cover'
 
 const TABS = [{ id: 'overview', label: 'Overview' }, { id: 'edit', label: 'Edit' }, { id: 'people', label: 'People' }, { id: 'checkin', label: 'Check-in' }]
@@ -101,7 +102,7 @@ export function ManageEventEditor({ id, session }) {
 
             <div className="tabs" role="tablist" aria-label="Manage event">
               {TABS.filter(item => (item.id !== 'people' || canManage) && (item.id !== 'checkin' || (!usesMainBackend && e.state === 'published'))).map(item => (
-                <button key={item.id} type="button" role="tab" className="tab-link" aria-selected={tab === item.id} aria-controls="manage-panel" onClick={() => select(item.id)}>{item.label}</button>
+                <button key={item.id} type="button" role="tab" className="tab-link" aria-selected={tab === item.id} aria-controls="manage-panel" onClick={() => select(item.id)}>{item.label}{item.id === 'people' && e.pending_join_requests > 0 && <span className="tab-count" aria-label={`${e.pending_join_requests} join requests`}>{e.pending_join_requests}</span>}</button>
               ))}
             </div>
 
@@ -167,6 +168,9 @@ export function ManageEventEditor({ id, session }) {
 
               {tab === 'checkin' && !usesMainBackend && e.state === 'published' && <CheckinPanel event={e} />}
 
+              {tab === 'people' && canManage && !usesMainBackend && e.visibility === 'members_only' && e.state === 'published' && (
+                <JoinRequestsPanel event={e} onDecided={() => { event.refresh(); participants.refresh() }} />
+              )}
               {tab === 'people' && canManage && (
                 <section>
                   <h2 className="section-title">Participants</h2>

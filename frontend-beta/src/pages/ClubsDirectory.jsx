@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { usesMainBackend } from '../api'
 import { PageHeading, Resource, Feedback } from '../components/common'
 import { Button, ButtonLink, EmptyState, StatusChip, useToast } from '../components/ui'
 import { useAction, useAllOptions } from '../hooks/resources'
@@ -50,7 +49,7 @@ function ClubCard({ club, membership, busy, onJoin, onLeave }) {
             ) : (
               <>
                 <span className="cs-meta">Not a member</span>
-                <Button disabled={busy} onClick={() => onJoin(club)}>{usesMainBackend ? 'Request to join' : 'Join club'}</Button>
+                <Button disabled={busy} onClick={() => onJoin(club)}>Request to join</Button>
               </>
             )}
           </div>
@@ -70,7 +69,8 @@ export function ClubsDirectory({ refreshSession }) {
 
   async function join(club) {
     const result = await action.run(`/clubs/${club.id}/membership`, 'PUT', {})
-    if (result) toast.show({ message: usesMainBackend ? `Request sent to ${club.name}.` : `You joined ${club.name}.` })
+    // Both providers send a request; a current member gets their membership back.
+    if (result) toast.show({ message: result.data?.role ? `You’re a member of ${club.name}.` : `Request sent to ${club.name}.` })
   }
   async function leave(club) {
     const result = await action.run(`/clubs/${club.id}/membership`, 'DELETE', {})

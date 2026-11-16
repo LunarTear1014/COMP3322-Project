@@ -61,7 +61,7 @@ export function EventDetail() {
   function leave() {
     setLeaving(true)
     toast.show({
-      message: view.kind === 'leave_waitlist' ? 'You left the waitlist.' : 'You left the event.',
+      message: view.kind === 'cancel_request' ? 'You cancelled your request.' : view.kind === 'leave_waitlist' ? 'You left the waitlist.' : 'You left the event.',
       tone: 'info',
       action: { label: 'Undo', onClick: () => setLeaving(false) },
       onExpire: async () => {
@@ -132,12 +132,13 @@ function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, detail
   switch (view.kind) {
     case 'join':
     case 'waitlist':
-      return <Button variant="primary" busy={busy} onClick={onRegister}>{busy ? (view.kind === 'join' ? 'Joining…' : 'Joining waitlist…') : view.label}</Button>
+      return <Button variant="primary" busy={busy} onClick={onRegister}>{busy ? (view.approval ? 'Sending request…' : view.kind === 'join' ? 'Joining…' : 'Joining waitlist…') : view.label}</Button>
     case 'join_club':
       return <ButtonLink variant="primary" to="/clubs">{view.label}</ButtonLink>
     case 'leave':
       return <Button onClick={() => downloadIcs(details)}><CalendarPlus className="cs-icon" aria-hidden="true" />Add to calendar</Button>
     case 'leave_waitlist':
+    case 'cancel_request':
       return <Button onClick={onLeave}>{view.label}</Button>
     default:
       return <Button disabled>{view.label}</Button>

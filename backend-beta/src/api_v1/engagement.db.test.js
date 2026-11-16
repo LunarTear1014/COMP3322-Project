@@ -25,7 +25,7 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     const list = await s1.get("/notifications");
     assert.equal(list.body.meta.unread_count >= 1, true);
     const first = list.body.data[0];
-    assert.deepEqual(Object.keys(first).sort(), ["body", "booking_id", "created_at", "event_id", "id", "read_at", "title", "type"]);
+    assert.deepEqual(Object.keys(first).sort(), ["body", "booking_id", "club_id", "created_at", "event_id", "id", "join_request_id", "read_at", "title", "type"]);
     assert.equal((await s2.patch(`/notifications/${first.id}/read`, {})).status, 404, "another user's item is 404");
     const read = await s1.patch(`/notifications/${first.id}/read`, {});
     app.set_now(new Date(app.get_now().getTime() + 5000));

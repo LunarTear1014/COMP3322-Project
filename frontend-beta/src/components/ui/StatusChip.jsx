@@ -8,6 +8,7 @@ const CHIPS = {
   published: { className: 'cs-chip-joined', label: 'Published', icon: Check },
   waitlisted: { className: 'cs-chip-waitlisted', label: 'Waitlisted' },
   pending: { className: 'cs-chip-waitlisted', label: 'Pending approval' },
+  requested: { className: 'cs-chip-waitlisted', label: 'Request sent' },
   awaiting_president: { className: 'cs-chip-waitlisted', label: 'Waiting for the president' },
   returned: { className: 'cs-chip-cancelled', label: 'Returned' },
   members_only: { className: 'cs-chip-members', label: 'Members only', icon: Lock },

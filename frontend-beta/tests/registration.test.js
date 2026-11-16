@@ -85,3 +85,18 @@ test('the file name is a safe slug', () => {
   assert.equal(icsFileName({ title: 'Campus photo walk!' }), 'campus-photo-walk.ics')
   assert.equal(icsFileName({ title: '攝影學會' }), 'event.ics')
 })
+
+test('members-only events for plain members say Request to join, and a pending request can be cancelled', () => {
+  const asks = view({ eligibility: { can_register: true, can_waitlist: false, requires_approval: true, reason: null } })
+  assert.equal(asks.kind, 'join')
+  assert.equal(asks.label, 'Request to join')
+  assert.equal(asks.approval, true)
+  assert.match(asks.detail, /committee approves/)
+  const full = view({ eligibility: { can_register: false, can_waitlist: true, requires_approval: true, reason: 'EVENT_FULL' } })
+  assert.equal(full.label, 'Request a waitlist place')
+  const sent = view({ my_registration: { status: 'requested', queue_position: null }, eligibility: { reason: 'REQUEST_PENDING' } })
+  assert.equal(sent.kind, 'cancel_request')
+  assert.equal(sent.label, 'Cancel request')
+  assert.equal(sent.chip, 'requested')
+  assert.equal(registrationToast({ status: 'requested' }), 'Request sent. We’ll tell you when the committee decides.')
+})

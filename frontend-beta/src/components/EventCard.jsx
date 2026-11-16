@@ -61,6 +61,7 @@ export function EventCard({ event, flat = false, eager = false, chip, source = '
             {chip}
             {mine === 'joined' && <StatusChip state="joined" />}
             {['pending', 'waitlisted'].includes(mine) && <StatusChip state="waitlisted" position={event.my_registration.queue_position} />}
+            {mine === 'requested' && <StatusChip state="requested" />}
           </div>
         )}
       </div>
