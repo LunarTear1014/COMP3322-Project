@@ -106,8 +106,8 @@ start; on an empty database it builds the full v1 schema on top of
 
    When the block finishes, open the HTTP URL in a browser and sign in with a
    demo account below. The block needs `git` on the server (`git --version`); Ubuntu server images
-   include it. Run `docker builder prune -f` now and then to free disk space
-   from old builds.
+   include it. Run `docker image prune -f` and `docker builder prune -f` now and
+   then to free disk space from old images and builds.
 
 ### Demo accounts and data
 

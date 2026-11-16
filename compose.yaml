@@ -1,3 +1,10 @@
+# Container logs are capped (3 x 10 MB per container): the server has 8.6 GB of disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   web:
     build: ./frontend-beta
@@ -11,13 +18,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+    logging: *logging
     restart: unless-stopped
 
   # One-shot: applies the tracked migrations (001-017) before the API and the
   # worker start. On a fresh database it builds the v1 schema on top of the
   # baseline from schema.sql; on later deploys it applies only new files.
   migrate:
-    build: ./backend-beta
+    # Reuses the image the backend service builds (built once per deploy).
+    image: clubspace-backend:local
+    pull_policy: never
     command: ["node", "src/ops/migrate.js"]
     environment:
       NODE_ENV: production
@@ -30,6 +40,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    logging: *logging
     restart: "no"
 
   # One-shot: fills an empty database with demo clubs, accounts and events
@@ -39,7 +50,9 @@ services:
   # already has events. The site does not wait for it, so a failure here never
   # blocks the deployment.
   seed:
-    build: ./backend-beta
+    # Reuses the image the backend service builds (built once per deploy).
+    image: clubspace-backend:local
+    pull_policy: never
     command: ["node", "src/ops/seed-demo.js"]
     environment:
       NODE_ENV: production
@@ -54,10 +67,12 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    logging: *logging
     restart: "no"
 
   backend:
     build: ./backend-beta
+    image: clubspace-backend:local
     environment:
       NODE_ENV: production
       DB_HOST: db
@@ -81,10 +96,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+    logging: *logging
     restart: unless-stopped
 
   worker:
-    build: ./backend-beta
+    # Reuses the image the backend service builds (built once per deploy).
+    image: clubspace-backend:local
+    pull_policy: never
     command: ["node", "src/worker.js"]
     environment:
       NODE_ENV: production
@@ -107,6 +125,7 @@ services:
       timeout: 10s
       start_period: 45s
       retries: 3
+    logging: *logging
     restart: unless-stopped
 
   db:
@@ -132,6 +151,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+    logging: *logging
     restart: unless-stopped
 
 volumes:
