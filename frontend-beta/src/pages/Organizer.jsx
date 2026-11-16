@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { usesMainBackend } from '../api'
 import { PageHeading, Resource } from '../components/common'
+import { SignoffQueue } from '../components/SignoffQueue'
 import { EventCard } from '../components/EventCard'
 import { ButtonLink, EmptyState, StatusChip } from '../components/ui'
 import { useAllOptions } from '../hooks/resources'
@@ -10,6 +11,7 @@ import { isOrganizer } from '../lib/roles'
 
 const NEEDS_HINT = {
   confirmed: 'Approved. Publish it so students can join.',
+  awaiting_president: 'Waiting for the president.',
   rejected: 'Rejected. Request another slot.',
   returned: 'Returned by the president.',
 }
@@ -38,13 +40,14 @@ export function Organizer({ session }) {
   const [club, setClub] = useState('')
   const events = useAllOptions('/me/events')
   const committeeClubs = session.memberships.filter(isOrganizer)
+  const president = session.memberships.some(item => item.role === 'president')
   const groups = groupManaged((events.data || []).filter(event => !club || String(event.club?.id) === club))
   return (
     <main className="page">
       <PageHeading title="Organizer" description="Manage your club events and requests." />
       <div className="cs-row organizer-tools">
         <ButtonLink variant="primary" to="/bookings/new">{usesMainBackend ? 'Book a venue and publish an event' : 'Request a venue and create a draft'}</ButtonLink>
-        <ButtonLink to="/organizer/clubs">Club members</ButtonLink>
+        <ButtonLink to={usesMainBackend ? "/organizer/clubs" : "/organizer/club-tools"}>Club members and reports</ButtonLink>
       </div>
       <div className="cs-field organizer-club">
         <label htmlFor="organizer-club">Club</label>
@@ -53,7 +56,9 @@ export function Organizer({ session }) {
           {committeeClubs.map(item => <option key={item.club_id} value={item.club_id}>{item.club_name}</option>)}
         </select>
       </div>
+      <ul className="cs-row role-chips" aria-label="Your roles">{committeeClubs.map(item => <li key={item.club_id}><span className="cs-chip cs-chip-neutral">{item.club_name}: {item.role === 'president' ? 'President' : 'Committee'}</span></li>)}</ul>
       {!usesMainBackend && <p>Reports: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/reports`}>{item.club_name}</Link> </span>)}</p>}
+      {president && !usesMainBackend && <SignoffQueue onChange={events.refresh} />}
       <Resource value={events} allowEmpty>
         {events.data?.length === 0 ? (
           <EmptyState title="No managed events yet" actions={<ButtonLink variant="primary" to="/bookings/new">Request a venue</ButtonLink>}>Request a venue to create your first event.</EmptyState>

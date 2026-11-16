@@ -25,7 +25,7 @@ export async function request(path, { method = 'GET', body, signal } = {}) {
   let requestPath = path
   if (import.meta.env?.MODE === 'fixtures' && typeof window !== 'undefined') {
     const scenario = new URLSearchParams(window.location.search).get('preview')
-    if (scenario === 'empty' || scenario === 'error' || scenario === 'student') {
+    if (scenario === 'empty' || scenario === 'error' || scenario === 'student' || scenario === 'president') {
       requestPath += `${requestPath.includes('?') ? '&' : '?'}preview=${scenario}`
     }
   }

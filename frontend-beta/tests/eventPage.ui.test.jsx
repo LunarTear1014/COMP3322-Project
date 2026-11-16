@@ -159,7 +159,7 @@ describe('event page on a phone', () => {
     expect(info.getAttribute('aria-live')).toBe('polite')
     expect(within(info).getByText('12 spots left')).toBeTruthy()
     expect(info.textContent).toMatch(/Closes/)
-    expect(document.documentElement.style.getPropertyValue('--actionbar-height')).toBe('76px')
+    await waitFor(() => expect(document.documentElement.style.getPropertyValue('--actionbar-height')).toBe('76px'))
     expect(screen.queryByRole('button', { name: 'Join event', hidden: false, description: undefined })).toBeTruthy()
 
     fireEvent.click(within(bar).getByRole('button', { name: 'Join event' }))

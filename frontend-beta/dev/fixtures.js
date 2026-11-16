@@ -54,6 +54,31 @@ const myRegistrations = [
   registration(byId(5), 'unsuccessful'),
   registration({ ...byId(2), id: 14, title: 'Left a workshop', start_at: future(20), end_at: future(20.08) }, 'left'),
 ]
+const campusTags = [['academic','Academic'],['arts','Arts'],['career','Career'],['culture','Culture'],['free-food','Free food'],['music','Music'],['social','Social'],['sports','Sports'],['tech','Tech'],['volunteering','Volunteering']].map(([slug, name], index) => ({ id: index + 1, slug, name }))
+const tagOf = slug => campusTags.find(tag => tag.slug === slug)
+const clubTags = [{ id: 1, name: 'Beginners' }, { id: 2, name: 'Darkroom' }]
+events.forEach((event, index) => { event.campus_tags = [tagOf(index % 3 === 0 ? 'arts' : index % 3 === 1 ? 'music' : 'social')]; event.club_tags = event.club?.id === 1 ? [clubTags[0]] : []; event.signoff = event.signoff ?? null })
+organizerEvents.forEach(event => { event.campus_tags = event.campus_tags ?? [tagOf('arts')]; event.club_tags = event.club_tags ?? [] })
+// Sign-off states for the president's queue and the committee's waiting and returned views.
+const awaitingBooking = { id: 31, event_id: 31, event_title: 'Zine-making evening', club_id: 1, venue_id: 1, start_at: future(18), end_at: future(18.08), status: 'awaiting_president', version: 1, requested_by: 3, created_at: future(-1), decided_by: null, decided_at: null, decision_reason: null, expired: false, capacity: 20 }
+const awaitingEvent = { ...events[0], id: 32, title: 'Spring portfolio show', state: 'awaiting_president', cover: null, joined_count: 0, signoff: { requested_by: 3, reason: null }, booking: { id: 32, status: 'confirmed', version: 2, expired: false, decision_reason: null, decided_at: future(-2) } }
+const returnedEvent = { ...events[0], id: 33, title: 'Macro workshop', state: 'draft', cover: null, joined_count: 0, signoff: { requested_by: 3, reason: 'Please add a rain plan before publishing.' }, booking: { id: 33, status: 'confirmed', version: 2, expired: false, decision_reason: null, decided_at: future(-2) } }
+const waitingBookingEvent = { ...events[0], id: 34, title: 'Street photo crawl', state: 'draft', cover: null, joined_count: 0, booking: { id: 34, status: 'awaiting_president', version: 1, expired: false, decision_reason: null, decided_at: null }, signoff: { requested_by: 3, reason: null } }
+organizerEvents.push(awaitingEvent, returnedEvent, waitingBookingEvent)
+events.push(awaitingEvent, returnedEvent, waitingBookingEvent)
+const checkinEvent = { ...events[0], id: 35, title: 'Gallery walk tonight', start_at: future(0.01), end_at: future(0.09), phase: 'upcoming', cover: null, my_registration: { status: 'joined', queue_position: null }, eligibility: { can_register: false, can_waitlist: false, reason: 'ALREADY_REGISTERED' }, campus_tags: [tagOf('arts')], club_tags: [] }
+events.push(checkinEvent)
+const attendanceRecords = [{ event_id: 35, user_id: 3, method: 'code', checked_in_at: future(-0.01), marked_by: null, user: { id: 3, name: 'Riley Chen' } }]
+const effectiveness = {
+  club_id: 1, from: future(-30), to: future(1), campus_timezone: 'Asia/Hong_Kong',
+  events: [
+    { event_id: 1, title: 'Campus photo walk', start_at: future(-9), capacity: 30, joined_at_start: 26, fill_rate: 0.867, peak_waitlist: 4, ever_joined: 31, dropped_out: 5, dropout_rate: 0.161, checkin_recorded: true, attended: 21, turnout: 0.808, no_shows: 5, promotions: 3, median_promotion_wait_hours: 6.5, promoted_attended: 2, views: 240, unique_viewers: 150, views_by_source: { explore: 120, club: 40, inbox: 30, my_events: 10, share: 30, other: 10 }, view_to_join: 0.18, joins_24h_after_publish: 12 },
+    { event_id: 36, title: 'Darkroom basics', start_at: future(-20), capacity: 12, joined_at_start: 9, fill_rate: 0.75, peak_waitlist: 0, ever_joined: 9, dropped_out: 0, dropout_rate: 0, checkin_recorded: false, attended: null, turnout: null, no_shows: null, promotions: 0, median_promotion_wait_hours: null, promoted_attended: null, views: 60, unique_viewers: 41, views_by_source: { explore: 30, club: 15, inbox: 5, my_events: 5, share: 5, other: 0 }, view_to_join: 0.22, joins_24h_after_publish: 5 },
+  ],
+  by_tag: [{ slug: 'arts', name: 'Arts', events: 2, avg_fill_rate: 0.81, avg_turnout: 0.808, too_few: true }],
+  by_weekday: [{ weekday: 1, name: 'Monday', events: 2, avg_fill_rate: 0.81, avg_turnout: 0.808, too_few: true }],
+  by_slot: [{ slot: 'afternoon', name: 'Afternoon', events: 2, avg_fill_rate: 0.81, avg_turnout: 0.808, too_few: true }],
+}
 const inbox = [
   { id: 31, type: 'event_published', event_id: 1, booking_id: null, title: 'New event: Campus photo walk', body: 'Photography Society just published Campus photo walk.', created_at: future(-0.01), read_at: null },
   { id: 30, type: 'booking_decided', event_id: 21, booking_id: 21, title: 'Venue request approved', body: 'Harbour Room is yours. Publish Portrait workshop when you are ready.', created_at: future(-1), read_at: null },
@@ -75,7 +100,7 @@ export function fixturePlugin() {
       if (url.pathname === '/config' && req.method === 'GET') return send(200, { data: { campus_timezone: 'Asia/Hong_Kong', slots } })
       if (url.pathname === '/auth/csrf' && req.method === 'GET') return send(200, { data: { csrf_token: token } })
       if (url.pathname === '/auth/login' && req.method === 'POST') { let raw = ''; req.on('data', chunk => { raw += chunk }); req.on('end', () => { try { const body = JSON.parse(raw); if (body.email !== user.email || body.password !== 'preview12345') return fail(401, 'INVALID_CREDENTIALS', 'Invalid preview credentials.'); res.setHeader('Set-Cookie', 'clubspace_preview=1; HttpOnly; SameSite=Strict; Path=/'); send(200, { data: session }) } catch { fail(400, 'INVALID_JSON', 'Invalid request.') } }); return }
-      if (url.pathname === '/auth/session' && req.method === 'GET') return signedIn ? send(200, { data: url.searchParams.get('preview') === 'student' ? { ...session, user: { ...user, platform_role: 'student' }, memberships: [] } : session }) : fail(401, 'AUTHENTICATION_REQUIRED', 'Sign in to the local preview.')
+      if (url.pathname === '/auth/session' && req.method === 'GET') return signedIn ? send(200, { data: url.searchParams.get('preview') === 'student' ? { ...session, user: { ...user, platform_role: 'student' }, memberships: [] } : url.searchParams.get('preview') === 'president' ? { ...session, user: { ...user, platform_role: 'student' }, memberships: [{ ...memberships[0], role: 'president' }] } : session }) : fail(401, 'AUTHENTICATION_REQUIRED', 'Sign in to the local preview.')
       if (!signedIn) return fail(401, 'AUTHENTICATION_REQUIRED', 'Sign in to the local preview.')
       if (url.pathname === '/auth/logout' && req.method === 'POST') { res.statusCode = 204; res.setHeader('Set-Cookie', 'clubspace_preview=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'); return res.end() }
       if (req.method !== 'GET') {
@@ -93,10 +118,12 @@ export function fixturePlugin() {
       }
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
       if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
+      if (url.pathname === '/events/35/participants') return send(200, list([{ user: { id: 3, name: 'Riley Chen', email: 'riley@example.test', student_id: 'S3' }, status: 'joined', queue_position: null }, { user: { id: 4, name: 'Zara Wong', email: 'zara@example.test', student_id: 'S4' }, status: 'joined', queue_position: null }]))
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
       if (url.pathname === '/clubs/1/members') return send(200, list([
-        { user_id: user.id, name: user.name, role: 'committee' },
-        { user_id: 3, name: 'Riley Chen', role: 'member' },
+        { user_id: user.id, name: user.name, role: 'committee', club_id: 1, version: 1, user: { id: user.id, name: user.name } },
+        { user_id: 3, name: 'Riley Chen', role: 'member', club_id: 1, version: 2, user: { id: 3, name: 'Riley Chen' } },
+        { user_id: 4, name: 'Zara Wong', role: 'committee', club_id: 1, version: 1, user: { id: 4, name: 'Zara Wong' } },
       ]))
       if (url.pathname === '/clubs/2/members') return send(200, list([{ user_id: 3, name: 'Morgan Lee', role: 'committee' }]))
       if (/^\/venues\/\d+\/calendar$/.test(url.pathname)) {
@@ -128,6 +155,19 @@ export function fixturePlugin() {
         }
         return send(200, { data: { club_id: 1, from, to, campus_timezone: 'Asia/Hong_Kong', events: included ? [{event_id:1,title:events[0].title,state:'published',capacity:30,joined_count:18,waitlisted_count:0}] : [], daily_actions: daily, venue_hours: included ? [{venue_id:1,venue_name:'Harbour Room',hours:2},{venue_id:2,venue_name:'The Studio for Photography and Creative Workshops',hours:1.5}] : [], history_complete_from: '2026-01-01T00:00:00Z' } })
       }
+      if (url.pathname === '/tags') return send(200, { data: campusTags })
+      if (/^\/clubs\/\d+\/tags$/.test(url.pathname)) return send(200, { data: clubTags })
+      if (url.pathname === '/me/signoffs') return send(200, { data: user.id && !empty ? { bookings: [awaitingBooking], events: [awaitingEvent] } : { bookings: [], events: [] } })
+      if (/^\/events\/\d+\/attendance$/.test(url.pathname)) return send(200, { data: { joined_at_open: 12, attended: attendanceRecords.length, records: attendanceRecords }, meta: { page: 1, page_size: 20, total: attendanceRecords.length } })
+      if (url.pathname === '/clubs/1/reports/effectiveness') return empty ? send(200, { data: { ...effectiveness, events: [], by_tag: [], by_weekday: [], by_slot: [] } }) : send(200, { data: effectiveness })
+      if (url.pathname === '/notifications/stream') {
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.write('retry: 3000\n\n')
+        const timer = setTimeout(() => res.write(`id: 99\nevent: notification\ndata: ${JSON.stringify({ notification: { id: 99, type: 'event_published', title: 'New event: Rooftop sketching', body: 'Photography Society published an event.', event_id: 1, created_at: new Date().toISOString(), read_at: null }, unread_count: 4 })}\n\n`), 4000)
+        req.on('close', () => clearTimeout(timer))
+        return
+      }
       const params = url.searchParams
       const filteredEvents = events.filter(event => event.state === 'published'
         && (!params.get('phase') || event.phase === params.get('phase'))
@@ -136,7 +176,8 @@ export function fixturePlugin() {
         && (!params.get('venue_id') || String(event.venue.id) === params.get('venue_id'))
         && (!params.get('visibility') || event.visibility === params.get('visibility'))
         && (!params.get('from') || new Date(event.start_at) >= new Date(params.get('from')))
-        && (!params.get('to') || new Date(event.start_at) < new Date(params.get('to'))))
+        && (!params.get('to') || new Date(event.start_at) < new Date(params.get('to')))
+        && (!params.getAll('tag').length || event.campus_tags?.some(tag => params.getAll('tag').includes(tag.slug))))
       const page = Number(params.get('page')) || 1
       const pageSize = Number(params.get('page_size')) || 20
       const eventList = { data: filteredEvents.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: filteredEvents.length } }

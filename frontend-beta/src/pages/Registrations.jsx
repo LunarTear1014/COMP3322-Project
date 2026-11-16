@@ -62,6 +62,7 @@ export function Registrations() {
             <div className="card-grid event-grid">
               {items.map(registration => (
                 <EventCard
+                  source="my_events"
                   key={registration.event.id}
                   event={{ ...registration.event, my_registration: { status: ['pending', 'waitlisted'].includes(registration.status) ? 'waitlisted' : registration.status, queue_position: registration.queue_position } }}
                   chip={tab === 'past' && chipFor(registration) === 'left' ? <StatusChip state="left" /> : undefined}

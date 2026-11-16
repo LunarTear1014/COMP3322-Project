@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { query } from '../api'
+import { query, usesMainBackend } from '../api'
 import { PageHeading, ErrorNotice, Resource, Pagination } from '../components/common'
 import { EventCard } from '../components/EventCard'
 import { FilterChips } from '../components/FilterChips'
@@ -22,6 +22,7 @@ export function Events() {
   const [draft, setDraft] = useState(filters)
   const clubs = useAllOptions('/clubs')
   const venues = useAllOptions('/venues')
+  const campusTags = useResource(usesMainBackend ? null : '/tags')
 
   const problem = rangeProblem(filters)
   const apiQuery = query(toApiQuery(filters))
@@ -38,7 +39,13 @@ export function Events() {
     { key: 'members_only', label: 'Members only', pressed: filters.visibility === 'members_only' },
     { key: 'past', label: 'Past events', pressed: filters.phase === 'past' },
   ]
+  for (const tag of campusTags.data ?? []) chips.push({ key: `tag:${tag.slug}`, label: tag.name, pressed: filters.tag.includes(tag.slug) })
   function toggle(key) {
+    if (key.startsWith('tag:')) {
+      const slug = key.slice(4)
+      set({ tag: filters.tag.includes(slug) ? filters.tag.filter(item => item !== slug) : [...filters.tag, slug].slice(0, 5) })
+      return
+    }
     if (key === 'week' || key === 'month') set({ when: filters.when === key ? '' : key, from: '', to: '' })
     else if (key === 'past') set({ phase: filters.phase === 'past' ? 'upcoming' : 'past' })
     else set({ visibility: filters.visibility === key ? '' : key })
@@ -91,7 +98,7 @@ export function Events() {
             <>
               <p className="cs-meta result-count" role="status">{total != null && `${total} ${total === 1 ? 'event' : 'events'}`}</p>
               <div className="card-grid event-grid">
-                {results.data?.map((event, index) => <EventCard key={event.id} event={event} eager={index < 2} />)}
+                {results.data?.map((event, index) => <EventCard key={event.id} event={event} eager={index < 2} source={filters.club_id ? 'club' : 'explore'} />)}
               </div>
               <Pagination meta={results.meta} page={filters.page} setPage={page => apply({ ...filters, page })} />
             </>

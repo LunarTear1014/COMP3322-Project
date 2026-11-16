@@ -8,21 +8,23 @@ import { useAction, useResource } from '../hooks/resources'
 import { timeLine } from '../lib/format'
 import { lifecycle } from '../lib/lifecycle'
 import { CoverUploader } from '../components/CoverUploader'
+import { TagPicker } from '../components/TagPicker'
+import { CheckinPanel } from '../components/CheckinPanel'
 import { coverForm } from '../lib/cover'
 
-const TABS = [{ id: 'overview', label: 'Overview' }, { id: 'edit', label: 'Edit' }, { id: 'people', label: 'People' }]
+const TABS = [{ id: 'overview', label: 'Overview' }, { id: 'edit', label: 'Edit' }, { id: 'people', label: 'People' }, { id: 'checkin', label: 'Check-in' }]
 const hkLocal = value => (value
   ? new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value)).replace(' ', 'T')
   : '')
 
-export function ManageEvent() {
+export function ManageEvent({ session }) {
   const { id } = useParams()
-  return <ManageEventEditor key={id} id={id} />
+  return <ManageEventEditor key={id} id={id} session={session} />
 }
 
 // Manage event: Overview (progress and next action), Edit, and People, with an
 // in-page cancel confirmation. The tab is kept in the URL.
-export function ManageEventEditor({ id }) {
+export function ManageEventEditor({ id, session }) {
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const toast = useToast()
@@ -33,7 +35,12 @@ export function ManageEventEditor({ id }) {
   const [confirming, setConfirming] = useState(false)
   const [status, setStatus] = useState('joined')
   const [page, setPage] = useState(1)
+  const [tags, setTags] = useState(null)
   const e = event.data
+  const role = session?.memberships.find(item => item.club_id === e?.club?.id)?.role
+  const admin = session?.user.platform_role === 'venue_admin'
+  // Only the president (or a venue admin) cancels a published event; committee may cancel drafts.
+  const mayCancel = usesMainBackend || !session || admin || role === 'president' || (role === 'committee' && e?.state !== 'published')
   const canManage = !usesMainBackend || e?.can_cancel
   const participants = useResource(canManage && e ? `/events/${id}/participants${query({ status, page })}` : null)
   const action = useAction(event.refresh)
@@ -43,6 +50,7 @@ export function ManageEventEditor({ id }) {
       title: event.data.title, description: event.data.description, capacity: String(event.data.capacity),
       visibility: event.data.visibility, registration_closes_at: hkLocal(event.data.registration_closes_at),
     })
+    if (event.data) setTags(current => current || { campus: (event.data.campus_tags ?? []).map(tag => tag.id), club: (event.data.club_tags ?? []).map(tag => tag.id) })
   }, [event.data])
 
   const select = next => setParams(next === 'overview' ? {} : { tab: next })
@@ -54,6 +62,7 @@ export function ManageEventEditor({ id }) {
     if (e.state === 'draft') {
       Object.assign(body, { capacity: Number(form.capacity), visibility: form.visibility, registration_closes_at: campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16)) })
     }
+    if (!usesMainBackend && tags) Object.assign(body, tags.campus.length ? { campus_tag_ids: tags.campus } : {}, { club_tag_ids: tags.club })
     const result = await action.run(`/events/${id}`, 'PATCH', body)
     if (result) toast.show({ message: 'Changes saved.' })
   }
@@ -91,7 +100,7 @@ export function ManageEventEditor({ id }) {
             <ErrorNotice error={action.error} />
 
             <div className="tabs" role="tablist" aria-label="Manage event">
-              {TABS.filter(item => item.id !== 'people' || canManage).map(item => (
+              {TABS.filter(item => (item.id !== 'people' || canManage) && (item.id !== 'checkin' || (!usesMainBackend && e.state === 'published'))).map(item => (
                 <button key={item.id} type="button" role="tab" className="tab-link" aria-selected={tab === item.id} aria-controls="manage-panel" onClick={() => select(item.id)}>{item.label}</button>
               ))}
             </div>
@@ -108,9 +117,12 @@ export function ManageEventEditor({ id }) {
                     </div>
                   )}
                   {e.booking?.decision_reason && <p>Decision reason: {e.booking.decision_reason}</p>}
+                  {e.state === 'awaiting_president' && <p className="notice notice-info">Waiting for the president to publish this event.</p>}
+                  {e.state === 'draft' && e.signoff?.reason && <p className="notice notice-error" role="status">Returned by the president: {e.signoff.reason}</p>}
+                  {e.state === 'published' && !mayCancel && <p className="cs-hint">Only the president can cancel a published event.</p>}
                   <p>To reschedule, start a new request. Creating a new event does not cancel this event.</p>
                   {canManage && <Link to="/bookings/new" state={copyState}>Copy details to a new request</Link>}
-                  {e.state !== 'cancelled' && canManage && (!usesMainBackend || e.phase !== 'past') && (
+                  {e.state !== 'cancelled' && canManage && mayCancel && (!usesMainBackend || e.phase !== 'past') && (
                     confirming ? (
                       <form className="inline-confirm" onSubmit={cancel}>
                         <h2>Cancel this event?</h2>
@@ -143,6 +155,7 @@ export function ManageEventEditor({ id }) {
                       </>
                     )}
                     {e.state === 'published' && <p className="cs-hint">After publishing, only the title and description can change.</p>}
+                    {!usesMainBackend && tags && <TagPicker clubId={e.club?.id} campus={tags.campus} club={tags.club} onCampus={campus => setTags({ ...tags, campus })} onClub={club => setTags({ ...tags, club })} />}
                     {!usesMainBackend && e.state !== 'cancelled' && (
                       <CoverUploader title={e.title} current={e.cover} busy={action.busy} serverError={action.error?.fields?.file || (action.error && /cover|image|5 MB/i.test(action.error.message) ? action.error.message : '')} onSave={uploadCover} onRemove={removeCover} />
                     )}
@@ -151,6 +164,8 @@ export function ManageEventEditor({ id }) {
                   </form>
                 )
               )}
+
+              {tab === 'checkin' && !usesMainBackend && e.state === 'published' && <CheckinPanel event={e} />}
 
               {tab === 'people' && canManage && (
                 <section>

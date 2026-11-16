@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { addDays, campusDate, campusInstant, query, request, usesMainBackend } from '../api'
 import { CoverUploader } from '../components/CoverUploader'
+import { TagPicker } from '../components/TagPicker'
 import { coverForm } from '../lib/cover'
 import { ErrorNotice, PageHeading, Resource } from '../components/common'
 import { SlotPicker } from '../components/SlotPicker'
@@ -38,6 +39,7 @@ export function CreateEvent({ session }) {
   const [conflict, setConflict] = useState('')
   const [errors, setErrors] = useState({})
   const [cover, setCover] = useState(null)
+  const [tags, setTags] = useState({ campus: [], club: [] })
   const [form, setForm] = useState({
     club_id: copy?.club_id ? String(copy.club_id) : clubs.length === 1 ? String(clubs[0].club_id) : '',
     title: copy?.title || '',
@@ -137,6 +139,10 @@ export function CreateEvent({ session }) {
     }
     if (form.registration_closes_at) body.registration_closes_at = campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16))
     if (usesMainBackend) delete body.capacity
+    else {
+      if (tags.campus.length) body.campus_tag_ids = tags.campus
+      if (tags.club.length) body.club_tag_ids = tags.club
+    }
     const result = await action.run('/events', 'POST', body)
     if (result) {
       if (cover && !usesMainBackend) {
@@ -247,6 +253,7 @@ export function CreateEvent({ session }) {
                 <TextField label="Registration deadline (Hong Kong time)" optional name="registration_closes_at" type="datetime-local" value={form.registration_closes_at} error={errors.registration_closes_at} hint="Leave empty to close registration when the event starts." onChange={update} />
               </>
             )}
+            {!usesMainBackend && <TagPicker clubId={form.club_id} campus={tags.campus} club={tags.club} onCampus={campus => setTags({ ...tags, campus })} onClub={club => setTags({ ...tags, club })} />}
             {!usesMainBackend && <CoverUploader title={form.title} onChange={setCover} />}
             <div className="step-actions">
               <Button onClick={() => goTo('venue')}>Back</Button>

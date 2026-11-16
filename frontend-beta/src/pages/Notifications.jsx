@@ -25,7 +25,7 @@ function NotificationRow({ item, action }) {
         <div className="notification-meta">
           <span>{label}</span>
           <time dateTime={item.created_at}>{timeLine(item.created_at)}</time>
-          {item.event_id && <Link to={`/events/${item.event_id}`}>View event</Link>}
+          {item.event_id && <Link to={`/events/${item.event_id}`} state={{ source: 'inbox' }}>View event</Link>}
         </div>
         {item.type === 'club_join_request' && (
           <div className="cs-row">

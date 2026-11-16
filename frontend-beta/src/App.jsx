@@ -9,6 +9,8 @@ import { TabBar } from './components/nav/TabBar'
 import { AuthForm } from './pages/AuthPage'
 import { WorkflowUnavailable } from './pages/WorkflowUnavailable'
 import { Clubs } from './pages/Clubs'
+import { ClubMembers, ClubTools } from './pages/ClubTools'
+import { Effectiveness } from './pages/Effectiveness'
 import { ClubsDirectory } from './pages/ClubsDirectory'
 import { Events } from './pages/Events'
 import { EventDetail } from './pages/EventDetail'
@@ -145,9 +147,12 @@ function Shell({ streamOverride }) {
           <Route path="/venues/:id/calendar" element={<Calendar canBook={organizer} />} />
           <Route path="/clubs" element={<ClubsDirectory session={session} refreshSession={refreshSession} />} />
           <Route path="/organizer/clubs" element={organizer ? <Clubs refreshSession={refreshSession} /> : <Navigate to="/clubs" replace />} />
+          <Route path="/organizer/club-tools" element={organizer && !usesMainBackend ? <ClubTools session={session} /> : <Navigate to="/clubs" replace />} />
+          <Route path="/organizer/clubs/:id/members" element={organizer && !usesMainBackend ? <ClubMembers session={session} refreshSession={refreshSession} /> : <Navigate to="/clubs" replace />} />
+          <Route path="/organizer/clubs/:id/reports/effectiveness" element={organizer && !usesMainBackend ? <Effectiveness /> : <Navigate to="/clubs" replace />} />
           <Route path="/bookings/new" element={<CreateEvent session={session} />} />
           <Route path="/organizer" element={<Organizer session={session} />} />
-          <Route path="/organizer/events/:id" element={<ManageEvent />} />
+          <Route path="/organizer/events/:id" element={<ManageEvent session={session} />} />
           <Route path="/admin/bookings" element={usesMainBackend ? <WorkflowUnavailable title="Booking review" /> : <Admin session={session} />} />
           <Route path="/notifications" element={<Notifications refreshInbox={refreshInbox} />} />
           <Route path="/organizer/clubs/:id/reports" element={usesMainBackend ? <WorkflowUnavailable title="Club reports" /> : <Reports />} />

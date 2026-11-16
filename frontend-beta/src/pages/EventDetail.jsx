@@ -1,10 +1,11 @@
 import { CalendarPlus, ChevronLeft, MapPin, CalendarDays } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
+import { request, usesMainBackend } from '../api'
 import { ErrorNotice, Resource } from '../components/common'
 import { EventCover } from '../components/EventCard'
 import { StickyActionBar } from '../components/StickyActionBar'
-import { Button, ButtonLink, StatusChip, Sticker, isAlmostFull, useToast } from '../components/ui'
+import { Button, ButtonLink, StatusChip, Sticker, TextField, isAlmostFull, useToast } from '../components/ui'
 import { useAction, useResource } from '../hooks/resources'
 import { usePhone } from '../hooks/useMediaQuery'
 import { clubColour } from '../lib/club'
@@ -24,6 +25,10 @@ export function EventDetail() {
   const [leaving, setLeaving] = useState(false)
   const goingTimer = useRef(null)
   const refreshEvent = event.refresh
+  const location = useLocation()
+  const [checkingIn, setCheckingIn] = useState(false)
+  const viewed = useRef(null)
+  const source = location.state?.source ?? 'share'
 
   // Counts and queue position are advisory snapshots: refetch when the tab regains focus.
   useEffect(() => {
@@ -31,6 +36,12 @@ export function EventDetail() {
     return () => window.removeEventListener('focus', refreshEvent)
   }, [refreshEvent])
   useEffect(() => () => clearTimeout(goingTimer.current), [])
+  // One view per page open (the API also deduplicates per 30 minutes). Direct links count as shares.
+  useEffect(() => {
+    if (usesMainBackend || !event.data || viewed.current === id) return
+    viewed.current = id
+    request(`/events/${id}/views`, { method: 'POST', body: { source } }).catch(() => {})
+  }, [id, event.data, source])
 
   const details = event.data
   const view = details ? registrationView(details) : null
@@ -74,6 +85,8 @@ export function EventDetail() {
             error={action.error}
             onRegister={register}
             onLeave={leave}
+            checkingIn={checkingIn}
+            setCheckingIn={setCheckingIn}
           />
         )}
       </Resource>
@@ -81,9 +94,41 @@ export function EventDetail() {
   )
 }
 
-function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, details }) {
+function checkinOpen(details, now = Date.now()) {
+  return now >= new Date(details.start_at).getTime() - 30 * 60_000 && now <= new Date(details.end_at).getTime() + 2 * 3_600_000
+}
+
+function CheckinForm({ id, onDone }) {
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  async function submit(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await request(`/events/${id}/attendance`, { method: 'POST', body: { code } })
+      toast.show({ message: 'You’re checked in. Enjoy!' })
+      onDone()
+    } catch (failure) {
+      setError(failure.fields?.code || failure.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form className="checkin-form" onSubmit={submit}>
+      <TextField label="Check-in code" hint="The 4 digits the organizers are showing." name="code" inputMode="numeric" autoComplete="off" maxLength={4} pattern="[0-9]{4}" value={code} error={error} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} />
+      <Button variant="primary" type="submit" busy={busy} disabled={code.length !== 4}>Check in</Button>
+    </form>
+  )
+}
+
+function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, details, checkin, onCheckin }) {
   if (leaving) return <Button disabled busy>Leaving…</Button>
   if (going) return <Button variant="success" disabled>You’re going!</Button>
+  if (checkin) return <Button variant="primary" onClick={onCheckin}>Check in</Button>
   switch (view.kind) {
     case 'join':
     case 'waitlist':
@@ -99,7 +144,8 @@ function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, detail
   }
 }
 
-function EventBody({ details, view, phone, going, leaving, busy, error, onRegister, onLeave }) {
+function EventBody({ details, view, phone, going, leaving, busy, error, onRegister, onLeave, checkingIn, setCheckingIn }) {
+  const canCheckIn = !usesMainBackend && view.kind === 'leave' && details.state === 'published' && checkinOpen(details)
   const colour = clubColour(details.club?.id)
   const tile = dateTile(details.start_at)
   const seats = seatSummary(details)
@@ -143,6 +189,13 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
             {hot && <span className="cs-chip cs-chip-hot">Almost full</span>}
           </div>
 
+          {(details.campus_tags?.length > 0 || details.club_tags?.length > 0) && (
+            <ul className="tag-list" aria-label="Tags">
+              {details.campus_tags?.map(tag => <li key={`c${tag.id}`}>{tag.name}</li>)}
+              {details.club_tags?.map(tag => <li key={`k${tag.id}`} className="is-club">{tag.name}</li>)}
+            </ul>
+          )}
+
           <dl className="event-facts">
             <CalendarDays className="cs-icon" aria-hidden="true" />
             <div><dt className="cs-sr">When</dt><dd className="fact-main">{timeLine(details.start_at, details.end_at)}</dd><dd className="cs-hint">Hong Kong time</dd></div>
@@ -169,10 +222,11 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
             <ErrorNotice error={error} />
             {!phone && (
               <div className="cs-col registration-actions">
-                <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} />
+                <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} checkin={canCheckIn} onCheckin={() => setCheckingIn(true)} />
                 {view.kind === 'leave' && !leaving && <Button onClick={onLeave}>{view.label}</Button>}
               </div>
             )}
+            {checkingIn && canCheckIn && <CheckinForm id={details.id} onDone={() => setCheckingIn(false)} />}
             {phone && view.kind === 'leave' && !leaving && <Button onClick={onLeave}>{view.label}</Button>}
           </div>
         </aside>
@@ -180,7 +234,7 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
 
       {phone && (
         <StickyActionBar info={info}>
-          <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} />
+          <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} checkin={canCheckIn} onCheckin={() => setCheckingIn(true)} />
         </StickyActionBar>
       )}
     </div>

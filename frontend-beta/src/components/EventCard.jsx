@@ -24,7 +24,7 @@ export function EventCover({ event, eager = false, children }) {
 // One card, one link: the title link stretches over the card. Chips and
 // stickers sit above it. Student surfaces use the sticker shadow; pass
 // `flat` for organizer lists.
-export function EventCard({ event, flat = false, eager = false, chip }) {
+export function EventCard({ event, flat = false, eager = false, chip, source = 'explore' }) {
   const seats = seatSummary(event)
   const tile = dateTile(event.start_at)
   const colour = clubColour(event.club?.id)
@@ -43,7 +43,7 @@ export function EventCard({ event, flat = false, eager = false, chip }) {
       </EventCover>
       <div className="cs-card-body">
         <span className="cs-club"><i aria-hidden="true" /><span>{event.club?.name}</span></span>
-        <h3 className="cs-card-title"><Link to={`/events/${event.id}`}>{event.title}</Link></h3>
+        <h3 className="cs-card-title"><Link to={`/events/${event.id}`} state={{ source }}>{event.title}</Link></h3>
         <span className="cs-meta">{timeLine(event.start_at, event.end_at)} · {event.venue?.name}</span>
         <div className="cs-meter">
           <div className="cs-meter-track" role="presentation">
@@ -54,6 +54,7 @@ export function EventCard({ event, flat = false, eager = false, chip }) {
             <span className={hot ? 'is-hot' : undefined}>{hot ? 'Almost full' : seats.caption}</span>
           </div>
         </div>
+        {event.campus_tags?.length > 0 && <ul className="tag-list" aria-label="Tags">{event.campus_tags.map(tag => <li key={tag.id}>{tag.name}</li>)}</ul>}
         {(chip || (mine && mine !== 'none') || event.state === 'cancelled') && (
           <div className="cs-card-chips">
             {event.state === 'cancelled' && <StatusChip state="cancelled" />}

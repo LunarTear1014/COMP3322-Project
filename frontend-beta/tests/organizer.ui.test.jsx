@@ -47,7 +47,7 @@ describe('organizer pages', () => {
     const needs = (await screen.findByRole('heading', { name: /Needs action/ })).closest('section')
     expect(await within(needs).findByText('Portrait workshop')).toBeTruthy()
     expect(within(needs).getByText('Night photography meetup')).toBeTruthy()
-    expect(within(needs).getByText('Approved. Publish it so students can join.')).toBeTruthy()
+    expect(within(needs).getAllByText('Approved. Publish it so students can join.').length).toBeGreaterThan(0)
     expect(within(needs).queryByText('Pending darkroom session')).toBeNull()
     const headings = screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
     expect(headings.findIndex(t => /Needs action/.test(t))).toBeLessThan(headings.findIndex(t => /Upcoming/.test(t)))
