@@ -4,6 +4,13 @@ import { identify } from "./common.js";
 import { create_clubs_router } from "./clubs.js";
 import { create_events_router } from "./events.js";
 import { create_registration_router } from "./registration.js";
+import { create_notifications_router } from "./notifications.js";
+import { create_calendar_router } from "./calendar_reports.js";
+import { create_engagement_router } from "./engagement.js";
+import { IS_COVER_UPLOAD, create_covers_router } from "./covers_routes.js";
+import { NotificationStreamHub } from "../features/notifications/stream_hub.js";
+import { create_notifications_repository } from "../features/notifications/notifications.repository.js";
+import { create_stream_router } from "../features/notifications/stream.routes.js";
 
 // Assembles every v1 router for create_app({ v1_routers }). `clock()` returns
 // the current Date (injectable for tests). Route modules are added here as they
@@ -13,18 +20,21 @@ function create_v1_stack({
   clock = () => new Date(),
   hasher = create_password_hasher(),
   cover_dir = process.env.COVER_DIR || "./data/covers",
-  hub = null,
+  hub_options = {},
   throttle_limits = { login: 10, register: 20, ip: 100 },
 } = {}) {
   const window_ms = 15 * 60_000;
+  const hub = new NotificationStreamHub({ repository: create_notifications_repository(pool), ...hub_options });
   const deps = {
     pool, clock, hasher, cover_dir, hub,
     login_throttle: create_throttle({ limit: throttle_limits.login, window_ms }),
     register_throttle: create_throttle({ limit: throttle_limits.register, window_ms }),
     ip_throttle: create_throttle({ limit: throttle_limits.ip, window_ms }),
   };
-  const routers = [identify(pool), create_auth_router(deps), create_clubs_router(deps), create_events_router(deps), create_registration_router(deps)];
-  return { deps, routers, is_multipart_route: () => false };
+  const routers = [identify(pool), create_auth_router(deps), create_clubs_router(deps), create_events_router(deps), create_registration_router(deps),
+    create_notifications_router(deps), create_calendar_router(deps), create_engagement_router(deps), create_covers_router(deps),
+    create_stream_router({ hub, authenticate: async (req) => req.user?.id ?? null })];
+  return { deps, routers, hub, is_multipart_route: IS_COVER_UPLOAD, start: () => hub.start(), stop: () => hub.stop() };
 }
 
 export { create_v1_stack };

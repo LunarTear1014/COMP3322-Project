@@ -56,7 +56,8 @@ async function start_v1({ migrate = true, hasher_params = FAST_HASH, throttle_li
   const pool = create_utc_pool({ ...db.config, connection_limit: 12 });
   let now = new Date("2026-11-16T00:00:00Z");
   const hasher = create_password_hasher({ params: hasher_params });
-  const stack = create_v1_stack({ pool, hasher, clock: () => (now = new Date(now.getTime() + 1)), throttle_limits, cover_dir: `${process.env.TMPDIR || "/tmp"}/clubspace-test-covers-${process.pid}-${counter++}` });
+  const stack = create_v1_stack({ pool, hasher, hub_options: { interval_ms: 50, logger: { error() {} } }, clock: () => (now = new Date(now.getTime() + 1)), throttle_limits, cover_dir: `${process.env.TMPDIR || "/tmp"}/clubspace-test-covers-${process.pid}-${counter++}` });
+  await stack.start();
   const store = new MysqlSessionStore({ pool, cleanup_ms: 0 });
   const app = create_app({
     session_secret: "s".repeat(32), app_origin: ORIGIN, session_store: store,
@@ -84,7 +85,7 @@ async function start_v1({ migrate = true, hasher_params = FAST_HASH, throttle_li
     client: () => new Client(base),
     set_now: (date) => { now = date; },
     get_now: () => now,
-    async stop() { server.closeAllConnections?.(); server.close(); store.close(); await pool.end(); await db.close(); },
+    async stop() { stack.stop(); server.closeAllConnections?.(); server.close(); store.close(); await pool.end(); await db.close(); },
   };
 }
 
