@@ -16,3 +16,10 @@ node_modules/
 
 # Local cover uploads
 backend-beta/data/
+
+# Agent session transcripts and cross-bot logs (local only; they contain
+# full conversations and personal details)
+docs/sessions/
+**/docs/sessions/
+.agent-sync/
+**/.agent-sync/
