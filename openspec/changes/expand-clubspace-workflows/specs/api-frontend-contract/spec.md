@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Versioned wire contract
-The API SHALL use /api/v1 for business endpoints, structured envelopes and machine-readable enums, retaining health and retiring Alpha routes with410.
+The API SHALL use /api/v1 for business endpoints, structured envelopes and machine-readable enums, retaining health. The unversioned legacy `/api/...` routes SHALL stay mounted alongside `/api/v1` until a coordinated cutover; new features SHALL be available only under `/api/v1`.
 
-#### Scenario: Stale Alpha client
-- **WHEN** a client calls the old event creation URL
-- **THEN** 410 API_VERSION_RETIRED is returned instead of insecure creation
+#### Scenario: Legacy client before cutover
+- **WHEN** a client calls a legacy `/api/...` URL while legacy routes are still mounted
+- **THEN** it keeps its legacy behaviour and legacy envelope, and none of the new v1 features are reachable through it
 
 #### Scenario: Invalid fields
 - **WHEN** a mutation contains an undeclared property

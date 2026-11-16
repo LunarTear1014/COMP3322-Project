@@ -34,7 +34,7 @@ Immediate notifications are written in the business transaction itself, so they 
 
 ### D6. UTC and versioned wire formats
 
-Persist DATETIME(6) as UTC; set every DB session to `+00:00`. API instants use ISO UTC `Z`; display and fixed slots use `Asia/Hong_Kong`. Request date/slot are campus-local and server-resolved. Ranges are `[from,to)`. `/api/v1` uses numeric IDs and common envelopes. Replace every frontend request atomically; legacy business endpoints return 410. Keep `/api/health`.
+Persist DATETIME(6) as UTC; set every DB session to `+00:00`. API instants use ISO UTC `Z`; display and fixed slots use `Asia/Hong_Kong`. Request date/slot are campus-local and server-resolved. Ranges are `[from,to)`. `/api/v1` uses numeric IDs and common envelopes. Replace every frontend request atomically; legacy business endpoints stay mounted until a coordinated cutover, after which they return 410 (decision 2026-11-16). Keep `/api/health`.
 
 ### D7. MySQL sessions and CSRF
 

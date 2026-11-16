@@ -23,7 +23,7 @@ Reference implementation plan: recipients may use their own development and trac
 
 - [ ] 3.1 Separate startup/app/router/controller/service/repository/query modules without changing runtime behavior prematurely; add characterization contract tests.
 - [x] 3.2 Implement transaction helper, UTC connection setup, global lock order, bounded retry and original-error preservation; test rollback/release/uncertain commit.
-- [ ] 3.3 Implement JSON/query validation, request IDs, error envelopes,404/405/410 handling and bounded body parsing.
+- [ ] 3.3 Implement JSON/query validation, request IDs, error envelopes,404/405 handling (410 for retired legacy URLs only after the coordinated cutover) and bounded body parsing.
 - [ ] 3.4 Implement server-side session adapter/config and CSRF/Origin middleware; verify cookies, token renewal, restart persistence and logout.
 - [ ] 3.5 Implement password hashing/verification, normalized registration/login, dummy path, hash queue and throttling; benchmark target memory/latency.
 - [ ] 3.6 Implement current-user profile/session/config endpoints and DB-backed identity/permission helpers; verify no DEMO_USER_ID bypass.
@@ -69,7 +69,7 @@ Reference implementation plan: recipients may use their own development and trac
 - [ ] 8.5 Implement admin pending-review queue/rejection reasons/conflict behavior with no self-decision UX.
 - [ ] 8.6 Implement weekly campus-time calendar and slot-to-request flow, including private blocks and keyboard alternative.
 - [ ] 8.7 Implement inbox/unread polling and report charts/tables with history cutoff and honest metric labels.
-- [ ] 8.8 Update every Alpha fetch in one coordinated v1 cutover; test401/403/404/409/410/422/429/503, mobile/keyboard/deep links and stale requests.
+- [ ] 8.8 Update every Alpha fetch in one coordinated v1 cutover, then retire legacy routes with 410 (legacy routes stay mounted until then); test401/403/404/409/410/422/429/503, mobile/keyboard/deep links and stale requests.
 
 ## 9. Release and handoff verification
 

@@ -23,7 +23,7 @@ Every error includes code/message/fields (object)/request_id; field errors map f
 | 403 | FORBIDDEN / CSRF_INVALID / ORIGIN_INVALID / SELF_DECISION_FORBIDDEN |
 | 404 | NOT_FOUND for missing or hidden private resource |
 | 409 | STALE_VERSION, INVALID_STATE, VENUE_UNAVAILABLE, EVENT_FULL, WAITLIST_FULL, REGISTRATION_CLOSED, MEMBERSHIP_REQUIRED, ACTIVE_MEMBER_REGISTRATIONS, COMMITTEE_MEMBERSHIP_PROTECTED, PUBLISHED_FIELDS_FROZEN, EVENT_STARTED, EMAIL_IN_USE, STUDENT_ID_IN_USE |
-| 410 | API_VERSION_RETIRED on old business URLs |
+| 410 | API_VERSION_RETIRED on old business URLs (only after the coordinated cutover) |
 | 413/415/422 | PAYLOAD_TOO_LARGE / UNSUPPORTED_MEDIA_TYPE / VALIDATION_FAILED |
 | 429 | RATE_LIMITED with Retry-After seconds |
 | 500 | INTERNAL_ERROR (sanitized) |
@@ -73,7 +73,7 @@ Auth: public=anonymous allowed; user=authenticated; committee=committee of targe
 | PATCH /notifications/:id/read | user/owner |{}|200 Notification; repeated read unchanged |
 | GET /clubs/:id/reports | committee |from,to|200 ClubReport (max93days) |
 
-Retain root `/api/health` outside v1:200 `{status:"ok"}` or503 `{status:"unavailable"}` with no internal details. Unsupported methods return structured405 and Allow header; unknown routes404. Retired `/api/events`, `/api/venues`, `/api/profile` and their old write methods return410; do not keep an insecure compatibility write path.
+Retain root `/api/health` outside v1:200 `{status:"ok"}` or503 `{status:"unavailable"}` with no internal details. Unsupported methods return structured405 and Allow header; unknown routes404. Decision 2026-11-16: the legacy unversioned `/api/events`, `/api/venues`, `/api/profile` and the other beta routes stay mounted next to `/api/v1` until a coordinated cutover; new features (sign-off, tags, check-in, effectiveness, covers, stream) exist only on `/api/v1`. After the cutover they return 410 `API_VERSION_RETIRED`.
 
 ## 3. Request DTOs and filters
 
