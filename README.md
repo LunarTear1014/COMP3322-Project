@@ -17,36 +17,61 @@ React frontend (port 5173) → Vite /api proxy → Express API (port 3000) → M
 ## Deploy to the Group 19 server
 
 Open **http://c3322-pg19.cs.hku.hk** over HKUVPN after deployment.
-Compose builds the beta frontend and Express backend on the Ubuntu server and
-runs them with MySQL. Only HTTP on port 80 is published. The MySQL data lives
-in the Compose `db_data` volume. The frontend talks only to `/api/v1`. On every
-`docker compose up`, a one-shot `migrate` service applies the tracked
-migrations before the API and worker start; on an empty database it builds the
-full v1 schema on top of `schema.sql`.
+The server runs the `main` branch of
+[the GitHub repository](https://github.com/LunarTear1014/COMP3322-Project),
+cloned to `~/clubspace-pg19`; nothing is edited or uploaded by hand, so the
+deployed code always matches GitHub. Compose builds the beta frontend and
+Express backend on the Ubuntu server and runs them with MySQL. Only HTTP on
+port 80 is published. The MySQL data lives in the Compose `db_data` volume.
+The frontend talks only to `/api/v1`. On every `docker compose up`, a one-shot
+`migrate` service applies the tracked migrations before the API and worker
+start; on an empty database it builds the full v1 schema on top of
+`schema.sql`.
 
-1. Connect to HKUVPN, then paste this block on your Mac. It uploads the
-   archive and opens an SSH session on the Group 19 server.
+1. Push the commits you want to deploy to `main` on GitHub. Connect to
+   HKUVPN, then open an SSH session on the Group 19 server from your Mac:
 
    ```bash
    workspace='/Volumes/Crucial P510 Gen 5 2TB NVMe 2280 M.2/Development/ClubSpace'
-   scp -i "$workspace/.ssh/id_rsa" -o IdentitiesOnly=yes \
-     -o "UserKnownHostsFile=$workspace/.ssh/known_hosts" \
-     "$workspace/clubspace-pg19-server.tar.gz" ubuntu@c3322-pg19.cs.hku.hk:~/ &&
    ssh -i "$workspace/.ssh/id_rsa" -o IdentitiesOnly=yes \
      -o "UserKnownHostsFile=$workspace/.ssh/known_hosts" ubuntu@c3322-pg19.cs.hku.hk
    ```
 
-2. Paste this block into the SSH session. It unpacks the archive, generates
-   the deployment credentials (and a demo account password, if `.env` has
-   none), starts Compose, and waits for the demo data. Later runs reuse the
-   existing `.env`, and the demo data is created only on an empty database.
+2. Paste this block into the SSH session. Use the same block for the first
+   deployment and for every update. It:
+   - clones the repository on the first run, or pulls the latest `main`
+     (fast-forward only) on later runs. If `~/clubspace-pg19` holds an older
+     archive deployment, it is moved aside and its `.env` is kept;
+   - refuses to deploy if tracked files were edited on the server;
+   - generates `.env` (database passwords and session secret) if it is
+     missing;
+   - backs up the database if it is running, then starts Compose;
+   - waits for the demo data and prints the deployed commit.
 
    ```bash
    (
      set -eu
      umask 022
-     tar -xzf "$HOME/clubspace-pg19-server.tar.gz" -C "$HOME"
-     cd "$HOME/clubspace-pg19"
+     repo=https://github.com/LunarTear1014/COMP3322-Project.git
+     app="$HOME/clubspace-pg19"
+     old=
+     cd "$HOME"
+     if [ ! -d "$app/.git" ]; then
+       if [ -e "$app" ]; then
+         old="$app-archive-$(date -u +%Y%m%dT%H%M%SZ)"
+         mv "$app" "$old"
+         printf 'Moved the old archive deployment to %s\n' "$old"
+       fi
+       git clone --branch main "$repo" "$app"
+       if [ -n "$old" ] && [ -e "$old/.env" ]; then cp -p "$old/.env" "$app/.env"; fi
+     fi
+     cd "$app"
+     if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+       printf 'Tracked files were edited on the server. Make the change on GitHub instead; discard it here with: git checkout -- .\n' >&2
+       exit 1
+     fi
+     git checkout -q main
+     git pull --ff-only origin main
      if [ ! -e .env ]; then
        db_root_password=$(openssl rand -hex 24)
        db_app_password=$(openssl rand -hex 24)
@@ -58,8 +83,15 @@ full v1 schema on top of `schema.sql`.
            "$db_root_password" "$db_app_password" "$app_session_secret" > .env
        )
      fi
-     if ! grep -q '^DEMO_ACCOUNT_PASSWORD=.' .env; then
-       printf 'DEMO_ACCOUNT_PASSWORD=%s\n' "$(openssl rand -hex 8)" >> .env
+     if docker compose ps --status running -q db | grep -q .; then
+       mkdir -p "$HOME/clubspace-backups"
+       backup="$HOME/clubspace-backups/clubspace-$(date -u +%Y%m%dT%H%M%SZ).sql"
+       (
+         umask 077
+         docker compose exec -T db sh -c 'exec mysqldump --single-transaction --routines --triggers -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' > "$backup"
+       )
+       test -s "$backup"
+       printf 'Database backup: %s\n' "$backup"
      fi
      docker compose up -d --build
      curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
@@ -67,12 +99,15 @@ full v1 schema on top of `schema.sql`.
      printf '\n'
      docker wait "$(docker compose ps -a -q seed)" >/dev/null
      docker compose logs --no-log-prefix seed
-     docker compose ps
+     docker compose ps -a
+     git log -1 --format='Deployed %h (%cs): %s'
    )
    ```
 
-   When the block finishes, open the HTTP URL in a browser. To see the demo
-   password, run `grep DEMO_ACCOUNT_PASSWORD .env` in `~/clubspace-pg19`.
+   When the block finishes, open the HTTP URL in a browser and sign in with a
+   demo account below. The block needs `git` on the server (`git --version`); Ubuntu server images
+   include it. Run `docker builder prune -f` now and then to free disk space
+   from old builds.
 
 ### Demo accounts and data
 
@@ -81,10 +116,13 @@ On an empty database the one-shot `seed` service
 creates 5 clubs, 5 venues and 25 events through the real API: 6 past events
 with check-ins (for the reports), 15 upcoming events (one full with a
 waitlist, members-only events with pending requests), one cancelled event and
-three still in the approval workflow. Every account uses the password in
-`DEMO_ACCOUNT_PASSWORD`; the names are fictional and the addresses use the
-reserved `.example` domain. Leave `DEMO_ACCOUNT_PASSWORD` empty to deploy
-without demo data.
+three still in the approval workflow. Every account uses the password
+**`clubspacetest123`**; the names are fictional and the addresses use the
+reserved `.example` domain. To use another password, add
+`DEMO_ACCOUNT_PASSWORD=...` (12+ characters) to `.env` before the first
+deployment; `DEMO_ACCOUNT_PASSWORD=` with no value deploys without demo data.
+The repository is public, so anyone on HKUVPN who reads this can sign in to
+the demo accounts, including the venue administrator.
 
 | Account | Role |
 | --- | --- |
@@ -237,42 +275,11 @@ session:
 Then run step 2 above again. It rebuilds the images, creates the schema and
 catalog, runs the migrations and creates the demo accounts and events.
 
-### Redeploy an updated archive
+### Update the deployment
 
-Upload the updated `clubspace-pg19-server.tar.gz` using the Mac commands
-above. This procedure stops the application, saves a database backup, then
-starts everything again; the `migrate` service applies any new migrations
-before the API and worker start. In the server SSH session, paste:
-
-```bash
-(
-  set -eu
-  tar -xzf "$HOME/clubspace-pg19-server.tar.gz" -C "$HOME"
-  cd "$HOME/clubspace-pg19"
-  docker compose stop web backend worker
-  docker compose up -d db
-  attempts=0
-  until docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$MYSQL_USER" "$MYSQL_DATABASE" -e "SELECT 1" >/dev/null 2>&1'; do
-    attempts=$((attempts + 1))
-    if [ "$attempts" -ge 30 ]; then
-      printf 'Database did not become ready. Check docker compose logs db.\n' >&2
-      exit 1
-    fi
-    sleep 2
-  done
-  mkdir -p "$HOME/clubspace-backups"
-  backup="$HOME/clubspace-backups/clubspace-$(date -u +%Y%m%dT%H%M%SZ).sql"
-  umask 077
-  docker compose exec -T db sh -c 'exec mysqldump --single-transaction --routines --triggers -u root -p"$MYSQL_ROOT_PASSWORD" clubspace' > "$backup"
-  test -s "$backup"
-  docker compose up -d --build
-  curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
-    --connect-timeout 2 --max-time 5 http://127.0.0.1/api/health
-  printf '\n'
-  docker compose ps -a
-  printf 'Database backup: %s\n' "$backup"
-)
-```
+Push to `main` on GitHub, then run step 2 again. It backs up the database,
+pulls the new commits and rebuilds; the `migrate` service applies any new
+migrations before the API and worker start, and the demo data is left alone.
 
 If `migrate` exits with an error, the API and worker do not start; read
 `docker compose logs migrate`. The runner refuses a changed checksum or an
@@ -290,8 +297,8 @@ source to be committed and pushed to the team GitHub repository using a tag.
 Prepare the ZIP from the final, tagged beta source so it contains the
 proposal, frontend, backend, database schema, Dockerfiles, Compose file, and
 README. Keep generated dependencies, database volumes, SSH keys, and real
-secrets out of the ZIP. The server transfer `.tar.gz` is the deployment
-package.
+secrets out of the ZIP. The server deploys straight from GitHub (see
+"Deploy to the Group 19 server").
 
 ## Local development
 

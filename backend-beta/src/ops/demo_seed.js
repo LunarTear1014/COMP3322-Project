@@ -14,8 +14,9 @@ import { campus_to_utc, slot_by_id, utc_to_campus_date } from "../shared/slots.j
 // notifications and audit rows look exactly as if people had used the app.
 // Past events are created on a simulated clock that is moved back in time.
 //
-// Every account shares one password (DEMO_ACCOUNT_PASSWORD). Nothing secret is
-// stored in the repository. All addresses use the reserved .example domain.
+// Every account shares one password (DEMO_ACCOUNT_PASSWORD; compose.yaml
+// defaults it to the documented demo password). All addresses use the
+// reserved .example domain.
 
 const DOMAIN = "clubspace.example";
 const ORIGIN = "http://demo-seed.invalid";

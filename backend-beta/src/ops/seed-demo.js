@@ -27,7 +27,7 @@ try {
   if (result.skipped) {
     console.log(`Skipping demo data: ${result.skipped}`);
   } else {
-    console.log("Demo accounts (password: DEMO_ACCOUNT_PASSWORD from .env):");
+    console.log("Demo accounts (password: DEMO_ACCOUNT_PASSWORD; Compose defaults it to clubspacetest123):");
     for (const account of result.accounts) {
       const role = account.platform_role === "venue_admin" ? "venue administrator" : account.club ? `${account.role}, ${account.club}` : "student, no club";
       console.log(`  ${account.email.padEnd(40)} ${account.name} (${role})`);

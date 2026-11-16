@@ -33,9 +33,11 @@ services:
     restart: "no"
 
   # One-shot: fills an empty database with demo clubs, accounts and events
-  # (backend-beta/src/ops/demo_seed.js). It does nothing when
-  # DEMO_ACCOUNT_PASSWORD is unset or the database already has events. The site
-  # does not wait for it, so a failure here never blocks the deployment.
+  # (backend-beta/src/ops/demo_seed.js). Every demo account uses
+  # DEMO_ACCOUNT_PASSWORD, clubspacetest123 unless .env sets another; set it
+  # to an empty value to skip demo data. It does nothing when the database
+  # already has events. The site does not wait for it, so a failure here never
+  # blocks the deployment.
   seed:
     build: ./backend-beta
     command: ["node", "src/ops/seed-demo.js"]
@@ -46,7 +48,7 @@ services:
       DB_NAME: clubspace
       DB_USER: clubspace_app
       DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
-      DEMO_ACCOUNT_PASSWORD: ${DEMO_ACCOUNT_PASSWORD:-}
+      DEMO_ACCOUNT_PASSWORD: ${DEMO_ACCOUNT_PASSWORD-clubspacetest123}
     depends_on:
       db:
         condition: service_healthy
