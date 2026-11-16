@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { dispatchSignal } from './useLiveSignal.js'
 
 export const STREAM_URL = '/api/v1/notifications/stream'
 export const FALLBACK_POLL_MS = 60000
@@ -6,7 +7,8 @@ export const FALLBACK_POLL_MS = 60000
 // Live inbox: one Server-Sent Events stream while signed in. The browser sends
 // Last-Event-ID itself when it reconnects, so nothing is missed or repeated.
 // Each `notification` event carries the unread count and the notification
-// (badge and toast); `refetch` means the gap was too large to replay. If the
+// (badge and toast); `refetch` means the gap was too large to replay;
+// `signal` is a live page hint, re-dispatched for useLiveSignal. If the
 // stream is unavailable or breaks, the inbox is polled every 60 s instead, and
 // polling stops again once the stream is back. The tab regaining focus always
 // refetches. `streamFactory` is injectable for tests.
@@ -39,6 +41,10 @@ export function useLiveInbox({ enabled, refreshInbox, onUnread, onNotification, 
         }
       })
       stream.addEventListener('refetch', () => handlers.current.refreshInbox())
+      // Live page hints: seats, state and check-in (see useLiveSignal).
+      stream.addEventListener('signal', event => {
+        try { dispatchSignal(JSON.parse(event.data)) } catch { /* ignore a malformed hint */ }
+      })
       stream.addEventListener('error', startPolling)
       handlers.current.refreshInbox()
     } else {

@@ -5,7 +5,7 @@ import { ApiError, validation_error } from "../shared/errors.js";
 import { resolve_slot } from "../shared/slots.js";
 import { PAGE_QUERY, assert_range, pagination, parse_utc_instant, validate_body, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
-import { audit, id_param, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
+import { signal, audit, id_param, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
 import { committee_ids } from "./clubs.js";
 import { access, event_dto, event_rows, load_event, tags_for } from "./event_model.js";
 
@@ -228,6 +228,7 @@ function create_events_router({ pool, clock }) {
         if (sets.length) await conn.query(`UPDATE events SET ${sets.join(", ")}, version = version + 1 WHERE id = ?`, [...values, id]);
         else await conn.query("UPDATE events SET version = version + 1 WHERE id = ?", [id]);
         await set_tags(conn, id, event.club_id, body);
+        await signal(conn, { event_id: id, club_id: event.club_id, public: event.status === "published", now });
         await audit(conn, { actor: req.user.id, entity_type: "event", entity_id: id, action: "event.edited", details: { fields: Object.keys(body).filter((key) => key !== "expected_version") }, now });
       });
       res.json({ data: await read_event(pool, req.user, id, now) });
@@ -250,10 +251,12 @@ function create_events_router({ pool, clock }) {
         if (ctx.role === "president" || president === null) {
           await conn.query("UPDATE events SET status = 'published', version = version + 1 WHERE id = ?", [id]);
           await audit(conn, { actor: req.user.id, entity_type: "event", entity_id: id, action: "event.published", now });
+          await signal(conn, { event_id: id, club_id: event.club_id, now });
           await announce(conn, event, req.user.id, now);
         } else {
           await conn.query("UPDATE events SET status = 'awaiting_president', signoff_requested_by = ?, signoff_reason = NULL, version = version + 1 WHERE id = ?", [req.user.id, id]);
           await audit(conn, { actor: req.user.id, entity_type: "event", entity_id: id, action: "event.publish_requested", now });
+          await signal(conn, { event_id: id, club_id: event.club_id, public: false, now });
           await notify(conn, { users: [president], type: "signoff_requested", club_id: event.club_id, event_id: id, now, key: `signoff_requested:e${id}:${Number(event.version) + 1}`, title: `Publish ${event.title}?`, body: `${req.user.name} asked to publish this event.` });
         }
       });
@@ -285,6 +288,7 @@ function create_events_router({ pool, clock }) {
           await conn.query("UPDATE events SET status = 'draft', signoff_decided_by = ?, signoff_decided_at = ?, signoff_reason = ?, version = version + 1 WHERE id = ?", [req.user.id, to_db(now), body.reason, id]);
         }
         await audit(conn, { actor: req.user.id, entity_type: "event", entity_id: id, action: `event.signoff_${body.decision}`, details: { reason: body.reason ?? null }, now });
+        await signal(conn, { event_id: id, club_id: event.club_id, public: body.decision === "publish", now });
         await notify(conn, { users: [event.signoff_requested_by], type: "signoff_decided", club_id: event.club_id, event_id: id, now, exclude: req.user.id, key: `signoff_decided:e${id}:${Number(event.version) + 1}`, title: body.decision === "publish" ? `${event.title} was published` : `${event.title} was returned`, body: body.decision === "publish" ? "The president published your event." : body.reason });
       });
       res.json({ data: await read_event(pool, req.user, id, now) });
@@ -321,6 +325,7 @@ function create_events_router({ pool, clock }) {
         const [requesters] = await conn.query("SELECT user_id FROM event_join_requests WHERE event_id = ? AND status = 'pending' FOR UPDATE", [id]);
         await conn.query("UPDATE event_join_requests SET status = 'cancelled' WHERE event_id = ? AND status = 'pending'", [id]);
         await audit(conn, { actor: req.user.id, entity_type: "event", entity_id: id, action: "event.cancelled", details: { reason: body.reason }, now });
+        await signal(conn, { event_id: id, club_id: event.club_id, public: event.status === "published", now });
         const committee = await committee_ids(conn, event.club_id);
         await notify(conn, { users: [...people.map((person) => person.user_id), ...requesters.map((row) => row.user_id), ...committee], type: "event_cancelled", club_id: event.club_id, event_id: id, now, key: `event_cancelled:${id}`, title: `Cancelled: ${event.title}`, body: body.reason });
       });
@@ -369,6 +374,7 @@ function create_events_router({ pool, clock }) {
         const status = body.decision === "approve" ? "confirmed" : "rejected";
         await conn.query("UPDATE bookings SET status = ?, decided_by = ?, decided_at = ?, decision_reason = ?, version = version + 1 WHERE id = ?", [status, req.user.id, to_db(now), body.reason ?? null, id]);
         await audit(conn, { actor: req.user.id, entity_type: "booking", entity_id: id, action: `booking.${status}`, details: { reason: body.reason ?? null }, now });
+        await signal(conn, { event_id: event.id, club_id: booking.club_id, public: false, now });
         await notify(conn, { users: await committee_ids(conn, booking.club_id), type: "booking_decided", club_id: booking.club_id, event_id: event.id, booking_id: id, now, exclude: req.user.id, key: `booking_decided:${id}:${Number(booking.version) + 1}`, title: body.decision === "approve" ? `Venue approved: ${event.title}` : `Venue request rejected: ${event.title}`, body: body.reason ?? (body.decision === "approve" ? "Publish the event when you are ready." : "The request was rejected.") });
       });
       const [[row]] = await pool.query("SELECT b.*, e.id AS event_id, e.title AS event_title, e.capacity FROM bookings b JOIN events e ON e.booking_id = b.id WHERE b.id = ?", [id]);
@@ -398,6 +404,7 @@ function create_events_router({ pool, clock }) {
         const status = body.decision === "send" ? "pending" : "returned";
         await conn.query("UPDATE bookings SET status = ?, signoff_decided_by = ?, signoff_decided_at = ?, signoff_reason = ?, version = version + 1 WHERE id = ?", [status, req.user.id, to_db(now), body.reason ?? null, id]);
         await audit(conn, { actor: req.user.id, entity_type: "booking", entity_id: id, action: `booking.signoff_${body.decision}`, details: { reason: body.reason ?? null }, now });
+        await signal(conn, { event_id: event.id, club_id: booking.club_id, public: false, now });
         const version = Number(booking.version) + 1;
         await notify(conn, { users: [booking.signoff_requested_by ?? booking.requested_by], type: "signoff_decided", club_id: booking.club_id, event_id: event.id, booking_id: id, now, exclude: req.user.id, key: `signoff_decided:b${id}:${version}`, title: body.decision === "send" ? `Sent to the venue team: ${event.title}` : `Returned: ${event.title}`, body: body.reason ?? "The president sent your request to the venue administrators." });
         if (body.decision === "send") {

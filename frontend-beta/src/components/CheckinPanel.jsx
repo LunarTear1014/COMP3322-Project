@@ -3,6 +3,7 @@ import { query } from '../api'
 import { ErrorNotice, Pagination, Resource } from './common'
 import { Button, useToast } from './ui'
 import { useAction, useResource } from '../hooks/resources'
+import { attendanceChanged, eventChanged, useLiveSignal } from '../hooks/useLiveSignal'
 import { timeLine } from '../lib/format'
 
 // Organizer check-in: open it, show the big code, and mark or unmark people.
@@ -13,6 +14,9 @@ export function CheckinPanel({ event }) {
   const attendance = useResource(`/events/${event.id}/attendance${query({ page })}`)
   const joined = useResource(`/events/${event.id}/participants${query({ status: 'joined', page_size: 100 })}`)
   const action = useAction(() => attendance.refresh())
+  // Arrivals appear as students check in; the joined list follows registrations.
+  useLiveSignal(attendanceChanged(event.id), attendance.refresh, { wait: 400 })
+  useLiveSignal(eventChanged(event.id), joined.refresh)
   const present = new Set((attendance.data?.records ?? []).map(record => record.user_id))
 
   async function open() {

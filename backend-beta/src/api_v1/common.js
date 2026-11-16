@@ -92,4 +92,12 @@ async function notify(conn, { users, type, title, body, event_id = null, booking
   return recipients.length;
 }
 
-export { audit, id_param, identify, iso, load_memberships, load_user, membership_dto, notify, page_meta, require_admin, require_user, to_db, user_dto, wrap };
+// Live change hint for open pages (stream hub). `public` signals go to every
+// connected user and are only for published events; the rest go to the
+// club's committee and president. Written in the source transaction.
+async function signal(conn, { topic = "event", event_id, club_id, public: is_public = true, now }) {
+  await conn.query("INSERT INTO live_signals (topic, event_id, club_id, public, created_at) VALUES (?, ?, ?, ?, ?)",
+    [topic, event_id, club_id, is_public, to_db(now)]);
+}
+
+export { signal, audit, id_param, identify, iso, load_memberships, load_user, membership_dto, notify, page_meta, require_admin, require_user, to_db, user_dto, wrap };

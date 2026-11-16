@@ -3,6 +3,7 @@ import { query } from '../api'
 import { ErrorNotice, Pagination, Resource } from './common'
 import { Button, TextField, useToast } from './ui'
 import { useAction, useResource } from '../hooks/resources'
+import { eventChanged, useLiveSignal } from '../hooks/useLiveSignal'
 import { timeLine } from '../lib/format'
 
 // Members-only events: the committee accepts or rejects each member's request.
@@ -15,6 +16,8 @@ export function JoinRequestsPanel({ event, onDecided }) {
   const toast = useToast()
   const requests = useResource(`/events/${event.id}/join-requests${query({ page })}`)
   const action = useAction(() => { requests.refresh(); onDecided?.() })
+  // New requests, withdrawals and other reviewers' decisions appear live.
+  useLiveSignal(eventChanged(event.id), requests.refresh)
 
   async function decide(person, decision) {
     const body = decision === 'reject' && reason.trim() ? { decision, reason: reason.trim() } : { decision }

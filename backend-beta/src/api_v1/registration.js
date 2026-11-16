@@ -4,7 +4,7 @@ import { with_transaction } from "../db/transaction.js";
 import { ApiError } from "../shared/errors.js";
 import { PAGE_QUERY, pagination, validate_body, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
-import { id_param, iso, notify, page_meta, require_user, to_db, wrap } from "./common.js";
+import { id_param, iso, notify, page_meta, require_user, signal, to_db, wrap } from "./common.js";
 import { enqueue } from "../jobs/queue.js";
 import { QUEUE_LIMIT, event_dto, event_rows, load_event, needs_approval, normalize_status, tags_for } from "./event_model.js";
 
@@ -143,11 +143,13 @@ function create_registration_router({ pool, clock }) {
             title: `${req.user.name} asked to join ${event.title}`, body: "Members-only event. Accept or reject the request." });
           await notify(conn, { users: [req.user.id], type: "registration_changed", event_id: id, club_id: event.club_id, now,
             key: `event-request-sent:${id}:${req.user.id}:${to_db(now)}`, title: `Request sent: ${event.title}`, body: "The committee will accept or reject it." });
+          await signal(conn, { event_id: id, club_id: event.club_id, public: false, now });
           return { code: 202, result: await result_for(conn, id, req.user.id) };
         }
         const action_id = randomUUID();
         const { to } = await allocate(conn, event, { user_id: req.user.id, actor: req.user.id, allow_waitlist: body.allow_waitlist, mine, current, now, action_id });
         await notify(conn, { users: [req.user.id], type: "registration_changed", event_id: id, club_id: event.club_id, now, key: `registration:${action_id}`, title: to === "joined" ? `You’re going to ${event.title}` : `You’re on the waitlist for ${event.title}`, body: to === "joined" ? "Your seat is confirmed." : "We’ll tell you if a seat opens." });
+        await signal(conn, { event_id: id, club_id: event.club_id, now });
         return { code: 201, result: await result_for(conn, id, req.user.id) };
       });
       res.status(out.code).json({ data: out.result });
@@ -165,7 +167,10 @@ function create_registration_router({ pool, clock }) {
         const current = normalize_status(mine?.status ?? "none");
         if (!["joined", "waitlisted"].includes(current)) {
           const [withdrawn] = await conn.query("UPDATE event_join_requests SET status = 'withdrawn' WHERE event_id = ? AND user_id = ? AND status = 'pending'", [id, req.user.id]);
-          if (withdrawn.affectedRows) return result_for(conn, id, req.user.id);
+          if (withdrawn.affectedRows) {
+            await signal(conn, { event_id: id, club_id: event.club_id, public: false, now });
+            return result_for(conn, id, req.user.id);
+          }
         }
         if (!mine) throw new ApiError("NOT_FOUND", "That event does not exist.");
         if (event.status === "cancelled" || !["joined", "waitlisted"].includes(current)) return result_for(conn, id, req.user.id);
@@ -181,6 +186,7 @@ function create_registration_router({ pool, clock }) {
             await notify(conn, { users: [user_id], type: "registration_changed", event_id: id, club_id: event.club_id, now, key: `registration:${action_id}`, title: `You got a seat: ${event.title}`, body: "A place opened up and you moved off the waitlist." });
           }
         }
+        await signal(conn, { event_id: id, club_id: event.club_id, now });
         return result_for(conn, id, req.user.id);
       });
       res.json({ data: result });
@@ -286,6 +292,7 @@ function create_registration_router({ pool, clock }) {
           await decide("rejected");
           await notify(conn, { users: [user_id], type: "registration_changed", event_id: id, club_id: event.club_id, now, key: `event-request-decided:${id}:${user_id}:${to_db(now)}`,
             title: `Request not accepted: ${event.title}`, body: body.reason ? `The committee said: ${body.reason}` : "The committee did not accept your request." });
+          await signal(conn, { event_id: id, club_id: event.club_id, public: false, now });
           return result_for(conn, id, user_id);
         }
         if (event.status === "cancelled") throw new ApiError("INVALID_STATE", "This event was cancelled.");
@@ -306,6 +313,7 @@ function create_registration_router({ pool, clock }) {
             title: to === "joined" ? `Request accepted: you’re going to ${event.title}` : `Request accepted: you’re on the waitlist for ${event.title}`,
             body: to === "joined" ? "Your seat is confirmed." : "We’ll tell you if a seat opens." });
         }
+        await signal(conn, { event_id: id, club_id: event.club_id, now });
         return result_for(conn, id, user_id);
       });
       // Outside the transaction so the cancelled request stays recorded.

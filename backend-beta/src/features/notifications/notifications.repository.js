@@ -48,6 +48,24 @@ function create_notifications_repository(pool) {
         "SELECT COUNT(*) AS unread FROM notifications WHERE user_id = ? AND read_at IS NULL", [user_id]);
       return Number(row.unread);
     },
+    // Live change hints (live_signals). Optional for the hub.
+    async max_signal_id() {
+      const [[row]] = await pool.query("SELECT COALESCE(MAX(id), 0) AS id FROM live_signals");
+      return Number(row.id);
+    },
+    async fetch_signals_after(id, limit) {
+      const [rows] = await pool.query(
+        "SELECT id, topic, event_id, club_id, public FROM live_signals WHERE id > ? ORDER BY id ASC LIMIT ?", [id, limit]);
+      return rows.map((row) => ({ id: Number(row.id), topic: row.topic, event_id: row.event_id, club_id: row.club_id, public: Boolean(row.public) }));
+    },
+    async club_committee_ids(club_ids) {
+      if (!club_ids.length) return new Map();
+      const [rows] = await pool.query(
+        "SELECT club_id, user_id FROM memberships WHERE club_id IN (?) AND role IN ('committee', 'president')", [club_ids]);
+      const map = new Map(club_ids.map((id) => [id, new Set()]));
+      for (const row of rows) map.get(row.club_id).add(row.user_id);
+      return map;
+    },
     to_dto,
   };
 }

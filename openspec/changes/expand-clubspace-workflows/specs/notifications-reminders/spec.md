@@ -23,6 +23,17 @@ A signed-in user with ClubSpace open SHALL receive each new notification within 
 - **WHEN** two users are connected
 - **THEN** neither stream ever carries the other user's notifications
 
+### Requirement: Live page updates
+When a change alters an event's seats, waitlist, state, join requests or check-in, the system SHALL push a hint naming only the topic and event over the notification stream within 2 seconds, and open screens showing that event SHALL refetch it through their normal routes. Hints for unpublished events, requests and check-in SHALL reach only that club's committee and president.
+
+#### Scenario: Seat freed while a page is open
+- **WHEN** a student withdraws from a published event while another user has its page open
+- **THEN** that page shows the new seat count within 2 seconds without a reload
+
+#### Scenario: Check-in arrival
+- **WHEN** a student checks in with the code
+- **THEN** the committee's open check-in panel lists them without a reload, and no student receives the hint
+
 ### Requirement: Stream recovery
 
 The notification stream SHALL resume from `Last-Event-ID` without gaps or duplicates after a reconnect, and SHALL send a heartbeat at least every 25 seconds. When the stream is unavailable, the client SHALL fall back to polling every 60 seconds.

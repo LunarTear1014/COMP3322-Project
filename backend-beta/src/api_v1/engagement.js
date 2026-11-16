@@ -5,7 +5,7 @@ import { ApiError, validation_error } from "../shared/errors.js";
 import { PAGE_QUERY, pagination, validate_body, validate_query } from "../shared/validate.js";
 import { create_throttle } from "../features/users/password_hasher.js";
 import { define_route } from "./router.js";
-import { id_param, iso, notify, page_meta, require_user, to_db, wrap } from "./common.js";
+import { signal, id_param, iso, notify, page_meta, require_user, to_db, wrap } from "./common.js";
 import { committee_of, is_committee } from "./clubs.js";
 import { build_report, parse_range } from "./effectiveness.js";
 import { load_event } from "./event_model.js";
@@ -49,6 +49,7 @@ function create_engagement_router({ pool, clock }) {
           await conn.query("UPDATE events SET checkin_code = ?, checkin_opened_at = COALESCE(checkin_opened_at, ?) WHERE id = ?", [code, to_db(now), id]);
           event.checkin_code = code;
           const [joined] = await conn.query("SELECT user_id FROM participations WHERE event_id = ? AND status = 'joined'", [id]);
+          await signal(conn, { topic: "attendance", event_id: id, club_id: event.club_id, public: false, now });
           await notify(conn, { users: joined.map((row) => row.user_id), type: "checkin_opened", event_id: id, club_id: event.club_id, now, exclude: req.user.id, key: `checkin_opened:${id}`, title: `Check-in is open: ${event.title}`, body: "Enter the code shown by the organizers." });
         }
         return { code: event.checkin_code, opens_at: opens.toISOString(), closes_at: closes.toISOString() };
@@ -76,6 +77,7 @@ function create_engagement_router({ pool, clock }) {
       if (body.code !== event.checkin_code) throw validation_error({ code: "That code doesn’t match. Ask the organizers." });
       attempts.reset(key);
       await pool.query("INSERT IGNORE INTO event_attendance (event_id, user_id, method, checked_in_at) VALUES (?, ?, 'code', ?)", [id, req.user.id, to_db(now)]);
+      await signal(pool, { topic: "attendance", event_id: id, club_id: event.club_id, public: false, now });
       const [[row]] = await pool.query("SELECT * FROM event_attendance WHERE event_id = ? AND user_id = ?", [id, req.user.id]);
       res.status(201).json({ data: attendance_dto(row) });
     })],
@@ -97,20 +99,22 @@ function create_engagement_router({ pool, clock }) {
       const id = id_param(req, "event_id");
       const user_id = id_param(req, "user_id");
       validate_body(req.body, {});
-      await managed_event(pool, req.user, id, clock);
+      const event = await managed_event(pool, req.user, id, clock);
       const [[mine]] = await pool.query("SELECT status FROM participations WHERE event_id = ? AND user_id = ?", [id, user_id]);
       if (mine?.status !== "joined") throw new ApiError("INVALID_STATE", "Only people who joined can be marked present.");
       await pool.query(
         "INSERT INTO event_attendance (event_id, user_id, method, checked_in_at, marked_by) VALUES (?, ?, 'marked', ?, ?) ON DUPLICATE KEY UPDATE event_id = event_id",
         [id, user_id, to_db(clock()), req.user.id]);
+      await signal(pool, { topic: "attendance", event_id: id, club_id: event.club_id, public: false, now: clock() });
       const [[row]] = await pool.query("SELECT * FROM event_attendance WHERE event_id = ? AND user_id = ?", [id, user_id]);
       res.json({ data: attendance_dto(row) });
     })],
     delete: [require_user, wrap(async (req, res) => {
       const id = id_param(req, "event_id");
       const user_id = id_param(req, "user_id");
-      await managed_event(pool, req.user, id, clock);
+      const event = await managed_event(pool, req.user, id, clock);
       await pool.query("DELETE FROM event_attendance WHERE event_id = ? AND user_id = ?", [id, user_id]);
+      await signal(pool, { topic: "attendance", event_id: id, club_id: event.club_id, public: false, now: clock() });
       res.status(204).end();
     })],
   });

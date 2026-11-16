@@ -24,6 +24,14 @@ function fake_repository() {
       return rows.filter((row) => row.user_id === user_id && row.id > id).slice(0, limit);
     },
     async unread_count(user_id) { return rows.filter((row) => row.user_id === user_id && !row.read_at).length; },
+    // live_signals stand-in; club 7's committee is users 71 and 72.
+    signal_rows: [],
+    signal(topic, event_id, is_public, club_id = 7) {
+      this.signal_rows.push({ id: this.signal_rows.length + 1, topic, event_id, club_id, public: is_public });
+    },
+    async max_signal_id() { return this.signal_rows.length; },
+    async fetch_signals_after(id, limit) { return this.signal_rows.filter((row) => row.id > id).slice(0, limit); },
+    async club_committee_ids(club_ids) { return new Map(club_ids.map((id) => [id, new Set(id === 7 ? [71, 72] : [])])); },
     to_dto,
   };
 }
@@ -162,5 +170,22 @@ describe("notification stream", () => {
     repository.rows.splice(repository.rows.indexOf(later), 0, late);
     await stream.until((t) => events(t).some((e) => e.id === late.id));
     stream.close();
+  });
+
+  test("live signals: public hints reach everyone, club hints only the committee, coalesced and without an SSE id", async () => {
+    const committee = await open_stream(71);
+    const student = await open_stream(73);
+    repository.signal("event", 501, true);
+    repository.signal("event", 501, true);
+    repository.signal("attendance", 501, false);
+    await committee.until((t) => t.includes('"topic":"attendance"') && t.includes('"topic":"event"'));
+    await student.until((t) => t.includes('"topic":"event"'));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const hints = (text) => [...text.matchAll(/event: signal\ndata: (.*)\n/g)].map(([, data]) => JSON.parse(data));
+    assert.deepEqual(hints(student.text), [{ topic: "event", event_id: 501 }], "coalesced, and no attendance hint for students");
+    assert.equal(hints(committee.text).length, 2);
+    assert.doesNotMatch(committee.text, /id: \d+\nevent: signal/, "signals never move Last-Event-ID");
+    committee.close();
+    student.close();
   });
 });

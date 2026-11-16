@@ -105,7 +105,9 @@ async function scan_digests(pool, now) {
 // Daily maintenance: purge old views.
 async function maintenance(pool, now) {
   const [views] = await pool.query("DELETE FROM event_views WHERE viewed_at < ?", [to_mysql_utc(new Date(now.getTime() - 180 * DAY))]);
-  return { views_purged: views.affectedRows };
+  // Live signals are only useful for the second after they are written.
+  const [signals] = await pool.query("DELETE FROM live_signals WHERE created_at < ?", [to_mysql_utc(new Date(now.getTime() - DAY))]);
+  return { views_purged: views.affectedRows, signals_purged: signals.affectedRows };
 }
 
 async function run_once(pool, now, { limit = 10 } = {}) {

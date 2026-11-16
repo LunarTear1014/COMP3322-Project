@@ -7,6 +7,7 @@ import { EventCard } from '../components/EventCard'
 import { FilterChips } from '../components/FilterChips'
 import { BottomSheet, Button, EmptyState, TextField } from '../components/ui'
 import { useAllOptions, useResource } from '../hooks/resources'
+import { anyEventIn, useLiveSignal } from '../hooks/useLiveSignal'
 import {
   activeFilterCount, clearedFilters, rangeProblem, readFilters, sheetFilterCount, toApiQuery, writeFilters,
 } from '../lib/eventFilters'
@@ -27,6 +28,9 @@ export function Events() {
   const problem = rangeProblem(filters)
   const apiQuery = query(toApiQuery(filters))
   const results = useResource(problem ? null : `/events${apiQuery}`)
+  // Seat counts on the cards on screen update live.
+  const shown = useMemo(() => new Set((results.data ?? []).map(event => event.id)), [results.data])
+  useLiveSignal(anyEventIn(shown), results.refresh, { wait: 1500 })
   const draftProblem = rangeProblem(draft)
 
   const apply = next => setParams(writeFilters({ ...next, page: next.page ?? 1 }), { replace: false })

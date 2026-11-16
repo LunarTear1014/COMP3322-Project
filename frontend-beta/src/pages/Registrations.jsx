@@ -1,9 +1,10 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router'
 import { PageHeading, Resource } from '../components/common'
 import { EventCard } from '../components/EventCard'
 import { ButtonLink, EmptyState, StatusChip } from '../components/ui'
 import { useAllOptions } from '../hooks/resources'
+import { anyEventIn, useLiveSignal } from '../hooks/useLiveSignal'
 import { TABS, chipFor, sortRegistrations } from '../lib/myEvents'
 
 const EMPTY = {
@@ -18,6 +19,9 @@ export function Registrations() {
   const requested = params.get('tab')
   const tab = TABS.some(item => item.id === requested) ? requested : 'upcoming'
   const registrations = useAllOptions('/me/registrations')
+  // Waitlist positions and request decisions update live.
+  const mine = useMemo(() => new Set((registrations.data ?? []).map(item => item.event.id)), [registrations.data])
+  useLiveSignal(anyEventIn(mine), registrations.refresh, { wait: 1500 })
   const refs = useRef({})
   const groups = sortRegistrations(registrations.data || [])
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ApiError } from "../shared/errors.js";
 import { parse_action_details, record_club_action } from "../shared/club_action_log.js";
-import { audit, notify, to_db } from "./common.js";
+import { audit, notify, signal, to_db } from "./common.js";
 
 // The president's club action log (club_action_log, from the beta) on v1.
 // v1 role, membership and join-request actions write the same rows the
@@ -64,6 +64,7 @@ async function end_members_only_places(conn, { club_id, user_id, actor, now, pro
     await conn.query(
       `INSERT INTO participation_history (event_id, user_id, actor_user_id, action_id, action, from_status, to_status, reason, occurred_at)
        VALUES (?, ?, ?, ?, 'left', ?, 'left', 'membership_removed', ?)`, [event.id, user_id, actor, action_id, from, to_db(now)]);
+    await signal(conn, { event_id: event.id, club_id, now });
     if (from === "joined" && new Date(`${event.registration_closes_at.replace(" ", "T")}Z`) > now) {
       for (const promoted of await promote_locked(conn, event, { actor, now, action_id })) {
         await notify(conn, { users: [promoted], type: "registration_changed", event_id: event.id, club_id, now, key: `registration:${action_id}`,

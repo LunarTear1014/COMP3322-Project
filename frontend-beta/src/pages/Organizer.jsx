@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { PageHeading, Resource } from '../components/common'
 import { SignoffQueue } from '../components/SignoffQueue'
 import { EventCard } from '../components/EventCard'
 import { ButtonLink, EmptyState, StatusChip } from '../components/ui'
 import { useAllOptions } from '../hooks/resources'
+import { anyEventIn, useLiveSignal } from '../hooks/useLiveSignal'
 import { groupManaged } from '../lib/lifecycle'
 import { isOrganizer } from '../lib/roles'
 
@@ -38,6 +39,9 @@ function Group({ id, title, events, empty }) {
 export function Organizer({ session }) {
   const [club, setClub] = useState('')
   const events = useAllOptions('/me/events')
+  // Approvals, sign-offs and seat counts on managed events update live.
+  const managed = useMemo(() => new Set((events.data ?? []).map(event => event.id)), [events.data])
+  useLiveSignal(anyEventIn(managed), events.refresh, { wait: 1500 })
   const committeeClubs = session.memberships.filter(isOrganizer)
   const president = session.memberships.some(item => item.role === 'president')
   const groups = groupManaged((events.data || []).filter(event => !club || String(event.club?.id) === club))

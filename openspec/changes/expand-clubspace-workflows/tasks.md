@@ -92,6 +92,7 @@ Reference implementation plan: recipients may use their own development and trac
 - [x] 10.7 Implement `GET /clubs/:id/reports/effectiveness` with named SQL. Verify against hand-built fixtures: join, leave and rejoin; a promoted no-show; no check-in; a group under 3; and views by source.
 - [ ] 10.8 Frontend parts of these features are tracked in `refresh-clubspace-visual-design` (section 8).
 
-## 11. Club management on v1 (beta parity)
+## 11. Club management and live updates on v1
 
 - [x] 11.1 Port the beta's remove-member, leave-committee and president action log with undo to v1 on `club_action_log`; v1 role, presidency and join-request decisions write log entries. Evidence: `src/api_v1/club_actions.db.test.js` (removal ends members-only places and promotes, undo of removal, step-down, version bumps, later-action block, president-only log, join-request undo, presidency undo).
+- [x] 11.2 Push live page hints over the SSE stream (`live_signals`, migration 017): seats, waitlist, state, join requests and check-in refresh open screens without a reload. Evidence: `stream_hub.test.js` (public versus club audience, coalescing, no SSE id), `live_signals.db.test.js` (hints per action, none on rollback), frontend `liveSignals.ui.test.jsx`; real stack: a withdrawal updated another user's open event page within 2 s.

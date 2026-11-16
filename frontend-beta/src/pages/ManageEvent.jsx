@@ -5,6 +5,7 @@ import { ErrorNotice, Feedback, PageHeading, Pagination, Resource } from '../com
 import { LifecycleStepper } from '../components/LifecycleStepper'
 import { Button, ButtonLink, StatusChip, TextField, useToast } from '../components/ui'
 import { useAction, useResource } from '../hooks/resources'
+import { eventChanged, useLiveSignal } from '../hooks/useLiveSignal'
 import { timeLine } from '../lib/format'
 import { lifecycle } from '../lib/lifecycle'
 import { CoverUploader } from '../components/CoverUploader'
@@ -45,6 +46,8 @@ export function ManageEventEditor({ id, session }) {
   const canManage = true
   const participants = useResource(canManage && e ? `/events/${id}/participants${query({ status, page })}` : null)
   const action = useAction(event.refresh)
+  // Booking decisions, sign-off, seats and requests update live.
+  useLiveSignal(eventChanged(id), () => { event.refresh(); participants.refresh?.() })
 
   useEffect(() => {
     if (event.data) setForm(current => current || {

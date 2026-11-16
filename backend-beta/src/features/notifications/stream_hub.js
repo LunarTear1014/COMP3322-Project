@@ -12,6 +12,16 @@ import { ApiError } from "../../shared/errors.js";
 //   unread_count(user_id)                    -> number
 //   to_dto(row)                              -> wire Notification
 //
+// Optional live change hints (live_signals, beta-feedback.md section 4):
+//   max_signal_id()                -> number
+//   fetch_signals_after(id, limit) -> {id, topic, event_id, club_id, public}[]
+//   club_committee_ids(club_ids)   -> Map<club_id, Set<user_id>>
+// A hint says only "event N changed" (topic event) or "its check-in changed"
+// (topic attendance); pages refetch through the normal authorized routes.
+// Public hints go to every connection; the others only to the club's
+// committee and president. Hints within one tick are coalesced, and they
+// carry no SSE id so Last-Event-ID keeps tracking notifications only.
+//
 // Auto-increment ids can commit out of order, so a row with a lower id than
 // one already seen may appear a moment late. Each tick therefore re-reads a
 // small look-back window and a bounded set of delivered ids suppresses repeats.
@@ -34,6 +44,9 @@ class NotificationStreamHub {
     this.clients = new Map(); // user_id -> Set<response>
     this.delivered = new Set();
     this.last_seen_max = 0;
+    this.signals = typeof repository.fetch_signals_after === "function";
+    this.last_signal_max = 0;
+    this.delivered_signals = new Set();
     this.timer = null;
     this.heartbeat = null;
     this.ticking = false;
@@ -41,6 +54,7 @@ class NotificationStreamHub {
 
   async start() {
     this.last_seen_max = await this.repository.max_id();
+    if (this.signals) this.last_signal_max = await this.repository.max_signal_id();
     this.timer = setInterval(() => void this.tick(), this.options.interval_ms);
     this.heartbeat = setInterval(() => this.ping(), this.options.heartbeat_ms);
     this.timer.unref?.();
@@ -81,10 +95,39 @@ class NotificationStreamHub {
         const frame = sse("notification", row.id, { notification: this.repository.to_dto(row), unread_count: unread });
         for (const res of connections) res.write(frame);
       }
+      if (this.signals) await this.tick_signals();
     } catch (error) {
       this.logger.error("notification stream tick failed", error?.message);
     } finally {
       this.ticking = false;
+    }
+  }
+
+  async tick_signals() {
+    const from = Math.max(0, this.last_signal_max - this.options.lookback);
+    const rows = await this.repository.fetch_signals_after(from, this.options.batch);
+    const fresh = new Map(); // "topic:event_id" -> merged hint
+    for (const row of rows) {
+      this.last_signal_max = Math.max(this.last_signal_max, row.id);
+      if (this.delivered_signals.has(row.id)) continue;
+      this.delivered_signals.add(row.id);
+      if (this.delivered_signals.size > this.options.remembered_ids) {
+        this.delivered_signals.delete(this.delivered_signals.values().next().value);
+      }
+      const key = `${row.topic}:${row.event_id}`;
+      const seen = fresh.get(key);
+      // A public hint for the same event also reaches the committee.
+      fresh.set(key, { ...row, public: row.public || Boolean(seen?.public) });
+    }
+    if (!fresh.size || !this.clients.size) return;
+    const private_clubs = [...new Set([...fresh.values()].filter((hint) => !hint.public).map((hint) => hint.club_id))];
+    const committees = await this.repository.club_committee_ids(private_clubs);
+    for (const hint of fresh.values()) {
+      const frame = `event: signal\ndata: ${JSON.stringify({ topic: hint.topic, event_id: hint.event_id })}\n\n`;
+      const audience = hint.public ? this.clients.keys() : committees.get(hint.club_id) ?? [];
+      for (const user_id of audience) {
+        for (const res of this.clients.get(user_id) ?? []) res.write(frame);
+      }
     }
   }
 

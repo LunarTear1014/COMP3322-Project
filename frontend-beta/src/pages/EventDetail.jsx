@@ -7,6 +7,7 @@ import { EventCover } from '../components/EventCard'
 import { StickyActionBar } from '../components/StickyActionBar'
 import { Button, ButtonLink, StatusChip, Sticker, TextField, isAlmostFull, useToast } from '../components/ui'
 import { useAction, useResource } from '../hooks/resources'
+import { eventChanged, useLiveSignal } from '../hooks/useLiveSignal'
 import { usePhone } from '../hooks/useMediaQuery'
 import { clubColour } from '../lib/club'
 import { dateTile, seatSummary, timeLine } from '../lib/format'
@@ -35,6 +36,8 @@ export function EventDetail() {
     window.addEventListener('focus', refreshEvent)
     return () => window.removeEventListener('focus', refreshEvent)
   }, [refreshEvent])
+  // Seats, waitlist and state update live when anyone registers or leaves.
+  useLiveSignal(eventChanged(id), refreshEvent)
   useEffect(() => () => clearTimeout(goingTimer.current), [])
   // One view per page open (the API also deduplicates per 30 minutes). Direct links count as shares.
   useEffect(() => {
