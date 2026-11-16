@@ -164,12 +164,12 @@ select.cs-input { appearance: none; background-color: var(--surface); color: var
 .cs-empty-art .c { fill: none; stroke: var(--outline); stroke-width: 2.5; stroke-linecap: round; }
 
 /* Toast */
-.cs-toast { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--ink); color: var(--bg); border-radius: var(--radius-md); box-shadow: var(--shadow-float); max-width: 360px; z-index: var(--z-toast); font-weight: 600; }
+.cs-toast { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--toast-bg); color: var(--toast-ink); border: 1px solid var(--toast-line); border-radius: var(--radius-md); box-shadow: var(--shadow-float); max-width: 360px; z-index: var(--z-toast); font-weight: 600; }
 .cs-toast-dot { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--on-pop); }
 .cs-toast-dot .cs-icon { width: 16px; height: 16px; stroke-width: 3; }
 .cs-toast-success .cs-toast-dot { background: var(--mint); }
 .cs-toast-error .cs-toast-dot { background: var(--coral); }
-.cs-toast span { flex: 1; min-width: 0; font-size: 15px; line-height: 20px; }
+.cs-toast span:not(.cs-toast-dot) { flex: 1; min-width: 0; font-size: 15px; line-height: 20px; }
 .cs-toast button { font: inherit; font-weight: 800; font-size: 14px; background: none; border: 0; color: var(--sun); min-height: 44px; padding: 0 4px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 
 /* Lifecycle stepper (organizer) */
@@ -192,7 +192,7 @@ select.cs-input { appearance: none; background-color: var(--surface); color: var
 .cs-table td { padding: 12px; border-top: 1px solid var(--line); vertical-align: middle; font-variant-numeric: tabular-nums; }
 .cs-table tbody tr:hover { background: var(--surface-sunk); }
 .cs-table tr[aria-selected="true"] { background: var(--lagoon-soft); }
-.cs-table td:first-child { font-weight: 700; max-width: 220px; overflow-wrap: anywhere; }
+.cs-table td:first-child { font-weight: 700; min-width: 160px; max-width: 220px; overflow-wrap: break-word; }
 .cs-table .cs-btn { min-height: 36px; padding: 6px 14px; font-size: 14px; }
 
 /* Cover uploader */

@@ -7,10 +7,14 @@ import './styles/app.css'
 import './styles/layout.css'
 import './styles/event.css'
 import './index.css'
+import { ThemeProvider } from '@mui/material/styles'
 import App from './App.jsx'
+import { muiTheme } from './muiTheme.js'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ThemeProvider theme={muiTheme}>
+      <App />
+    </ThemeProvider>
   </StrictMode>,
 )
