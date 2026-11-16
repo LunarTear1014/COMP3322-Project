@@ -1,4 +1,8 @@
+import dotenv from "dotenv";
 import mysql from "mysql2/promise";
+
+// TEST_ENV_FILE=/path/to/test.env loads the TEST_DB_* settings without printing them.
+if (process.env.TEST_ENV_FILE) dotenv.config({ path: process.env.TEST_ENV_FILE, quiet: true });
 
 // Destructive-test isolation. DB integration tests run only when
 //   TEST_DB_NAME=<disposable database>   (must contain "test", must not be
@@ -34,4 +38,13 @@ async function connect_test_db(config, options = {}) {
   });
 }
 
-export { connect_test_db, test_db_config };
+// Drops every table inside the (guarded) disposable database. Never drops the database.
+async function reset_tables(connection, database) {
+  if (!/test/i.test(database) || database === "clubspace") throw new Error(`refusing to reset ${database}`);
+  const [rows] = await connection.query("SELECT TABLE_NAME AS name FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?", [database]);
+  await connection.query("SET FOREIGN_KEY_CHECKS = 0");
+  for (const { name } of rows) await connection.query(`DROP TABLE IF EXISTS \`${name}\``);
+  await connection.query("SET FOREIGN_KEY_CHECKS = 1");
+}
+
+export { connect_test_db, reset_tables, test_db_config };

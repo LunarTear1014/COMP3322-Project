@@ -2,6 +2,7 @@
 // The beta schema already allows role = 'president'. This adds the per-row
 // version and the database-level rule of at most one president per club.
 // The operator sets a club's first president; this migration never infers one.
+// VIRTUAL, not STORED: MySQL rejects a stored generated column over club_id because of its FK ON DELETE CASCADE.
 import { MigrationError } from "../../src/db/migrate.js";
 
 export async function up(ctx) {
@@ -18,6 +19,6 @@ export async function up(ctx) {
     MODIFY role ENUM('member','committee','president') NOT NULL DEFAULT 'member'`);
   await ctx.add_column("memberships", "version", "INT UNSIGNED NOT NULL DEFAULT 1");
   await ctx.add_column("memberships", "president_club_id",
-    "INT AS (IF(role = 'president', club_id, NULL)) STORED");
+    "INT AS (IF(role = 'president', club_id, NULL)) VIRTUAL");
   await ctx.add_index("memberships", "uq_memberships_one_president", "president_club_id", { unique: true });
 }

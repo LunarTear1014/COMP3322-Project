@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
-import { connect_test_db, test_db_config } from "../../test/db_guard.js";
+import { connect_test_db, reset_tables, test_db_config } from "../../test/db_guard.js";
 import { load_migrations, run_migrations } from "./migrate.js";
 
 // Runs only against a disposable database (see test/db_guard.js). NOT RUN in
@@ -17,6 +17,7 @@ describe("migrations on a disposable MySQL database", { skip }, () => {
 
   before(async () => {
     admin = await connect_test_db(config);
+    await reset_tables(admin, config.database);
     const schema = await readFile(fileURLToPath(new URL("../../db/schema.sql", import.meta.url)), "utf8");
     await admin.query(schema); // beta baseline; drops and recreates tables in the test DB only
     pool = mysql.createPool({ ...config, connectionLimit: 3, dateStrings: true, timezone: "Z" });
