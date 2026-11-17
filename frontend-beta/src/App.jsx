@@ -7,6 +7,7 @@ import { ErrorNotice } from './components/common'
 import { AppHeader } from './components/nav/AppHeader'
 import { TabBar } from './components/nav/TabBar'
 import { AuthForm } from './pages/AuthPage'
+import { ProfileCompletion } from './pages/ProfileCompletion'
 import { Credits } from './pages/Credits'
 import { ClubMembers, ClubTools } from './pages/ClubTools'
 import { Effectiveness } from './pages/Effectiveness'
@@ -118,6 +119,10 @@ function Shell({ streamOverride }) {
     return <Navigate to={`/login?${bounce}`} replace />
   }
   if (!session) return <AuthForm key={location.pathname} mode={location.pathname.slice(1)} onLogin={setSession} />
+
+  // Profile Completion (ADR-0001): a Google-signed-in user without a student ID
+  // completes the profile before anything else renders, on every route.
+  if (session.user.student_id == null) return <ProfileCompletion session={session} refreshSession={refreshSession} />
 
   const organizer = session.memberships.some(isOrganizer)
   return (
