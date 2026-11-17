@@ -54,6 +54,9 @@ function create_google_router({ google_client, app_origin, ip_throttle, pool }) 
         get: (_req, _res, next) => next(new ApiError("NOT_FOUND", "That resource does not exist.")),
       });
     }
+    // Read by the v1 stack: the public config endpoint reports whether the
+    // routes exist, so the frontend can hide the sign-in button.
+    router.__google_disabled = true;
     return router;
   }
 

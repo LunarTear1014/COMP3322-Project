@@ -3,11 +3,18 @@ import { after, before, describe, test } from "node:test";
 import express from "express";
 import { create_app } from "./app.js";
 import { define_route } from "./api_v1/router.js";
+import { create_v1_stack } from "./api_v1/stack.js";
 
 const ORIGIN = "http://app.test";
 let server;
 let base;
 const logged = [];
+
+// Enough pool surface for the stack to assemble: the notifications repository
+// only captures it, no query runs until the stream hub starts.
+function stub_pool() {
+  return { query: async () => [[], []], getConnection: async () => { throw new Error("no database in this test"); } };
+}
 
 before(async () => {
   // Probe routes exercise the pipeline without a database.
@@ -50,6 +57,35 @@ describe("v1 pipeline", () => {
     const { data } = await response.json();
     assert.equal(data.campus_timezone, "Asia/Hong_Kong");
     assert.deepEqual(data.slots.map((slot) => slot.id), ["morning", "afternoon", "evening"]);
+  });
+
+  test("config reports google_oauth_enabled false when no v1 router supplies the flag", async () => {
+    const response = await fetch(`${base}/api/v1/config`);
+    assert.equal(response.status, 200);
+    const { data } = await response.json();
+    assert.equal(data.google_oauth_enabled, false);
+  });
+
+  test("config reports google_oauth_enabled true when the stack enables Google", async () => {
+    const probe = express.Router();
+    define_route(probe, "/__probe", { get: (_req, res) => res.json({ data: {} }) });
+    const app = create_app({
+      session_secret: "x".repeat(32),
+      app_origin: ORIGIN,
+      ...(() => { const stack = create_v1_stack({ pool: stub_pool(), google_client: { enabled: true }, app_origin: ORIGIN }); return { v1_routers: [...stack.routers, probe], google_oauth_enabled: stack.google_oauth_enabled }; })(),
+      logger: { error: () => {} },
+    });
+    const probe_server = app.listen(0);
+    await new Promise((resolve) => probe_server.once("listening", resolve));
+    try {
+      const base = `http://127.0.0.1:${probe_server.address().port}`;
+      const { data } = await (await fetch(`${base}/api/v1/config`)).json();
+      assert.equal(data.google_oauth_enabled, true);
+      assert.equal((await fetch(`${base}/api/v1/__probe`)).status, 200);
+    } finally {
+      probe_server.closeAllConnections?.();
+      probe_server.close();
+    }
   });
 
   test("unknown route returns a 404 envelope with request_id", async () => {

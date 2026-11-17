@@ -42,6 +42,7 @@ const google_client = create_google_client({
 const stack = create_v1_stack({ pool: v1_pool, google_client, app_origin });
 
 const app = create_app({
+  google_oauth_enabled: stack.google_oauth_enabled,
   session_store: new MysqlSessionStore({ pool: v1_pool }),
   v1_routers: stack.routers,
   legacy_google_mounts: stack.extra_mounts,

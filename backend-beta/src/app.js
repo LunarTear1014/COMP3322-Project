@@ -13,6 +13,7 @@ import request_id from "./middleware/request_id.js";
 function create_app({
   session_secret,
   app_origin,
+  google_oauth_enabled = false,
   legacy_routers = [],
   v1_routers = [],
   legacy_google_mounts = [],
@@ -53,7 +54,7 @@ function create_app({
   v1.use(json_body({ skip: is_multipart_route }));
   v1.use(session_middleware);
   v1.use(origin_and_csrf({ app_origin }));
-  v1.use(create_v1_router());
+  v1.use(create_v1_router({ google_oauth_enabled }));
   for (const router of v1_routers) v1.use(router);
   v1.use(not_found_handler);
   v1.use(error_handler({ logger }));
