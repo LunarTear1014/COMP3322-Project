@@ -18,6 +18,9 @@ const LOGIN = {
 const PROFILE = {
   name: { kind: "string", min: 1, max: 100 },
   email: { ...REGISTER.email, required: false },
+  // Profile Completion: a Google-signed-in user (null student_id) fills this
+  // once; password users keep the value they registered with.
+  student_id: { ...REGISTER.student_id, required: false },
 };
 
 const ip_of = (req) => req.ip || req.socket?.remoteAddress || "unknown";
@@ -95,9 +98,11 @@ function create_auth_router({ pool, hasher, login_throttle, register_throttle, i
   define_route(router, "/profile", {
     get: [require_user, (req, res) => res.json({ data: user_dto(req.user) })],
     patch: [require_user, wrap(async (req, res) => {
-      const body = validate_body(req.body, PROFILE, { at_least_one_of: ["name", "email"] });
+      const body = validate_body(req.body, PROFILE, { at_least_one_of: ["name", "email", "student_id"] });
       try {
-        await pool.query("UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email) WHERE id = ?", [body.name ?? null, body.email ?? null, req.user.id]);
+        await pool.query(
+          "UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), student_id = COALESCE(?, student_id) WHERE id = ?",
+          [body.name ?? null, body.email ?? null, body.student_id ?? null, req.user.id]);
       } catch (error) {
         throw duplicate_error(error) ?? error;
       }
