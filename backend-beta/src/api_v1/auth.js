@@ -3,7 +3,7 @@ import { rotate_csrf_token } from "../middleware/csrf.js";
 import { ApiError } from "../shared/errors.js";
 import { validate_body } from "../shared/validate.js";
 import { define_route } from "./router.js";
-import { load_memberships, require_user, user_dto, wrap } from "./common.js";
+import { load_memberships, require_user, session_regenerate, session_save, user_dto, wrap } from "./common.js";
 
 const REGISTER = {
   name: { kind: "string", min: 1, max: 100, required: true },
@@ -22,8 +22,8 @@ const PROFILE = {
 
 const ip_of = (req) => req.ip || req.socket?.remoteAddress || "unknown";
 
-const regenerate = (req) => new Promise((resolve, reject) => req.session.regenerate((error) => (error ? reject(error) : resolve())));
-const save = (req) => new Promise((resolve, reject) => req.session.save((error) => (error ? reject(error) : resolve())));
+const regenerate = session_regenerate;
+const save = session_save;
 const destroy = (req) => new Promise((resolve, reject) => req.session.destroy((error) => (error ? reject(error) : resolve())));
 
 function duplicate_error(error) {

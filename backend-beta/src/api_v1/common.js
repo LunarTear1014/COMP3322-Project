@@ -23,6 +23,11 @@ async function load_user(pool, user_id) {
   return rows[0] || null;
 }
 
+// Session writes shared by password login (auth.js) and the Google callback
+// (google.js); both must regenerate and save through the same wrapped calls.
+const session_regenerate = (req) => new Promise((resolve, reject) => req.session.regenerate((error) => (error ? reject(error) : resolve())));
+const session_save = (req) => new Promise((resolve, reject) => req.session.save((error) => (error ? reject(error) : resolve())));
+
 async function load_memberships(db, user_id) {
   const [rows] = await db.query(
     `SELECT m.club_id, c.name AS club_name, m.role, m.version, m.joined_at
@@ -100,4 +105,4 @@ async function signal(conn, { topic = "event", event_id, club_id, public: is_pub
     [topic, event_id, club_id, is_public, to_db(now)]);
 }
 
-export { signal, audit, id_param, identify, iso, load_memberships, load_user, membership_dto, notify, page_meta, require_admin, require_user, to_db, user_dto, wrap };
+export { signal, audit, id_param, identify, iso, load_memberships, load_user, membership_dto, notify, page_meta, require_admin, require_user, session_regenerate, session_save, to_db, user_dto, wrap };

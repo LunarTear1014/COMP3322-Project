@@ -37,7 +37,7 @@ before(async () => {
     resolve();
   }));
   config = await openid.discovery(
-    new URL(`http://127.0.0.1:${issuer_port}`), "client-id", { clientSecret: "client-secret" }, undefined,
+    new URL(`http://127.0.0.1:${issuer_port}`), "client-id", "client-secret", undefined,
     { execute: [openid.allowInsecureRequests] });
 });
 
@@ -45,15 +45,21 @@ after(async () => { issuer_server.close(); });
 
 // A minimal session-aware app mounting the real error handler: the OAuth
 // routes are GETs and need the session (handshake state lives there) but no
-// CSRF/origin check.
+// CSRF/origin check. The pool rejects any query: ticket 02's tests only cover
+// the handshake, and a provisioning attempt lands in the catch-all error
+// redirect instead.
 function create_test_app({ google_client, app_origin = CALLBACK_ORIGIN, ip_throttle } = {}) {
   const store = new session.MemoryStore();
   const app = express();
   app.use(session({ name: "clubspace.sid", secret: "s".repeat(32), resave: false, saveUninitialized: false, store }));
   app._session_store_for_test = store;
-  app.use("/api/auth", create_google_router({ google_client, app_origin, ip_throttle }));
+  app.use("/api/auth", create_google_router({ google_client, app_origin, ip_throttle, pool: rejecting_pool() }));
   app.use(error_handler({ logger: { error() {} } }));
   return app;
+}
+
+function rejecting_pool() {
+  return { query: async () => { throw new Error("no database in handshake tests"); }, getConnection: async () => { throw new Error("no database in handshake tests"); } };
 }
 
 // The google_client object google_setup.js produces, wired to the stub issuer.
@@ -132,7 +138,7 @@ describe("v1 Google OIDC routes (handshake only)", () => {
     }
   });
 
-  test("callback with the matching state validates, clears the handshake and redirects home", async () => {
+  test("callback with the matching state validates, clears the handshake and fails friendly when the exchange cannot complete", async () => {
     const app = create_test_app({ google_client: stub_google_client() });
     const { base, server } = await listen(app);
     try {
@@ -142,7 +148,9 @@ describe("v1 Google OIDC routes (handshake only)", () => {
       const callback = await fetch(`${base}/api/auth/google/callback?state=${encodeURIComponent(state)}&code=abc`, { redirect: "manual", headers: { cookie } });
       assert.equal(callback.status, 302);
       const target = new URL(callback.headers.get("location"));
-      assert.equal(target.href, `${CALLBACK_ORIGIN}/`, "no error marker on a valid handshake");
+      // The stub issuer has no token endpoint, so the grant fails; the user
+      // sees the friendly unavailable marker, not a 500 or a stack.
+      assert.equal(target.href, `${CALLBACK_ORIGIN}/?error=google_unavailable`);
       // Session handshake values are gone (single use).
       const stored = await stored_session(app, cookie);
       assert.equal(stored.google_state, undefined, "state cleared after use");

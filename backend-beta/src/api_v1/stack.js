@@ -34,7 +34,7 @@ function create_v1_stack({
     register_throttle: create_throttle({ limit: throttle_limits.register, window_ms }),
     ip_throttle: create_throttle({ limit: throttle_limits.ip, window_ms }),
   };
-  const google_router = create_google_router({ google_client, app_origin, ip_throttle: deps.ip_throttle });
+  const google_router = create_google_router({ google_client, app_origin, ip_throttle: deps.ip_throttle, pool });
   const routers = [identify(pool), create_auth_router(deps), create_clubs_router(deps), create_events_router(deps), create_registration_router(deps),
     create_notifications_router(deps), create_calendar_router(deps), create_engagement_router(deps), create_covers_router(deps),
     google_router,

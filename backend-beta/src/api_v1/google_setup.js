@@ -25,7 +25,11 @@ function create_google_client({ client_id, client_secret, logger = console } = {
   let pending = null;
   const get_config = async () => {
     if (!pending) {
-      pending = discovery(new URL(GOOGLE_ISSUER), client_id, { clientSecret: client_secret })
+      // openid-client v6: the third argument is the client metadata; a bare
+      // secret string resolves to { client_secret } and enables
+      // client_secret_post authentication at the token endpoint. An object
+      // with a camelCase `clientSecret` key would be silently ignored.
+      pending = discovery(new URL(GOOGLE_ISSUER), client_id, client_secret)
         .catch((error) => {
           pending = null; // a later request retries discovery
           throw error;
