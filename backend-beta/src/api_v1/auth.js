@@ -62,7 +62,8 @@ function create_auth_router({ pool, hasher, login_throttle, register_throttle, i
       login_throttle.hit(`${body.email}|${ip_of(req)}`);
       const [rows] = await pool.query("SELECT id, name, email, student_id, platform_role, password_hash FROM users WHERE LOWER(TRIM(email)) = ?", [body.email]);
       const user = rows[0];
-      // Unknown email still spends a full derivation (dummy path), same generic error.
+      // Unknown email and sentinel (Google-only user) both still spend a full
+      // derivation (dummy path), same generic error.
       const verdict = await hasher.verify(body.password, user?.password_hash ?? null);
       if (!user || !verdict.ok) throw new ApiError("INVALID_CREDENTIALS", "Email or password is incorrect.");
       if (verdict.needs_rehash) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { test_db_config } from "../../test/db_helper.js";
 import { Client, start_v1 } from "../../test/v1_harness.js";
+import { NO_PASSWORD_SENTINEL } from "./identity.js";
 
 const { skip } = test_db_config();
 let app;
@@ -116,6 +117,17 @@ describe("v1 auth, sessions and profile", { skip }, () => {
     assert.equal(last.status, 429);
     assert.equal(last.body.error.code, "RATE_LIMITED");
     assert.ok(Number(last.headers.get("retry-after")) > 0);
+  });
+
+  test("a Google-only user has the sentinel password and cannot log in with one", async () => {
+    const client = app.client();
+    await app.user({ email: "google-only@example.test", password: NO_PASSWORD_SENTINEL, student_id: null });
+    const attempt = await client.post("/auth/login", { email: "google-only@example.test", password: NO_PASSWORD_SENTINEL });
+    assert.equal(attempt.status, 401);
+    assert.equal(attempt.body.error.code, "INVALID_CREDENTIALS");
+    const [[row]] = await app.admin.query("SELECT google_sub, student_id FROM users WHERE email = 'google-only@example.test'");
+    assert.equal(row.google_sub, null, "the column exists and is nullable");
+    assert.equal(row.student_id, null, "student_id accepts null before Profile Completion");
   });
 
   test("a mutation without a session CSRF token is rejected before authentication", async () => {

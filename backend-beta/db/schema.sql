@@ -24,14 +24,16 @@ CREATE TABLE `users` (
     `email` VARCHAR(255) NOT NULL,
     `password_hash` VARCHAR(255) NOT NULL,
     `name` VARCHAR(255) NOT NULL,
-    `student_id` VARCHAR(50) NOT NULL,
+    `student_id` VARCHAR(50) NULL,
+    `google_sub` VARCHAR(255) NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_users_email` (`email`),
-    UNIQUE KEY `uk_users_student_id` (`student_id`)
+    UNIQUE KEY `uk_users_student_id` (`student_id`),
+    UNIQUE KEY `uk_users_google_sub` (`google_sub`)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
