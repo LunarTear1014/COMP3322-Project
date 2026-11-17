@@ -34,6 +34,16 @@ describe('Google sign-in on the auth page', () => {
     expect(button.getAttribute('href')).toBe('/api/v1/auth/google/start')
   })
 
+  it('keeps the error marker when the signed-out bounce moves / to /login', async () => {
+    // Callbacks land on the app root, so the bounce to /login?return=… must
+    // carry the marker along or the friendly message would be lost.
+    window.history.replaceState({}, '', '/?error=google_unavailable')
+    vi.stubGlobal('fetch', fixtureFetch(withConfig(true)))
+    render(<App />)
+    expect(await screen.findByText(/Google sign-in is not available right now/)).toBeTruthy()
+    expect(window.location.search).toBe('')
+  })
+
   it('renders a friendly message for each error marker and clears it from the URL', async () => {
     const messages = {
       google_invalid_handshake: 'Your Google sign-in session expired or was already used. Start again from the sign-in page.',

@@ -109,7 +109,11 @@ function Shell({ streamOverride }) {
   if (!session && location.pathname === '/credits') return <Credits signedIn={false} />
   const publicPage = location.pathname === '/login' || location.pathname === '/register'
   if (!session && !publicPage) {
-    return <Navigate to={`/login?return=${encodeURIComponent(location.pathname + location.search)}`} replace />
+    // A Google callback error marker (?error=…) must survive the signed-out
+    // bounce: pass it through as its own query param so the auth page can
+    // show the friendly message even though the marker is inside `return` too.
+    const marker = new URLSearchParams(location.search).get('error')
+    return <Navigate to={`/login?return=${encodeURIComponent(location.pathname + location.search)}${marker ? `&error=${encodeURIComponent(marker)}` : ''}`} replace />
   }
   if (!session) return <AuthForm key={location.pathname} mode={location.pathname.slice(1)} onLogin={setSession} />
 
