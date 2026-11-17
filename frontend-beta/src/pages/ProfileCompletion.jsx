@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PageHeading, Feedback } from '../components/common'
 import { Button, TextField } from '../components/ui'
 import { useAction } from '../hooks/resources'
+import { STUDENT_ID } from '../lib/validation'
 
 // Profile Completion (ADR-0001): a Google-signed-in user whose row still has a
 // null student_id supplies it once before entering the app. Rendered in place
@@ -30,10 +31,11 @@ export function ProfileCompletion({ session, refreshSession }) {
           autoComplete="off"
           spellCheck={false}
           required
-          maxLength={50}
+          maxLength={STUDENT_ID.max}
           value={studentId}
           onChange={event => setStudentId(event.target.value)}
         />
+        <p className="cs-meta cs-hint">{STUDENT_ID.patternMessage}</p>
         <Feedback action={action} />
         <Button variant="primary" type="submit" busy={action.busy}>Save and continue</Button>
       </form>

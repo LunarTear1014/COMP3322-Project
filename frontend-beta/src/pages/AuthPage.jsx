@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { setCsrf } from '../api'
 import { Feedback } from '../components/common'
 import { useAction, useResource } from '../hooks/resources'
@@ -10,10 +10,18 @@ import { GOOGLE_ERRORS, GOOGLE_ERROR_FALLBACK } from '../lib/googleAuth'
 // marker, and the param is consumed in an effect so a refresh does not
 // re-show it.
 function useGoogleError() {
-  const [marker] = useState(() => new URLSearchParams(window.location.search).get('error'))
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [marker, setMarker] = useState(null)
+
   useEffect(() => {
-    if (marker) window.history.replaceState({}, '', window.location.pathname)
-  }, [marker])
+    const m = searchParams.get('error')
+    if (m) {
+      setMarker(m)
+      // Consume the marker so a refresh does not re-show it.
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
+
   return marker ? (GOOGLE_ERRORS[marker] || GOOGLE_ERROR_FALLBACK) : null
 }
 

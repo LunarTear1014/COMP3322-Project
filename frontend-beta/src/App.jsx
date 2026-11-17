@@ -122,7 +122,9 @@ function Shell({ streamOverride }) {
 
   // Profile Completion (ADR-0001): a Google-signed-in user without a student ID
   // completes the profile before anything else renders, on every route.
-  if (session.user.student_id == null) return <ProfileCompletion session={session} refreshSession={refreshSession} />
+  // Only redirect when we have a confirmed session (not during bootstrap) and
+  // student_id is explicitly null — avoids flicker during background refresh.
+  if (session && session.user.student_id == null) return <ProfileCompletion session={session} refreshSession={refreshSession} />
 
   const organizer = session.memberships.some(isOrganizer)
   return (
