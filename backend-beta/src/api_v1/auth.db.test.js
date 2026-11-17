@@ -101,7 +101,7 @@ describe("v1 auth, sessions and profile", { skip }, () => {
   test("profile patch validates, rejects forbidden fields and duplicate emails", async () => {
     const client = await app.client_for("tai.man@example.test");
     assert.equal((await client.patch("/profile", {})).status, 422);
-    assert.ok((await client.patch("/profile", { student_id: "x" })).body.error.fields.student_id);
+    assert.ok((await client.patch("/profile", { student_id: "bad id!" })).body.error.fields.student_id);
     assert.ok((await client.patch("/profile", { platform_role: "venue_admin" })).body.error.fields.platform_role);
     await app.user({ email: "taken@example.test" });
     assert.equal((await client.patch("/profile", { email: "taken@example.test" })).body.error.code, "EMAIL_IN_USE");
