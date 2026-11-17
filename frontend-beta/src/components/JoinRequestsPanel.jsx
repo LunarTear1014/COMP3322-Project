@@ -47,7 +47,7 @@ export function JoinRequestsPanel({ event, onDecided }) {
               <div>
                 <p className="fact-main">{person.user.name}</p>
                 <p className="cs-meta">
-                  {person.user.student_id} · asked {timeLine(person.requested_at)}
+                  {person.user.student_id ?? '—'} · asked {timeLine(person.requested_at)}
                   {person.allow_waitlist ? ' · will take a waitlist place' : ' · seat only, no waitlist'}
                 </p>
               </div>
