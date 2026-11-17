@@ -15,6 +15,7 @@ function create_app({
   app_origin,
   legacy_routers = [],
   v1_routers = [],
+  legacy_google_mounts = [],
   is_multipart_route = () => false,
   session_store,
   cookie_secure = false,
@@ -58,9 +59,13 @@ function create_app({
   v1.use(error_handler({ logger }));
   app.use("/api/v1", v1);
 
-  if (legacy_routers.length) {
+  if (legacy_routers.length || legacy_google_mounts.length) {
     app.use(express.json());
     app.use(session_middleware);
+    // The Google callback redirect lands on the frontend-facing /api/auth
+    // prefix; mount the same session-aware router there (GET-only routes, no
+    // CSRF/origin check needed — same policy as the /api/v1 mount).
+    for (const [prefix, router] of legacy_google_mounts) app.use(prefix, router);
     for (const router of legacy_routers) app.use(router);
   }
 
