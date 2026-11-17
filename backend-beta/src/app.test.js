@@ -69,10 +69,12 @@ describe("v1 pipeline", () => {
   test("config reports google_oauth_enabled true when the stack enables Google", async () => {
     const probe = express.Router();
     define_route(probe, "/__probe", { get: (_req, res) => res.json({ data: {} }) });
+    const stack = create_v1_stack({ pool: stub_pool(), google_client: { enabled: true }, app_origin: ORIGIN });
     const app = create_app({
       session_secret: "x".repeat(32),
       app_origin: ORIGIN,
-      ...(() => { const stack = create_v1_stack({ pool: stub_pool(), google_client: { enabled: true }, app_origin: ORIGIN }); return { v1_routers: [...stack.routers, probe], google_oauth_enabled: stack.google_oauth_enabled }; })(),
+      v1_routers: [...stack.routers, probe],
+      google_oauth_enabled: stack.google_oauth_enabled,
       logger: { error: () => {} },
     });
     const probe_server = app.listen(0);

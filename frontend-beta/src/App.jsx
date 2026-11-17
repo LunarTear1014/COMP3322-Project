@@ -113,7 +113,9 @@ function Shell({ streamOverride }) {
     // bounce: pass it through as its own query param so the auth page can
     // show the friendly message even though the marker is inside `return` too.
     const marker = new URLSearchParams(location.search).get('error')
-    return <Navigate to={`/login?return=${encodeURIComponent(location.pathname + location.search)}${marker ? `&error=${encodeURIComponent(marker)}` : ''}`} replace />
+    const bounce = new URLSearchParams({ return: location.pathname + location.search })
+    if (marker) bounce.set('error', marker)
+    return <Navigate to={`/login?${bounce}`} replace />
   }
   if (!session) return <AuthForm key={location.pathname} mode={location.pathname.slice(1)} onLogin={setSession} />
 

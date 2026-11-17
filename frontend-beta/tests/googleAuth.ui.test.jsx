@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import App from '../src/App.jsx'
 import { setCsrf } from '../src/api.js'
+import { GOOGLE_ERRORS, GOOGLE_ERROR_FALLBACK } from '../src/lib/googleAuth.js'
 import { fixtureFetch, json } from './support/fixtureFetch.js'
 
 beforeEach(() => setCsrf(null))
@@ -46,12 +47,8 @@ describe('Google sign-in on the auth page', () => {
 
   it('renders a friendly message for each error marker and clears it from the URL', async () => {
     const messages = {
-      google_invalid_handshake: 'Your Google sign-in session expired or was already used. Start again from the sign-in page.',
-      google_email_unverified: 'Your Google account has no verified email address, so ClubSpace cannot link it. Verify the email with Google and try again.',
-      google_sign_in_busy: 'Another sign-in just touched your account. Wait a moment and try again.',
-      google_email_linked_elsewhere: 'This Google account is already linked to a different ClubSpace account. Sign in with that account’s password instead.',
-      google_unavailable: 'Google sign-in is not available right now. Please try again shortly, or use your email and password.',
-      google_not_a_marker: 'Google sign-in failed. Please try again, or use your email and password.',
+      ...GOOGLE_ERRORS,
+      google_not_a_marker: GOOGLE_ERROR_FALLBACK,
     }
     for (const [marker, message] of Object.entries(messages)) {
       window.history.replaceState({}, '', `/login?error=${marker}`)

@@ -10,6 +10,10 @@ import { define_route } from "./router.js";
 // Google OIDC sign-in (spec .scratch/google-oidc-login/spec.md, ADR-0001).
 //
 // create_google_router({ google_client, app_origin, ip_throttle, pool }):
+//   Returns { router, enabled }: enabled is false when OAuth is not usable
+//     (missing credentials, no app_origin or no pool) — the router then
+//     mounts nothing but a 404 for the two Google paths, and the v1 stack
+//     reports the flag on the public config endpoint.
 //   google_client: the object from create_google_client (google_setup.js) —
 //     { enabled: false } mounts nothing but a 404; { enabled: true,
 //     get_config } lazily discovers Google and caches the Configuration.
@@ -54,10 +58,10 @@ function create_google_router({ google_client, app_origin, ip_throttle, pool }) 
         get: (_req, _res, next) => next(new ApiError("NOT_FOUND", "That resource does not exist.")),
       });
     }
-    // Read by the v1 stack: the public config endpoint reports whether the
+    // The v1 stack reads `enabled` (this router's own contract, not a
+    // monkey-patched flag): the public config endpoint reports whether the
     // routes exist, so the frontend can hide the sign-in button.
-    router.__google_disabled = true;
-    return router;
+    return { router, enabled: false };
   }
 
   const { get_config } = google_client;
@@ -157,7 +161,7 @@ function create_google_router({ google_client, app_origin, ip_throttle, pool }) 
     }),
   });
 
-  return router;
+  return { router, enabled: true };
 }
 
 export { create_google_router, CALLBACK_PATH };

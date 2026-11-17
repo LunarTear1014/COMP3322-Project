@@ -53,7 +53,7 @@ function create_test_app({ google_client, app_origin = CALLBACK_ORIGIN, ip_throt
   const app = express();
   app.use(session({ name: "clubspace.sid", secret: "s".repeat(32), resave: false, saveUninitialized: false, store }));
   app._session_store_for_test = store;
-  app.use("/api/auth", create_google_router({ google_client, app_origin, ip_throttle, pool: rejecting_pool() }));
+  app.use("/api/auth", create_google_router({ google_client, app_origin, ip_throttle, pool: rejecting_pool() }).router);
   app.use(error_handler({ logger: { error() {} } }));
   return app;
 }

@@ -238,7 +238,7 @@ describe("v1 Google callback error redirects (mapping)", { skip }, () => {
   function create_app_with_pool(pool) {
     const app = express();
     app.use(session({ name: "clubspace.sid", secret: "s".repeat(32), resave: false, saveUninitialized: false, store: new session.MemoryStore() }));
-    app.use("/api/auth", create_google_router({ google_client: { enabled: true, get_config: async () => config }, app_origin: ORIGIN, pool }));
+    app.use("/api/auth", create_google_router({ google_client: { enabled: true, get_config: async () => config }, app_origin: ORIGIN, pool }).router);
     app.use(error_handler({ logger: { error() {} } }));
     return app;
   }
