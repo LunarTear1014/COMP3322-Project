@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { test_db_config } from "../../test/db_helper.js";
 import { Client, start_v1 } from "../../test/v1_harness.js";
+import { NO_PASSWORD_SENTINEL } from "./identity.js";
 
 const { skip } = test_db_config();
 let app;
@@ -100,13 +101,45 @@ describe("v1 auth, sessions and profile", { skip }, () => {
   test("profile patch validates, rejects forbidden fields and duplicate emails", async () => {
     const client = await app.client_for("tai.man@example.test");
     assert.equal((await client.patch("/profile", {})).status, 422);
-    assert.ok((await client.patch("/profile", { student_id: "x" })).body.error.fields.student_id);
+    assert.ok((await client.patch("/profile", { student_id: "bad id!" })).body.error.fields.student_id);
     assert.ok((await client.patch("/profile", { platform_role: "venue_admin" })).body.error.fields.platform_role);
     await app.user({ email: "taken@example.test" });
     assert.equal((await client.patch("/profile", { email: "taken@example.test" })).body.error.code, "EMAIL_IN_USE");
     const renamed = await client.patch("/profile", { name: "Tai Man Chan" });
     assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
     assert.equal(renamed.body.data.name, "Tai Man Chan");
+  });
+
+  test("profile patch completes a profile-incomplete user's student ID with the register rules", async () => {
+    await app.user({ email: "incomplete@example.test", student_id: null });
+    const client = await app.client_for("incomplete@example.test");
+    const bad = await client.patch("/profile", { student_id: "bad id!" });
+    assert.equal(bad.status, 422);
+    assert.equal(bad.body.error.fields.student_id, "Use letters, digits and hyphens only.");
+    const too_long = await client.patch("/profile", { student_id: "x".repeat(51) });
+    assert.equal(too_long.status, 422);
+    const completed = await client.patch("/profile", { student_id: " 3040-777 " });
+    assert.equal(completed.status, 200, JSON.stringify(completed.body));
+    assert.equal(completed.body.data.student_id, "3040-777");
+    const [[row]] = await app.admin.query("SELECT student_id FROM users WHERE email = 'incomplete@example.test'");
+    assert.equal(row.student_id, "3040-777");
+  });
+
+  test("profile patch keeps name and email working alongside the student ID", async () => {
+    await app.user({ email: "incomplete-side@example.test", student_id: null });
+    const client = await app.client_for("incomplete-side@example.test");
+    const both = await client.patch("/profile", { name: "Google User", student_id: "gg-1" });
+    assert.equal(both.status, 200, JSON.stringify(both.body));
+    assert.equal(both.body.data.name, "Google User");
+    assert.equal(both.body.data.student_id, "gg-1");
+    await app.user({ email: "google-id-taken@example.test", student_id: "taken-1" });
+    const clash = await client.patch("/profile", { student_id: "taken-1" });
+    assert.equal(clash.body.error.code, "STUDENT_ID_IN_USE");
+    assert.equal(clash.body.error.fields.student_id, "Already in use.");
+    const [[row]] = await app.admin.query("SELECT student_id FROM users WHERE email = 'incomplete-side@example.test'");
+    assert.equal(row.student_id, "gg-1", "a failed patch leaves the row untouched");
+    const still_required = await client.patch("/profile", {});
+    assert.equal(still_required.status, 422, "at least one field is still required");
   });
 
   test("login is throttled with Retry-After", async () => {
@@ -116,6 +149,17 @@ describe("v1 auth, sessions and profile", { skip }, () => {
     assert.equal(last.status, 429);
     assert.equal(last.body.error.code, "RATE_LIMITED");
     assert.ok(Number(last.headers.get("retry-after")) > 0);
+  });
+
+  test("a Google-only user has the sentinel password and cannot log in with one", async () => {
+    const client = app.client();
+    await app.user({ email: "google-only@example.test", password: NO_PASSWORD_SENTINEL, student_id: null });
+    const attempt = await client.post("/auth/login", { email: "google-only@example.test", password: NO_PASSWORD_SENTINEL });
+    assert.equal(attempt.status, 401);
+    assert.equal(attempt.body.error.code, "INVALID_CREDENTIALS");
+    const [[row]] = await app.admin.query("SELECT google_sub, student_id FROM users WHERE email = 'google-only@example.test'");
+    assert.equal(row.google_sub, null, "the column exists and is nullable");
+    assert.equal(row.student_id, null, "student_id accepts null before Profile Completion");
   });
 
   test("a mutation without a session CSRF token is rejected before authentication", async () => {

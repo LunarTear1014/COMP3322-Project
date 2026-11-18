@@ -7,6 +7,7 @@ import { ErrorNotice } from './components/common'
 import { AppHeader } from './components/nav/AppHeader'
 import { TabBar } from './components/nav/TabBar'
 import { AuthForm } from './pages/AuthPage'
+import { ProfileCompletion } from './pages/ProfileCompletion'
 import { Credits } from './pages/Credits'
 import { ClubMembers, ClubTools } from './pages/ClubTools'
 import { Effectiveness } from './pages/Effectiveness'
@@ -109,9 +110,21 @@ function Shell({ streamOverride }) {
   if (!session && location.pathname === '/credits') return <Credits signedIn={false} />
   const publicPage = location.pathname === '/login' || location.pathname === '/register'
   if (!session && !publicPage) {
-    return <Navigate to={`/login?return=${encodeURIComponent(location.pathname + location.search)}`} replace />
+    // A Google callback error marker (?error=…) must survive the signed-out
+    // bounce: pass it through as its own query param so the auth page can
+    // show the friendly message even though the marker is inside `return` too.
+    const marker = new URLSearchParams(location.search).get('error')
+    const bounce = new URLSearchParams({ return: location.pathname + location.search })
+    if (marker) bounce.set('error', marker)
+    return <Navigate to={`/login?${bounce}`} replace />
   }
   if (!session) return <AuthForm key={location.pathname} mode={location.pathname.slice(1)} onLogin={setSession} />
+
+  // Profile Completion (ADR-0001): a Google-signed-in user without a student ID
+  // completes the profile before anything else renders, on every route.
+  // Only redirect when we have a confirmed session (not during bootstrap) and
+  // student_id is explicitly null — avoids flicker during background refresh.
+  if (session && session.user.student_id == null) return <ProfileCompletion session={session} refreshSession={refreshSession} />
 
   const organizer = session.memberships.some(isOrganizer)
   return (

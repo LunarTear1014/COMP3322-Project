@@ -20,11 +20,11 @@ function define_route(router, path, handlers) {
 
 // v1 router. Business resources are added by later tasks; only the shared
 // public endpoints live here today.
-function create_v1_router() {
+function create_v1_router({ google_oauth_enabled = false } = {}) {
   const router = express.Router();
 
   define_route(router, "/config", {
-    get: (_req, res) => res.json({ data: config_payload() }),
+    get: (_req, res) => res.json({ data: config_payload({ google_oauth_enabled }) }),
   });
 
   define_route(router, "/auth/csrf", {

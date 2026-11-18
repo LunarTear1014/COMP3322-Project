@@ -13,8 +13,10 @@ import request_id from "./middleware/request_id.js";
 function create_app({
   session_secret,
   app_origin,
+  google_oauth_enabled = false,
   legacy_routers = [],
   v1_routers = [],
+  legacy_google_mounts = [],
   is_multipart_route = () => false,
   session_store,
   cookie_secure = false,
@@ -52,15 +54,19 @@ function create_app({
   v1.use(json_body({ skip: is_multipart_route }));
   v1.use(session_middleware);
   v1.use(origin_and_csrf({ app_origin }));
-  v1.use(create_v1_router());
+  v1.use(create_v1_router({ google_oauth_enabled }));
   for (const router of v1_routers) v1.use(router);
   v1.use(not_found_handler);
   v1.use(error_handler({ logger }));
   app.use("/api/v1", v1);
 
-  if (legacy_routers.length) {
+  if (legacy_routers.length || legacy_google_mounts.length) {
     app.use(express.json());
     app.use(session_middleware);
+    // The Google callback redirect lands on the frontend-facing /api/auth
+    // prefix; mount the same session-aware router there (GET-only routes, no
+    // CSRF/origin check needed — same policy as the /api/v1 mount).
+    for (const [prefix, router] of legacy_google_mounts) app.use(prefix, router);
     for (const router of legacy_routers) app.use(router);
   }
 

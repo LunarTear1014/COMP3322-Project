@@ -56,8 +56,8 @@ function from_mysql_utc(text) {
   return new Date(`${text.replace(" ", "T")}Z`);
 }
 
-function config_payload() {
-  return { campus_timezone: CAMPUS_TIMEZONE, slots: SLOTS };
+function config_payload({ google_oauth_enabled = false } = {}) {
+  return { campus_timezone: CAMPUS_TIMEZONE, slots: SLOTS, google_oauth_enabled };
 }
 
 export {

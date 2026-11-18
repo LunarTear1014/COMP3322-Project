@@ -1,5 +1,6 @@
 import { create_password_hasher, create_throttle } from "../features/users/password_hasher.js";
 import { create_auth_router } from "./auth.js";
+import { create_google_router } from "./google.js";
 import { identify } from "./common.js";
 import { create_clubs_router } from "./clubs.js";
 import { create_events_router } from "./events.js";
@@ -22,6 +23,8 @@ function create_v1_stack({
   cover_dir = process.env.COVER_DIR || "./data/covers",
   hub_options = {},
   throttle_limits = { login: 10, register: 20, ip: 100 },
+  google_client = { enabled: false },
+  app_origin = null,
 } = {}) {
   const window_ms = 15 * 60_000;
   const hub = new NotificationStreamHub({ repository: create_notifications_repository(pool), ...hub_options });
@@ -31,10 +34,19 @@ function create_v1_stack({
     register_throttle: create_throttle({ limit: throttle_limits.register, window_ms }),
     ip_throttle: create_throttle({ limit: throttle_limits.ip, window_ms }),
   };
+  const { router: google_router, enabled: google_oauth_enabled } = create_google_router({ google_client, app_origin, ip_throttle: deps.ip_throttle, pool });
+  // The Google routes 404 as a pair when credentials are missing, so the
+  // public config endpoint must surface whether they exist at all — the
+  // frontend uses it to show or hide the "Continue with Google" button.
   const routers = [identify(pool), create_auth_router(deps), create_clubs_router(deps), create_events_router(deps), create_registration_router(deps),
     create_notifications_router(deps), create_calendar_router(deps), create_engagement_router(deps), create_covers_router(deps),
+    google_router,
     create_stream_router({ hub, authenticate: async (req) => req.user?.id ?? null })];
-  return { deps, routers, hub, is_multipart_route: IS_COVER_UPLOAD, start: () => hub.start(), stop: () => hub.stop() };
+  // Google's redirect lands on the frontend-facing /api/auth/google/callback
+  // (the same /api prefix the legacy beta routers use), not /api/v1; expose
+  // the router so index.js can mount it at that exact path too.
+  const extra_mounts = app_origin ? [["/api/auth", google_router]] : [];
+  return { deps, routers, extra_mounts, hub, google_oauth_enabled, is_multipart_route: IS_COVER_UPLOAD, start: () => hub.start(), stop: () => hub.stop() };
 }
 
 export { create_v1_stack };

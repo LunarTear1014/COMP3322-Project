@@ -15,7 +15,7 @@ h1, h2, h3, h4 { text-wrap: balance; }
 
 /* Buttons: rest → hover lifts → press sinks */
 .cs-btn { font: inherit; font-weight: 700; font-size: 16px; line-height: 20px; min-height: 44px; padding: 10px 20px; border-radius: var(--radius-pill); border: 2px solid var(--outline); background: var(--surface); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); text-decoration: none; transition: transform .16s ease-out, box-shadow .16s ease-out, background-color .16s ease-out; }
-.cs-btn:hover { background: var(--surface-sunk); }
+.cs-btn:hover { background: var(--surface-sunk); text-decoration: none; }
 .cs-btn:active { transform: translate(1px, 1px); }
 .cs-btn-primary { background: var(--lagoon); color: var(--on-lagoon); box-shadow: var(--shadow-sticker); }
 .cs-btn-primary:hover { background: var(--lagoon); transform: translate(-2px, -2px); box-shadow: var(--shadow-sticker-hover); }
@@ -26,6 +26,9 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .cs-btn-danger:hover { background: var(--danger-soft); }
 .cs-btn-success { background: var(--mint); color: var(--on-pop); box-shadow: var(--shadow-sticker); }
 .cs-btn-success:hover { background: var(--mint); }
+.cs-btn-surface { background: var(--surface); color: var(--ink); border-color: var(--line); box-shadow: var(--shadow-sticker); }
+.cs-btn-surface:hover { background: var(--surface); transform: translate(-2px, -2px); box-shadow: var(--shadow-sticker-hover); border-color: var(--outline); }
+.cs-btn-surface:active { transform: translate(2px, 2px); box-shadow: var(--shadow-sticker-press); }
 .cs-btn-block { width: 100%; }
 .cs-btn:disabled, .cs-btn[aria-disabled="true"] { background: var(--surface-sunk); color: var(--ink-muted); border-color: var(--line); box-shadow: none; cursor: not-allowed; transform: none; }
 .cs-btn[aria-busy="true"] { cursor: progress; }

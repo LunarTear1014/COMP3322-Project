@@ -22,7 +22,7 @@ const pool = create_utc_pool({
   user: process.env.DB_USER, password: process.env.DB_PASSWORD, connection_limit: 8,
 });
 try {
-  await assert_schema_version(pool, "017_live_signals");
+  await assert_schema_version(pool, "018_google_identity");
   const result = await seed_demo({ pool, password });
   if (result.skipped) {
     console.log(`Skipping demo data: ${result.skipped}`);

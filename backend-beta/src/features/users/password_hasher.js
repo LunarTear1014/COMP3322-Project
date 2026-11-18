@@ -2,6 +2,7 @@ import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { ApiError } from "../../shared/errors.js";
 import { verify_password as verify_legacy } from "./passwords.js";
+import { NO_PASSWORD_SENTINEL } from "../../api_v1/identity.js";
 
 // v1 password hashing (backend.md section 2): async scrypt, a random 16-byte
 // salt, a 64-byte result, and the parameters stored with the hash so they can
@@ -66,11 +67,12 @@ function create_password_hasher({ params = DEFAULT_PARAMS, concurrency = 2, max_
       });
     },
 
-    // Returns { ok, needs_rehash }. A missing stored hash (unknown email)
-    // still spends a full derivation so timing does not reveal the account.
+    // Returns { ok, needs_rehash }. A missing stored hash (unknown email) or a
+    // sentinel (Google-only user) still spends a full derivation so timing
+    // does not reveal the account.
     async verify(password, stored) {
       const parsed = parse(stored);
-      if (!parsed) {
+      if (!parsed || parsed.sentinel) {
         await limiter.run(() => derive(password, DUMMY_SALT, options));
         return { ok: false, needs_rehash: false };
       }
@@ -92,6 +94,10 @@ const DUMMY_SALT = Buffer.alloc(SALT_BYTES, 7);
 
 function parse(stored) {
   if (typeof stored !== "string") return null;
+  // Google-only accounts carry the sentinel instead of a password; it never
+  // verifies, and recognition of "stored values that never verify" lives here
+  // so every verify call site gets the same treatment.
+  if (stored === NO_PASSWORD_SENTINEL) return { sentinel: true };
   if (/^[a-f0-9]{32}:[a-f0-9]{128}$/.test(stored)) return { legacy: true };
   const match = FORMAT.exec(stored);
   if (!match) return null;

@@ -3,7 +3,7 @@ import { rotate_csrf_token } from "../middleware/csrf.js";
 import { ApiError } from "../shared/errors.js";
 import { validate_body } from "../shared/validate.js";
 import { define_route } from "./router.js";
-import { load_memberships, require_user, user_dto, wrap } from "./common.js";
+import { load_memberships, require_user, session_regenerate, session_save, user_dto, wrap } from "./common.js";
 
 const REGISTER = {
   name: { kind: "string", min: 1, max: 100, required: true },
@@ -18,12 +18,15 @@ const LOGIN = {
 const PROFILE = {
   name: { kind: "string", min: 1, max: 100 },
   email: { ...REGISTER.email, required: false },
+  // Profile Completion: a Google-signed-in user (null student_id) fills this
+  // once; password users keep the value they registered with.
+  student_id: { ...REGISTER.student_id, required: false },
 };
 
 const ip_of = (req) => req.ip || req.socket?.remoteAddress || "unknown";
 
-const regenerate = (req) => new Promise((resolve, reject) => req.session.regenerate((error) => (error ? reject(error) : resolve())));
-const save = (req) => new Promise((resolve, reject) => req.session.save((error) => (error ? reject(error) : resolve())));
+const regenerate = session_regenerate;
+const save = session_save;
 const destroy = (req) => new Promise((resolve, reject) => req.session.destroy((error) => (error ? reject(error) : resolve())));
 
 function duplicate_error(error) {
@@ -62,7 +65,8 @@ function create_auth_router({ pool, hasher, login_throttle, register_throttle, i
       login_throttle.hit(`${body.email}|${ip_of(req)}`);
       const [rows] = await pool.query("SELECT id, name, email, student_id, platform_role, password_hash FROM users WHERE LOWER(TRIM(email)) = ?", [body.email]);
       const user = rows[0];
-      // Unknown email still spends a full derivation (dummy path), same generic error.
+      // Unknown email and sentinel (Google-only user) both still spend a full
+      // derivation (dummy path), same generic error.
       const verdict = await hasher.verify(body.password, user?.password_hash ?? null);
       if (!user || !verdict.ok) throw new ApiError("INVALID_CREDENTIALS", "Email or password is incorrect.");
       if (verdict.needs_rehash) {
@@ -94,9 +98,11 @@ function create_auth_router({ pool, hasher, login_throttle, register_throttle, i
   define_route(router, "/profile", {
     get: [require_user, (req, res) => res.json({ data: user_dto(req.user) })],
     patch: [require_user, wrap(async (req, res) => {
-      const body = validate_body(req.body, PROFILE, { at_least_one_of: ["name", "email"] });
+      const body = validate_body(req.body, PROFILE, { at_least_one_of: ["name", "email", "student_id"] });
       try {
-        await pool.query("UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email) WHERE id = ?", [body.name ?? null, body.email ?? null, req.user.id]);
+        await pool.query(
+          "UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), student_id = COALESCE(?, student_id) WHERE id = ?",
+          [body.name ?? null, body.email ?? null, body.student_id ?? null, req.user.id]);
       } catch (error) {
         throw duplicate_error(error) ?? error;
       }

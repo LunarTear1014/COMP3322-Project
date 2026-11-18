@@ -278,3 +278,9 @@ a.calendar-slot.is-available:hover {
     font-size: .875rem;
   }
 }
+
+.auth-buttons-stack { display: flex; flex-direction: column; gap: 0; }
+.auth-divider { display: flex; align-items: center; justify-content: center; gap: var(--space-3); color: var(--ink); font-size: .8rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; padding: var(--space-3) 0; position: relative; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 2px; background: var(--line); border-radius: 1px; }
+.auth-divider::before { margin-right: var(--space-2); }
+.auth-divider::after { margin-left: var(--space-2); }

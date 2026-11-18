@@ -2,6 +2,7 @@ import { create_app } from "../src/app.js";
 import { create_utc_pool } from "../src/db/pool.js";
 import { create_password_hasher } from "../src/features/users/password_hasher.js";
 import { MysqlSessionStore } from "../src/api_v1/session_store.js";
+import { NO_PASSWORD_SENTINEL } from "../src/api_v1/identity.js";
 import { create_v1_stack } from "../src/api_v1/stack.js";
 import { prepare_database } from "./db_helper.js";
 
@@ -51,17 +52,17 @@ class Client {
 
 // Boots the app on a fresh, migrated disposable database. `now` is a mutable
 // clock: `app.set_now(date)`.
-async function start_v1({ migrate = true, hasher_params = FAST_HASH, throttle_limits } = {}) {
+async function start_v1({ migrate = true, hasher_params = FAST_HASH, throttle_limits, google_client = { enabled: false } } = {}) {
   const db = await prepare_database({ migrate });
   const pool = create_utc_pool({ ...db.config, connection_limit: 12 });
   let now = new Date("2026-11-16T00:00:00Z");
   const hasher = create_password_hasher({ params: hasher_params });
-  const stack = create_v1_stack({ pool, hasher, hub_options: { interval_ms: 50, logger: { error() {} } }, clock: () => (now = new Date(now.getTime() + 1)), throttle_limits, cover_dir: `${process.env.TMPDIR || "/tmp"}/clubspace-test-covers-${process.pid}-${counter++}` });
+  const stack = create_v1_stack({ pool, hasher, google_client, app_origin: ORIGIN, hub_options: { interval_ms: 50, logger: { error() {} } }, clock: () => (now = new Date(now.getTime() + 1)), throttle_limits, cover_dir: `${process.env.TMPDIR || "/tmp"}/clubspace-test-covers-${process.pid}-${counter++}` });
   await stack.start();
   const store = new MysqlSessionStore({ pool, cleanup_ms: 0 });
   const app = create_app({
     session_secret: "s".repeat(32), app_origin: ORIGIN, session_store: store,
-    v1_routers: stack.routers, is_multipart_route: stack.is_multipart_route, logger: { error() {} },
+    v1_routers: stack.routers, legacy_google_mounts: stack.extra_mounts, is_multipart_route: stack.is_multipart_route, logger: { error() {} },
   });
   const server = app.listen(0);
   await new Promise((resolve) => server.once("listening", resolve));
@@ -69,9 +70,13 @@ async function start_v1({ migrate = true, hasher_params = FAST_HASH, throttle_li
   const hash = (password) => hasher.hash(password);
 
   async function user({ email, name = "User", student_id, platform_role = "student", password = "correct-horse-1" }) {
+    // The sentinel is stored raw: the scrypt hasher never emits it, so a
+    // stored sentinel means the account has no password (Google-only).
+    const stored = password === NO_PASSWORD_SENTINEL ? password : await hash(password);
+    const student_id_value = student_id === undefined ? email.split("@")[0] : student_id;
     const [result] = await db.admin.query(
       "INSERT INTO users (email, password_hash, name, student_id, platform_role) VALUES (?, ?, ?, ?, ?)",
-      [email, await hash(password), name, student_id ?? email.split("@")[0], platform_role]);
+      [email, stored, name, student_id_value, platform_role]);
     return result.insertId;
   }
   async function client_for(email) {

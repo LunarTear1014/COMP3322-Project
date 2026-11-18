@@ -35,7 +35,7 @@ export function Profile({ session, refreshSession }) {
           <form className="profile-form" onSubmit={save}>
             <TextField label="Name" name="name" autoComplete="name" required maxLength={100} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} />
             <TextField label="Email" name="email" type="email" autoComplete="email" spellCheck={false} required value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} />
-            <p className="cs-meta">Student ID: {profile.data.student_id} · Role: {session.user.platform_role === 'venue_admin' ? 'Venue administrator' : 'Student'}</p>
+            <p className="cs-meta">Student ID: {profile.data.student_id ?? '—'} · Role: {session.user.platform_role === 'venue_admin' ? 'Venue administrator' : 'Student'}</p>
             <Button variant="primary" type="submit" busy={action.busy}>Save profile</Button>
           </form>
         )}

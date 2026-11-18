@@ -188,7 +188,7 @@ export function ManageEventEditor({ id, session }) {
                           {participants.data?.map(p => (
                             <tr key={p.user.id}>
                               <td>{p.user.name}</td>
-                              <td>{p.user.email}</td><td>{p.user.student_id}</td>
+                              <td>{p.user.email}</td><td>{p.user.student_id ?? '—'}</td>
                               <td>{p.status}</td>
                               <td>{p.queue_position ?? '—'}</td>
                             </tr>
