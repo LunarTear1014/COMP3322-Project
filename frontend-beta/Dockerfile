@@ -6,5 +6,9 @@ COPY . .
 RUN npm run build
 
 FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# openssl issues the self-signed certificate when APP_ORIGIN is https://
+# (see nginx/40-clubspace-site.sh, which writes conf.d/default.conf at start).
+RUN apk add --no-cache openssl && rm -f /etc/nginx/conf.d/default.conf
+COPY nginx/locations.conf /etc/nginx/clubspace/locations.conf
+COPY --chmod=755 nginx/40-clubspace-site.sh /docker-entrypoint.d/40-clubspace-site.sh
 COPY --from=build /app/dist /usr/share/nginx/html

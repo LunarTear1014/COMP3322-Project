@@ -5,7 +5,7 @@ We added Google sign-in without introducing a second identities table: a Google 
 ## Considered options
 
 - **Separate `identities` table** (the standard multi-provider pattern): rejected as overkill — one IdP, one email namespace, no provider deletion/merge requirements in scope.
-- **Passwordless-only OAuth**: rejected — demo/marker accounts are seeded with shared passwords, and Google OAuth cannot run on the plain-HTTP HKU deployment (Google requires HTTPS for non-localhost redirect URIs), so password login must keep working there.
+- **Passwordless-only OAuth**: rejected — demo/marker accounts are seeded with shared passwords, and Google OAuth cannot run on the plain-HTTP HKU deployment (Google requires HTTPS for non-localhost redirect URIs), so password login must keep working there. (The HKU deployment later moved to HTTPS so Google sign-in can run there too; see [ADR 0002](0002-https-self-signed-on-hku-server.md). Password login still stays.)
 
 ## Consequences
 
