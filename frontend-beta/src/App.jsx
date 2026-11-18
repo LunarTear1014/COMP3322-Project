@@ -9,6 +9,7 @@ import { TabBar } from './components/nav/TabBar'
 import { AuthForm } from './pages/AuthPage'
 import { ProfileCompletion } from './pages/ProfileCompletion'
 import { Credits } from './pages/Credits'
+import { PrivacyPolicy, Terms } from './pages/Legal'
 import { ClubMembers, ClubTools } from './pages/ClubTools'
 import { Effectiveness } from './pages/Effectiveness'
 import { ClubsDirectory } from './pages/ClubsDirectory'
@@ -106,8 +107,11 @@ function Shell({ streamOverride }) {
   if (bootError && !session) {
     return <main><ErrorNotice error={bootError} /><button className="cs-btn" onClick={refreshSession}>Retry session</button></main>
   }
-  // The credits page is public: it is linked from the sign-in footer.
+  // Credits, privacy and terms are public: they are linked from the sign-in
+  // footer, and privacy and terms from Google's sign-in consent screen.
   if (!session && location.pathname === '/credits') return <Credits signedIn={false} />
+  if (!session && location.pathname === '/privacy') return <PrivacyPolicy signedIn={false} />
+  if (!session && location.pathname === '/terms') return <Terms signedIn={false} />
   const publicPage = location.pathname === '/login' || location.pathname === '/register'
   if (!session && !publicPage) {
     // A Google callback error marker (?error=…) must survive the signed-out
@@ -155,6 +159,8 @@ function Shell({ streamOverride }) {
           <Route path="/admin/bookings" element={<Admin session={session} />} />
           <Route path="/notifications" element={<Notifications refreshInbox={refreshInbox} />} />
           <Route path="/credits" element={<Credits signedIn />} />
+          <Route path="/privacy" element={<PrivacyPolicy signedIn />} />
+          <Route path="/terms" element={<Terms signedIn />} />
           <Route path="/organizer/clubs/:id/reports" element={<Reports />} />
           <Route path="*" element={<main><h1>Page not found</h1></main>} />
         </Routes>

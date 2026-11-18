@@ -64,6 +64,7 @@ export function Credits({ signedIn }) {
       <CreditList title="Fonts" items={FONTS} />
       <CreditList title="Backend and database" items={BACKEND} />
       <CreditList title="Build, test and deployment tools" items={TOOLS} />
+      <p>See also the <Link to="/privacy">privacy policy</Link> and <Link to="/terms">terms of use</Link>.</p>
       <p><Link to={signedIn ? '/events' : '/login'}>{signedIn ? 'Back to Explore' : 'Back to sign in'}</Link></p>
     </main>
   )

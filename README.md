@@ -364,6 +364,12 @@ server's `.env` (git-ignored; never commit them or copy the downloaded
    consent screen is in **Testing**, only the listed test users can sign in;
    add the markers' accounts or publish the app (the `openid`, `email` and
    `profile` scopes need no Google review).
+   To publish, fill in Branding with the home page
+   `https://c3322-pg19.cs.hku.hk`, the privacy policy
+   `https://c3322-pg19.cs.hku.hk/privacy`, the terms
+   `https://c3322-pg19.cs.hku.hk/terms` (both public pages in the app) and
+   the authorised domain `hku.hk`. Do not upload a logo: that requires
+   Google's verification.
 2. On your computer, print the two `.env` lines from the downloaded JSON:
 
    ```bash

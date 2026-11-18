@@ -159,4 +159,7 @@ body { padding: 0; }
 .credits-section { margin-block: var(--space-6); }
 .credits-list { display: flex; flex-direction: column; gap: var(--space-2); padding: 0; margin: 0; list-style: none; }
 .credits-list a { font-weight: 700; }
+.legal-page { max-width: 760px; }
+.legal-section { margin-block: var(--space-6); }
+.legal-section ul { display: flex; flex-direction: column; gap: var(--space-2); padding-left: 1.25rem; margin: 0 0 var(--space-3); }
 .auth-footer a { color: inherit; }
