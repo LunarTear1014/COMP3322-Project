@@ -23,3 +23,7 @@ docs/sessions/
 **/docs/sessions/
 .agent-sync/
 **/.agent-sync/
+
+# Google OAuth client credentials downloaded from Google Cloud Console.
+# The app reads GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET from .env instead.
+client_secret_*.json

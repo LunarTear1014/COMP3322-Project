@@ -5,7 +5,7 @@ Project, Group 19 (PG19).
 
 | | |
 | --- | --- |
-| **Live deployment** | **http://c3322-pg19.cs.hku.hk** (connect to HKUVPN first) |
+| **Live deployment** | **https://c3322-pg19.cs.hku.hk** (connect to HKUVPN first; the certificate is self-signed, so accept the browser warning once) |
 | Demo password | `clubspacetest123` for every [demo account](#demo-accounts) |
 | Source | https://github.com/LunarTear1014/COMP3322-Project (`main` is what is deployed) |
 | Proposal | [`proposal/Proposal.md`](proposal/Proposal.md) |
@@ -79,7 +79,7 @@ Lucien Balthazar Neale, Chan Ka Hei Aubrey.
 ## Architecture
 
 ```text
-Browser ──HTTP :80──▶ web (nginx: built React SPA, proxies /api/)
+Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :80 redirects)
                            │
                            ▼
                       backend (Express, /api/v1, SSE stream) ──▶ db (MySQL 8.4, volume db_data)
@@ -92,7 +92,7 @@ Cover images live on the `cover_data` volume shared by `backend` and `worker`.
 The ER diagram and design notes are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ```text
-frontend-beta/   React + Vite SPA, its Dockerfile and nginx.conf
+frontend-beta/   React + Vite SPA, its Dockerfile and nginx/ config
 backend-beta/    Express API, worker, ops scripts, MySQL schema, migrations, tests
 openspec/        Specifications and the v1 API contract
 proposal/        Project proposal
@@ -183,12 +183,17 @@ internet access to GitHub, Docker Hub and npm during the build. Nothing else
    origin. For example, to use http://localhost:8080:
 
    ```bash
-   printf 'APP_ORIGIN=http://localhost:8080\nWEB_PORT=8080\n' >> .env
+   printf 'APP_ORIGIN=http://localhost:8080\nWEB_PORT=8080\nWEB_HTTPS_PORT=8443\n' >> .env
    ```
 
    `APP_ORIGIN` must match the browser's address bar exactly (scheme, host and
    port; no trailing slash). Leave out `WEB_PORT` to serve on port 80, in which
-   case use `APP_ORIGIN=http://localhost`.
+   case use `APP_ORIGIN=http://localhost`. An `http://` address serves plain
+   HTTP only; an `https://` one (the default, `https://c3322-pg19.cs.hku.hk`)
+   serves HTTPS with a self-signed certificate the web container issues on
+   its first start, and redirects port 80 to it. `WEB_HTTPS_PORT` (default
+   443) only moves the HTTPS port off 443 so it cannot clash with another
+   service.
 
 3. **Build and start.**
 
@@ -198,7 +203,8 @@ internet access to GitHub, Docker Hub and npm during the build. Nothing else
 
    The first build takes about 3–5 minutes. Compose starts MySQL, applies the
    schema and migrations (`migrate`), starts the API and worker, serves the
-   site on port 80 (or `WEB_PORT`) and loads the demo data (`seed`).
+   site on port 443 (HTTPS) and 80, or `WEB_PORT` for an `http://`
+   `APP_ORIGIN`, and loads the demo data (`seed`).
 
 4. **Check it.**
 
@@ -215,8 +221,10 @@ internet access to GitHub, Docker Hub and npm during the build. Nothing else
    If you set `WEB_PORT` in `.env`, run `export WEB_PORT=8080` first so the
    `curl` line uses the same port.
 
-5. **Open the site** at http://c3322-pg19.cs.hku.hk (or your `APP_ORIGIN`)
-   and sign in with a [demo account](#demo-accounts).
+5. **Open the site** at https://c3322-pg19.cs.hku.hk (or your `APP_ORIGIN`)
+   and sign in with a [demo account](#demo-accounts). On HTTPS the browser
+   warns that the self-signed certificate is not trusted, which is expected
+   (course server guide, Option A): choose Advanced → Proceed.
 
 **Start again from an empty database** (deletes all data and uploaded covers,
 then rebuilds and re-seeds):
@@ -235,7 +243,9 @@ from old builds: `docker image prune -f` and `docker builder prune -f`.
 | --- | --- |
 | `Set MYSQL_PASSWORD in .env` (Compose stops before starting) | `.env` is missing; do step 2 in the repository folder. |
 | Pages load but sign-in or any change fails with "origin" or 403 | `APP_ORIGIN` does not match the address in the browser. Fix `.env`, then `docker compose up -d`. |
-| `bind: address already in use` on port 80 | Another service uses port 80. Set `WEB_PORT` and `APP_ORIGIN` as in step 2. |
+| `bind: address already in use` on port 80 or 443 | Another service uses the port. Set `WEB_PORT`, `WEB_HTTPS_PORT` and `APP_ORIGIN` as in step 2. |
+| The browser says the connection is not private | Expected on HTTPS: the certificate is self-signed. Choose Advanced → Proceed once per browser. |
+| "Continue with Google" is missing | `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are not both in `.env`; Google sign-in is optional, password sign-in always works. See [Google sign-in](#google-sign-in). |
 | `backend` and `worker` never start | `migrate` failed: read `docker compose logs migrate`. |
 | Seed log says `Skipping demo data: The database already has events.` | The database volume is not empty. Use `docker compose down -v` to start again. |
 | Changed the MySQL passwords in `.env` after the first start | MySQL keeps the passwords it was created with. Restore the old `.env` or start again with `down -v`. |
@@ -244,8 +254,11 @@ from old builds: `docker image prune -f` and `docker builder prune -f`.
 
 The server runs `main` of the GitHub repository, cloned to `~/clubspace-pg19`.
 Nothing is edited or uploaded by hand, so the deployed code always matches
-GitHub. Only HTTP on port 80 is published (Option B of the course server
-guide). The server allows Docker only, so everything runs in containers.
+GitHub. The site is served over HTTPS on port 443 with a self-signed
+certificate (Option A of the course server guide), because Google sign-in
+needs an `https` redirect URI; port 80 redirects to it. The web container
+issues the certificate on its first start and keeps it on the `web_certs`
+volume. The server allows Docker only, so everything runs in containers.
 
 1. Push the commits you want to deploy to `main` on GitHub. Connect to
    HKUVPN, then open an SSH session with the group's private key:
@@ -317,6 +330,12 @@ guide). The server allows Docker only, so everything runs in containers.
      curl -fsS --retry 20 --retry-all-errors --retry-delay 2 \
        --connect-timeout 2 --max-time 5 http://127.0.0.1/api/health
      printf '\n'
+     curl -kfsS --retry 5 --retry-all-errors --retry-delay 2 \
+       --connect-timeout 2 --max-time 5 https://127.0.0.1/api/health
+     printf '\n'
+     if ! grep -q '^GOOGLE_CLIENT_SECRET=.' .env; then
+       printf 'Google sign-in is off: GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET are not in .env\n'
+     fi
      docker wait "$(docker compose ps -a -q seed)" >/dev/null
      docker compose logs --no-log-prefix seed
      docker compose ps -a
@@ -324,9 +343,41 @@ guide). The server allows Docker only, so everything runs in containers.
    )
    ```
 
-   When the block finishes, open http://c3322-pg19.cs.hku.hk and sign in with
-   a demo account. Run `docker image prune -f` and `docker builder prune -f`
+   When the block finishes, open https://c3322-pg19.cs.hku.hk, accept the
+   self-signed certificate and sign in with a demo account. Run `docker image prune -f` and `docker builder prune -f`
    now and then; the server has 8.6 GB of disk.
+
+### Google sign-in
+
+Google sign-in is optional and off until both credentials are in the
+server's `.env` (git-ignored; never commit them or copy the downloaded
+`client_secret_*.json` to the server).
+
+1. In Google Cloud Console → APIs & Services → Credentials, open the web
+   OAuth client and add:
+   - Authorized JavaScript origin: `https://c3322-pg19.cs.hku.hk`
+   - Authorized redirect URI: `https://c3322-pg19.cs.hku.hk/api/auth/google/callback`
+
+   Keep `http://localhost:5173/api/auth/google/callback` for local
+   development. Google refuses plain `http` redirect URIs for any host other
+   than localhost, which is why the server uses HTTPS. While the OAuth
+   consent screen is in **Testing**, only the listed test users can sign in;
+   add the markers' accounts or publish the app (the `openid`, `email` and
+   `profile` scopes need no Google review).
+2. On your computer, print the two `.env` lines from the downloaded JSON:
+
+   ```bash
+   python3 -c 'import json,sys;w=json.load(open(sys.argv[1]))["web"];print("GOOGLE_CLIENT_ID="+w["client_id"]);print("GOOGLE_CLIENT_SECRET="+w["client_secret"])' ~/Downloads/client_secret_*.json
+   ```
+
+3. In the SSH session, append them to `~/clubspace-pg19/.env` (for example
+   with `nano ~/clubspace-pg19/.env`), make sure `.env` has no
+   `APP_ORIGIN=http://...` line left from the HTTP deployment, then run the
+   deploy block again (or `docker compose up -d` in `~/clubspace-pg19`).
+
+The site loads Google's OpenID configuration once and caches it; sign-ins
+are only sent to Google when a user clicks the button, so the server does not
+poll an outside service.
 
 ### Update the deployment
 
@@ -393,8 +444,11 @@ version only after it finishes.
 | --- | --- |
 | `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` | MySQL root and application passwords (required) |
 | `SESSION_SECRET` | Signs session cookies (required) |
-| `APP_ORIGIN` | Exact site address; default `http://c3322-pg19.cs.hku.hk` |
-| `WEB_PORT` | Host port for the website; default `80` |
+| `APP_ORIGIN` | Exact site address; default `https://c3322-pg19.cs.hku.hk`. `https://` serves HTTPS with a self-signed certificate; `http://` serves plain HTTP |
+| `WEB_PORT` | Host port for HTTP; default `80` |
+| `WEB_HTTPS_PORT` | Host port for HTTPS; default `443` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in; both unset keeps it off ([Google sign-in](#google-sign-in)) |
+| `SESSION_COOKIE_SECURE` | Override for the Secure cookie flag (`true`/`false`); by default it follows the scheme of `APP_ORIGIN` |
 | `DEMO_ACCOUNT_PASSWORD` | Demo account password; default `clubspacetest123`, empty to skip demo data |
 | `LEGACY_DATETIME_TIMEZONE` | Only for migrating a pre-v1 database that stored bookings in local time (`Asia/Taipei`) |
 
@@ -497,7 +551,9 @@ client (the `mysql` CLI, MySQL Workbench or Sequel Ace). On macOS:
    (set `CLUBSPACE_API_TARGET` to change it). `http://localhost:3000/api/health`
    returns `{"status":"ok"}` when the API can reach MySQL. The local
    `APP_ORIGIN` in `backend-beta/.env.example` is already
-   `http://localhost:5173`.
+   `http://localhost:5173`. For Google sign-in locally, set `GOOGLE_CLIENT_ID`
+   and `GOOGLE_CLIENT_SECRET` in `backend-beta/.env`; the OAuth client already
+   lists `http://localhost:5173/api/auth/google/callback`.
 
 ## Tests
 
@@ -555,6 +611,6 @@ compatibility, but no page uses them.
 ## Credits and academic integrity
 
 Third-party libraries, UI components and assets are credited on the in-app
-[credits page](http://c3322-pg19.cs.hku.hk/credits) (`/credits`). All project
+[credits page](https://c3322-pg19.cs.hku.hk/credits) (`/credits`). All project
 code was written by the team members listed above, with AI tools used as
 allowed by the course policy.

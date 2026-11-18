@@ -29,6 +29,14 @@ if (production && !process.env.APP_ORIGIN) {
 
 const app_origin = process.env.APP_ORIGIN || (production ? undefined : "http://localhost:5173");
 
+// Browsers only send Secure cookies over HTTPS, so by default the session
+// cookie is Secure exactly when the site is served over https://.
+// SESSION_COOKIE_SECURE=true or false overrides that.
+const cookie_secure_override = process.env.SESSION_COOKIE_SECURE;
+const cookie_secure = production && (cookie_secure_override
+  ? cookie_secure_override !== "false"
+  : Boolean(app_origin?.startsWith("https://")));
+
 // v1 runs on its own UTC pool and a MySQL session store; the legacy routes
 // share the same session (and cookie), so signing in on either authenticates both.
 const v1_pool = create_utc_pool({
@@ -49,7 +57,7 @@ const app = create_app({
   is_multipart_route: stack.is_multipart_route,
   session_secret,
   app_origin,
-  cookie_secure: production && process.env.SESSION_COOKIE_SECURE !== "false",
+  cookie_secure,
   trust_proxy: production,
   legacy_routers: [
     health_routes,

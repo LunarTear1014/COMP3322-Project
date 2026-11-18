@@ -8,9 +8,18 @@ x-logging: &logging
 services:
   web:
     build: ./frontend-beta
-    # WEB_PORT lets a rebuild on another machine use a free port (default 80).
+    # An https:// APP_ORIGIN serves the site on 443 with a self-signed
+    # certificate (kept on web_certs) and redirects port 80 there; an http://
+    # one serves port 80 only. See frontend-beta/nginx/40-clubspace-site.sh.
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:-https://c3322-pg19.cs.hku.hk}
+    # WEB_PORT and WEB_HTTPS_PORT let a rebuild on another machine use free
+    # ports (defaults 80 and 443).
     ports:
       - "${WEB_PORT:-80}:80"
+      - "${WEB_HTTPS_PORT:-443}:443"
+    volumes:
+      - web_certs:/etc/nginx/certs
     depends_on:
       backend:
         condition: service_healthy
@@ -82,8 +91,13 @@ services:
       DB_USER: clubspace_app
       DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
-      SESSION_COOKIE_SECURE: "false"
-      APP_ORIGIN: ${APP_ORIGIN:-http://c3322-pg19.cs.hku.hk}
+      # Empty: session cookies are Secure exactly when APP_ORIGIN is https://.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-}
+      APP_ORIGIN: ${APP_ORIGIN:-https://c3322-pg19.cs.hku.hk}
+      # Google sign-in (optional): both empty keeps it switched off. The
+      # OAuth client must list ${APP_ORIGIN}/api/auth/google/callback.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       COVER_DIR: /app/data/covers
     volumes:
       - cover_data:/app/data/covers
@@ -158,3 +172,4 @@ services:
 volumes:
   db_data:
   cover_data:
+  web_certs:
