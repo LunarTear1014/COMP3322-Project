@@ -278,3 +278,7 @@ a.calendar-slot.is-available:hover {
     font-size: .875rem;
   }
 }
+
+.auth-buttons-stack { display: flex; flex-direction: column; gap: 0; }
+.auth-divider { display: flex; align-items: center; justify-content: center; gap: var(--space-3); color: var(--ink-muted); font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: var(--space-2) 0; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }

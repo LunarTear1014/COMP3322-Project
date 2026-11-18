@@ -6,6 +6,7 @@ const VARIANT_CLASS = {
   ghost: 'cs-btn-ghost',
   danger: 'cs-btn-danger',
   success: 'cs-btn-success',
+  white: 'cs-btn-white',
 }
 
 function classes({ variant = 'secondary', block = false, className = '' }) {
