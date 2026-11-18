@@ -53,8 +53,8 @@ services:
     logging: *logging
     restart: "no"
 
-  # One-shot: fills an empty database with demo clubs, accounts and events
-  # (backend-beta/src/ops/demo_seed.js). Every demo account uses
+  # One-shot: fills an empty database with demo clubs, accounts and events,
+  # with cover images (backend-beta/src/ops/demo_seed.js, demo_covers.js). Every demo account uses
   # DEMO_ACCOUNT_PASSWORD, clubspacetest123 unless .env sets another; set it
   # to an empty value to skip demo data. It does nothing when the database
   # already has events. The site does not wait for it, so a failure here never
@@ -72,6 +72,10 @@ services:
       DB_USER: clubspace_app
       DB_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       DEMO_ACCOUNT_PASSWORD: ${DEMO_ACCOUNT_PASSWORD-clubspacetest123}
+      # The seed also stores the demo events' cover images.
+      COVER_DIR: /app/data/covers
+    volumes:
+      - cover_data:/app/data/covers
     depends_on:
       db:
         condition: service_healthy

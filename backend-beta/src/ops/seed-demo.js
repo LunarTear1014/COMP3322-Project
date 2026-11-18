@@ -1,4 +1,5 @@
-// One-shot: fills an empty database with demo clubs, accounts and events.
+// One-shot: fills an empty database with demo clubs, accounts and events,
+// and gives the events their cover images (demo_covers.js).
 //   DEMO_ACCOUNT_PASSWORD='<12+ chars>' node src/ops/seed-demo.js
 // Compose runs it after the migrations on every `docker compose up`. It does
 // nothing when DEMO_ACCOUNT_PASSWORD is unset or the database already has
@@ -6,6 +7,7 @@
 import { assert_schema_version } from "../db/migrate.js";
 import { create_utc_pool } from "../db/pool.js";
 import { seed_demo } from "./demo_seed.js";
+import { attach_demo_covers } from "./demo_covers.js";
 
 const password = process.env.DEMO_ACCOUNT_PASSWORD ?? "";
 if (!password) {
@@ -32,6 +34,7 @@ try {
       const role = account.platform_role === "venue_admin" ? "venue administrator" : account.club ? `${account.role}, ${account.club}` : "student, no club";
       console.log(`  ${account.email.padEnd(40)} ${account.name} (${role})`);
     }
+    await attach_demo_covers({ pool, cover_dir: process.env.COVER_DIR || "./data/covers" });
   }
 } catch (error) {
   console.error(`Demo data failed: ${error.message}`);
