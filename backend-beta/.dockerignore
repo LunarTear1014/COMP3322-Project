@@ -6,4 +6,6 @@
 !db/
 !db/migrations/
 !db/migrations/*.js
+!db/demo-images/
+!db/demo-images/event-*.jpg
 **/*.test.js

@@ -383,6 +383,19 @@ backend container) on the `cover_data` volume. Back it up with the database:
 tar -czf /backup/covers.tgz -C /data .`. A scheduled sweep removes files that
 no event references.
 
+The demo events get generated cover images from
+[`backend-beta/db/demo-images/`](backend-beta/db/demo-images/) when `seed`
+fills a fresh database. A database seeded before those images existed gets
+them with this command, which only fills demo events that have no cover and
+is safe to run again:
+
+```bash
+docker compose exec -T backend node src/ops/attach-demo-covers.js
+```
+
+The `club-*.jpg` images in the same folder are not used yet, because clubs
+have no image field.
+
 Schema changes after the baseline are ordered migrations in
 `backend-beta/db/migrations`. The `migrate` service runs them on every
 `docker compose up`, before the API and worker start. The runner takes a
