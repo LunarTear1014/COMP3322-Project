@@ -164,3 +164,12 @@ test('events carry VENUE_ADMIN eligibility for the administrator and stay regist
   assert.ok((await call('/events?preview=admin')).body.data.every(event => event.eligibility.reason !== null))
   assert.equal((await call('/events/1')).body.data.eligibility.can_register, true)
 })
+
+test('organizer people views are refused for the venue admin like the real API', async () => {
+  assert.equal((await call('/events/1/participants', { as: 'admin' })).status, 403)
+  assert.equal((await call('/events/1/participation-history', { as: 'admin' })).status, 403)
+  assert.equal((await call('/events/9999/participation-history', { as: 'admin' })).status, 404)
+  const history = (await call('/events/1/participation-history?action=quit')).body
+  assert.ok(history.data.length > 0 && history.data.every(entry => entry.action === 'left'))
+  assert.equal(history.summary.rejoined_people, 1)
+})

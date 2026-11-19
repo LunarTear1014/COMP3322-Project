@@ -171,6 +171,73 @@ describe("v1 registration, waitlist and participants", { skip }, () => {
     assert.deepEqual(hist, ["joined", "waitlisted", "waitlisted"], "only actual transitions are recorded");
   });
 
+  test("participants rows report the person's current club role", async () => {
+    const event = await fresh({ capacity: 5 });
+    const [mem, s1] = await Promise.all(["mem", "s1"].map((n) => app.client_for(`${n}@x.test`)));
+    await join(mem, event); await join(s1, event);
+    const comm = await app.client_for("comm@x.test");
+    const list = (await comm.get(`/events/${event.id}/participants`)).body.data;
+    assert.deepEqual(list.map((p) => [p.user.name, p.club_role]), [["mem", "member"], ["s1", null]]);
+  });
+
+  test("participation history: join, quit and rejoin show newest first with a summary", async () => {
+    const event = await fresh({ capacity: 5 });
+    const [s1, s2, mem] = await Promise.all(["s1", "s2", "mem"].map((n) => app.client_for(`${n}@x.test`)));
+    await join(s1, event); await join(mem, event); await join(s2, event);
+    await s1.delete(`/events/${event.id}/registration`);
+    await join(s1, event);
+    const comm = await app.client_for("comm@x.test");
+    const res = await comm.get(`/events/${event.id}/participation-history`);
+    assert.equal(res.status, 200);
+    const mine = res.body.data.filter((h) => h.user.name === "s1");
+    assert.deepEqual(mine.map((h) => h.action), ["joined", "left", "joined"]);
+    assert.ok(res.body.data[0].id > res.body.data[res.body.data.length - 1].id, "newest first");
+    assert.deepEqual(res.body.data[0].from_status, "left");
+    assert.equal(res.body.data[0].by, null);
+    assert.deepEqual(res.body.data[0].user, { id: ids.s1, name: "s1", student_id: res.body.data[0].user.student_id });
+    assert.deepEqual(res.body.summary, { joined_people: 3, quit_people: 1, rejoined_people: 1, promoted: 0, currently_joined: 3, currently_waitlisted: 0 });
+    assert.equal(res.body.meta.total, 5);
+    const roles = Object.fromEntries(res.body.data.map((h) => [h.user.name, h.club_role]));
+    assert.deepEqual(roles, { s1: null, s2: null, mem: "member" });
+    const quit = await comm.get(`/events/${event.id}/participation-history?action=quit`);
+    assert.deepEqual(quit.body.data.map((h) => [h.user.name, h.action]), [["s1", "left"]]);
+    assert.equal(quit.body.summary.joined_people, 3, "summary covers the whole event, not the filter");
+    assert.equal((await comm.get(`/events/${event.id}/participation-history?action=left`)).body.data.length, 1);
+    const paged = await comm.get(`/events/${event.id}/participation-history?page=2&page_size=2`);
+    assert.equal(paged.body.data.length, 2);
+    assert.equal(paged.body.meta.total, 5);
+    assert.equal((await comm.get(`/events/${event.id}/participation-history?action=bogus`)).status, 422);
+  });
+
+  test("participation history records waitlist promotion", async () => {
+    const event = await fresh({ capacity: 1 });
+    const [s1, s2] = await Promise.all(["s1", "s2"].map((n) => app.client_for(`${n}@x.test`)));
+    await join(s1, event); await join(s2, event);
+    await s1.delete(`/events/${event.id}/registration`);
+    const pres = await app.client_for("pres@x.test");
+    const res = await pres.get(`/events/${event.id}/participation-history?action=promoted`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.length, 1);
+    assert.deepEqual([res.body.data[0].user.name, res.body.data[0].from_status, res.body.data[0].to_status], ["s2", "waitlisted", "joined"]);
+    assert.equal(res.body.summary.promoted, 1);
+    assert.equal(res.body.summary.currently_joined, 1);
+    assert.equal(res.body.summary.currently_waitlisted, 0);
+    const waited = await pres.get(`/events/${event.id}/participation-history?action=waitlisted`);
+    assert.deepEqual(waited.body.data.map((h) => h.user.name), ["s2"]);
+  });
+
+  test("participation history is for the event's committee only", async () => {
+    const event = await fresh();
+    const [mem, s1, admin, other] = await Promise.all(["mem", "s1", "admin", "pres2"].map((n) => app.client_for(`${n}@x.test`)));
+    const url = `/events/${event.id}/participation-history`;
+    assert.equal((await mem.get(url)).status, 403, "plain member");
+    assert.equal((await s1.get(url)).status, 403, "student");
+    assert.equal((await admin.get(url)).status, 403, "venue admin, same as participants");
+    assert.equal((await other.get(url)).status, 403, "other club's president");
+    assert.equal((await (await app.client_for("pres@x.test")).get(url)).status, 200);
+    assert.equal((await (await app.client_for("comm@x.test")).get("/events/999999/participation-history")).status, 404);
+  });
+
   test("a hidden draft cannot be registered for and gives no existence oracle", async () => {
     const pres = await app.client_for("pres@x.test");
     const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "Secret", description: "d", date: future_date(app, 60), slot_id: "morning", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] })).body.data;

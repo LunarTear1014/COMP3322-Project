@@ -59,6 +59,21 @@ The system SHALL restrict participant identities to club committee and append hi
 - **WHEN** a student reloads or logs in on another browser
 - **THEN** their actual database registration is returned
 
+### Requirement: Organizers see who joined or quit
+The system SHALL let the club committee and president of an event's club list its participants with each person's current club role (member, committee, president or none) and read a newest-first history of who joined, quit, were promoted from the waitlist or were cancelled, with whole-event totals. Other users, including venue administrators, SHALL NOT see it.
+
+#### Scenario: Join, quit and rejoin
+- **WHEN** a student joins, withdraws and joins again
+- **THEN** the committee's history shows three entries newest first, and the summary counts one person joined, one quit and one rejoined
+
+#### Scenario: Promotion and filtering
+- **WHEN** a waitlisted student is promoted and the committee filters the history by `promoted` or `quit`
+- **THEN** only entries of that action are returned while the summary still covers the whole event
+
+#### Scenario: Not an organizer
+- **WHEN** a plain member, a student or a venue administrator requests the participation history
+- **THEN** 403 is returned
+
 ### Requirement: Members-only registration approval
 A plain member registering for a members-only event SHALL create a pending join request that allocates no seat or waitlist place. Committee members and the president of the event's club SHALL register directly, and public events SHALL stay automatic. The committee SHALL accept or reject each request; accepting SHALL apply the current capacity and waitlist rules with the student's own `allow_waitlist` choice.
 

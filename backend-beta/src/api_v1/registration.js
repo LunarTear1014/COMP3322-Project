@@ -230,18 +230,72 @@ function create_registration_router({ pool, clock }) {
       const wanted = { joined: ["joined"], waitlisted: WAITING, left: ["left", "unsuccessful"], cancelled: ["cancelled"] }[query.status ?? "joined"];
       const [[{ total }]] = await pool.query("SELECT COUNT(*) AS total FROM participations WHERE event_id = ? AND status IN (?)", [id, wanted]);
       const [rows] = await pool.query(
-        `SELECT p.*, u.name, u.email, u.student_id,
+        `SELECT p.*, u.name, u.email, u.student_id, m.role AS club_role,
            (SELECT COUNT(*) FROM participations q WHERE q.event_id = p.event_id AND q.status IN ('waitlisted', 'pending')
               AND (q.queued_at < p.queued_at OR (q.queued_at = p.queued_at AND q.user_id <= p.user_id))) AS position,
            EXISTS (SELECT 1 FROM event_attendance a WHERE a.event_id = p.event_id AND a.user_id = p.user_id) AS checked_in
-         FROM participations p JOIN users u ON u.id = p.user_id WHERE p.event_id = ? AND p.status IN (?)
-         ORDER BY p.last_registered_at, p.user_id LIMIT ? OFFSET ?`, [id, wanted, page_size, (page - 1) * page_size]);
+         FROM participations p JOIN users u ON u.id = p.user_id
+         LEFT JOIN memberships m ON m.user_id = p.user_id AND m.club_id = ?
+         WHERE p.event_id = ? AND p.status IN (?)
+         ORDER BY p.last_registered_at, p.user_id LIMIT ? OFFSET ?`, [found.row.club_id, id, wanted, page_size, (page - 1) * page_size]);
       res.json({ data: rows.map((row) => ({
         user: { id: row.user_id, name: row.name, email: row.email, student_id: row.student_id },
+        club_role: row.club_role ?? null,
         status: normalize_status(row.status), queue_position: WAITING.includes(row.status) ? Number(row.position) : null,
         last_registered_at: iso(row.last_registered_at), confirmed_at: iso(row.confirmed_at), left_at: iso(row.left_at),
         checked_in: Boolean(Number(row.checked_in)),
       })), meta: page_meta(total, { page, page_size }) });
+    })],
+  });
+
+  // Who joined, quit, was promoted or lost the event, newest first, plus whole-event totals.
+  // "rejoined" = a user whose joined/promoted entry comes after one of their own left entries.
+  define_route(router, "/events/:event_id/participation-history", {
+    get: [require_user, wrap(async (req, res) => {
+      const id = id_param(req, "event_id");
+      const query = validate_query(req.query, { ...PAGE_QUERY, action: { kind: "enum", values: ["joined", "waitlisted", "left", "quit", "promoted", "cancelled"] } });
+      const { page, page_size } = pagination(query);
+      const found = await load_event(pool, req.user, id, clock());
+      if (!found) throw new ApiError("NOT_FOUND", "That event does not exist.");
+      const club_id = found.row.club_id;
+      const [[role]] = await pool.query("SELECT role FROM memberships WHERE user_id = ? AND club_id = ?", [req.user.id, club_id]);
+      if (!role || !["committee", "president"].includes(role.role)) throw new ApiError("FORBIDDEN", "Only the club committee can see who joined or quit.");
+      const action = query.action === "quit" ? "left" : query.action;
+      const where = action ? "h.event_id = ? AND h.action = ?" : "h.event_id = ?";
+      const args = action ? [id, action] : [id];
+      const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM participation_history h WHERE ${where}`, args);
+      const [rows] = await pool.query(
+        `SELECT h.id, h.action, h.from_status, h.to_status, h.reason, h.occurred_at, h.user_id, h.actor_user_id,
+           u.name, u.student_id, m.role AS club_role, a.name AS actor_name
+         FROM participation_history h JOIN users u ON u.id = h.user_id
+         LEFT JOIN users a ON a.id = h.actor_user_id
+         LEFT JOIN memberships m ON m.user_id = h.user_id AND m.club_id = ?
+         WHERE ${where} ORDER BY h.occurred_at DESC, h.id DESC LIMIT ? OFFSET ?`, [club_id, ...args, page_size, (page - 1) * page_size]);
+      const [[sum]] = await pool.query(
+        `SELECT
+           COUNT(DISTINCT CASE WHEN action IN ('joined', 'promoted') THEN user_id END) AS joined_people,
+           COUNT(DISTINCT CASE WHEN action = 'left' THEN user_id END) AS quit_people,
+           COUNT(DISTINCT CASE WHEN action = 'promoted' THEN user_id END) AS promoted,
+           COUNT(DISTINCT CASE WHEN action IN ('joined', 'promoted') AND EXISTS (
+             SELECT 1 FROM participation_history l WHERE l.event_id = h.event_id AND l.user_id = h.user_id AND l.action = 'left'
+               AND (l.occurred_at < h.occurred_at OR (l.occurred_at = h.occurred_at AND l.id < h.id))) THEN user_id END) AS rejoined_people
+         FROM participation_history h WHERE h.event_id = ?`, [id]);
+      const [[now_in]] = await pool.query(
+        `SELECT SUM(status = 'joined') AS joined, SUM(status IN ('waitlisted', 'pending')) AS waiting FROM participations WHERE event_id = ?`, [id]);
+      res.json({
+        data: rows.map((row) => ({
+          id: Number(row.id), action: row.action, from_status: row.from_status, to_status: row.to_status,
+          occurred_at: iso(row.occurred_at), reason: row.reason,
+          user: { id: row.user_id, name: row.name, student_id: row.student_id },
+          club_role: row.club_role ?? null,
+          by: row.actor_user_id && row.actor_user_id !== row.user_id ? { id: row.actor_user_id, name: row.actor_name } : null,
+        })),
+        summary: {
+          joined_people: Number(sum.joined_people), quit_people: Number(sum.quit_people), rejoined_people: Number(sum.rejoined_people),
+          promoted: Number(sum.promoted), currently_joined: Number(now_in.joined ?? 0), currently_waitlisted: Number(now_in.waiting ?? 0),
+        },
+        meta: page_meta(total, { page, page_size }),
+      });
     })],
   });
 

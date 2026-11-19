@@ -225,3 +225,4 @@ body { padding: 0; }
 .removal-card-reason { padding: var(--space-2) var(--space-3); background: var(--coral-soft); border-radius: var(--radius-md); color: var(--ink); overflow-wrap: anywhere; }
 .removal-card-actions { padding-top: var(--space-3); border-top: 1px solid var(--line); }
 .removal-card-actions .member-confirm { max-width: none; }
+.activity-entry { overflow-wrap: anywhere; line-height: 28px; }

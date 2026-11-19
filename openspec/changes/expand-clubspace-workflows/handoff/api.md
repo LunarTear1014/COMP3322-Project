@@ -80,6 +80,7 @@ Auth: public=anonymous allowed; user=authenticated; committee=committee of targe
 | POST /events/:id/join-requests/:user_id/decision | committee |`{decision:"accept"|"reject",reason?:1..500}`|200 the student's RegistrationResult; full without waitlist consent 409 EVENT_FULL (request stays); student no longer a member 409 MEMBERSHIP_REQUIRED (request closed) |
 | GET /me/registrations | user |status?,page,page_size|200 MyRegistration[] sorted event.start_at,id DESC |
 | GET /events/:id/participants | committee |status?,page,page_size|200 Participant[] sorted last_registered_at,user_id ASC |
+| GET /events/:id/participation-history | committee |action?(joined,waitlisted,left,quit,promoted,cancelled; quit=left),page,page_size|200 `{data:HistoryEntry[],summary,meta}` newest first (occurred_at,id DESC); non-committee 403, invisible event 404, bad action 422 |
 | GET /bookings | admin |status?,venue_id?,page,page_size|200 Booking[] sorted created_at,id ASC |
 | POST /bookings/:id/decision | admin,not self |Decision|200 Booking; no publication |
 | GET /venues | user |page,page_size|200 Venue[] sorted id ASC |
@@ -130,7 +131,7 @@ RegistrationResult:
 ```json
 {"data":{"event_id":12,"status":"waitlisted","queue_position":1,"joined_count":30,"waitlisted_count":1}}
 ```
-MyRegistration: `{event:EventSummary,status,queue_position,last_registered_at,confirmed_at,left_at}`. Participant (committee only): `{user:{id,name,email,student_id},status,queue_position,last_registered_at,confirmed_at,left_at}`. Default participant list must not expose password or private session information.
+MyRegistration: `{event:EventSummary,status,queue_position,last_registered_at,confirmed_at,left_at}`. Participant (committee only): `{user:{id,name,email,student_id},club_role:member|committee|president|null (current membership in the event's club),status,queue_position,last_registered_at,confirmed_at,left_at}`. Default participant list must not expose password or private session information. HistoryEntry (committee only): `{id,action:joined|waitlisted|left|promoted|cancelled,from_status,to_status,occurred_at,reason,user:{id,name,student_id},club_role,by:null|{id,name}}`; `by` is set only when the actor differs from the person (for a waitlist promotion the actor is the user whose withdrawal or the committee action freed the seat). `summary` covers the whole event, ignores `action`/paging: `{joined_people (distinct users with a joined or promoted entry),quit_people (distinct users with a left entry),rejoined_people (users with a joined/promoted entry after one of their own left entries),promoted (distinct users promoted),currently_joined,currently_waitlisted}`. No email in history.
 
 Calendar:
 ```json

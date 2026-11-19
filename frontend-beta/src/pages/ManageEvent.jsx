@@ -7,6 +7,8 @@ import { Button, ButtonLink, StatusChip, TextField, useToast } from '../componen
 import { useAction, useResource } from '../hooks/resources'
 import { eventChanged, useLiveSignal } from '../hooks/useLiveSignal'
 import { timeLine } from '../lib/format'
+import { roleChip, statusWord } from '../lib/people'
+import { ParticipationActivity } from '../components/ParticipationActivity'
 import { lifecycle } from '../lib/lifecycle'
 import { CoverUploader } from '../components/CoverUploader'
 import { TagPicker } from '../components/TagPicker'
@@ -14,6 +16,7 @@ import { CheckinPanel } from '../components/CheckinPanel'
 import { JoinRequestsPanel } from '../components/JoinRequestsPanel'
 import { coverForm } from '../lib/cover'
 
+const PARTICIPANT_FILTERS = [['joined', 'Joined'], ['waitlisted', 'Waitlisted'], ['left', 'Quit'], ['cancelled', 'Cancelled by event']]
 const TABS = [{ id: 'overview', label: 'Overview' }, { id: 'edit', label: 'Edit' }, { id: 'people', label: 'People' }, { id: 'checkin', label: 'Check-in' }]
 // Readable status words for the chips (F03): never raw lower_snake_case.
 const EVENT_LABEL = { draft: 'Draft', awaiting_president: 'Waiting for the president to publish', published: 'Published', cancelled: 'Cancelled' }
@@ -270,21 +273,33 @@ export function ManageEventEditor({ id, session }) {
                 <section>
                   <h2 className="section-title">Participants</h2>
                   <TextField as="select" label="Filter" value={status} onChange={ev => { setStatus(ev.target.value); setPage(1) }}>
-                    {['joined', 'waitlisted', 'left', 'cancelled'].map(x => <option key={x}>{x}</option>)}
+                    {PARTICIPANT_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </TextField>
                   <Resource value={participants} empty="No participants in this state.">
                     <div className="cs-tablewrap" role="region" aria-label="Participants" tabIndex={0}>
                       <table className="cs-table">
-                        <thead><tr><th>Name</th><th>Email</th><th>Student ID</th><th>Status</th><th>Queue position</th></tr></thead>
+                        <thead>
+                          <tr>
+                            <th>Name</th><th>Club</th><th>Email</th><th>Student ID</th><th>Status</th><th>Registered</th><th>Quit</th><th>Checked in</th>
+                            {status === 'waitlisted' && <th>Queue position</th>}
+                          </tr>
+                        </thead>
                         <tbody>
-                          {participants.data?.map(p => (
-                            <tr key={p.user.id}>
-                              <td>{p.user.name}</td>
-                              <td>{p.user.email}</td><td>{p.user.student_id ?? '—'}</td>
-                              <td>{p.status}</td>
-                              <td>{p.queue_position ?? '—'}</td>
-                            </tr>
-                          ))}
+                          {participants.data?.map(p => {
+                            const chip = roleChip(p.club_role)
+                            return (
+                              <tr key={p.user.id}>
+                                <td>{p.user.name}</td>
+                                <td><span className={`cs-chip ${chip.className}`}>{chip.label}</span></td>
+                                <td>{p.user.email}</td><td>{p.user.student_id ?? '—'}</td>
+                                <td>{statusWord(p.status)}</td>
+                                <td>{p.last_registered_at ? timeLine(p.last_registered_at) : '—'}</td>
+                                <td>{p.left_at ? timeLine(p.left_at) : '—'}</td>
+                                <td>{p.checked_in ? 'Yes' : '—'}</td>
+                                {status === 'waitlisted' && <td>{p.queue_position ?? '—'}</td>}
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -292,6 +307,7 @@ export function ManageEventEditor({ id, session }) {
                   </Resource>
                 </section>
               )}
+              {tab === 'people' && canManage && <ParticipationActivity event={e} />}
             </div>
           </>
         )}

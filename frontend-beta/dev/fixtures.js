@@ -125,6 +125,43 @@ const bookingRequests = [
 const removalNames = { 3: 'Riley Chen', 4: 'Zara Wong', 6: 'Ada Ng' }
 const removalRequest = (id, userId, requestedBy, reason = null) => ({ id, club_id: 1, status: 'pending', version: 1, reason, created_at: future(-0.4), decided_at: null, decision_reason: null,
   user: { id: userId, name: removalNames[userId] }, requested_by: { id: requestedBy, name: requestedBy === user.id ? user.name : removalNames[requestedBy] }, decided_by: null })
+// Event 1 people for the organizer's People tab: a mix of members and non-members, one quit, one rejoin and one promotion.
+const person = (id, name, club_role) => ({ id, name, club_role, email: `${name.toLowerCase().replace(/ /g, '.')}@example.test`, student_id: `S${id}` })
+const people1 = {
+  ada: person(6, 'Ada Ng', 'member'), riley: person(3, 'Riley Chen', 'member'), zara: person(4, 'Zara Wong', 'committee'), morgan: person(2, 'Morgan Lee', 'president'),
+  jess: person(11, 'Jess Ho', null), noah: person(12, 'Noah Kim', null), kai: person(13, 'Kai Wu', null), priya: person(14, 'Priya Rao', null), leo: person(15, 'Leo Tan', null), sam: person(7, 'Sam Lee', 'member'),
+}
+const participants1 = [
+  [people1.morgan, 'joined', -5, null, true], [people1.sam, 'left', -4.5, -0.6, false], [people1.leo, 'left', -4.2, -1.2, false], [people1.noah, 'joined', -0.1, null, false],
+  [people1.riley, 'joined', -3.5, null, true], [people1.ada, 'joined', -3, null, false], [people1.zara, 'joined', -2.5, null, true], [people1.kai, 'joined', -2.2, null, false],
+  [people1.jess, 'joined', -2, null, false], [people1.priya, 'waitlisted', -0.8, null, false],
+].sort((a, b) => a[2] - b[2]).map(([who, status, registered, left, checked_in]) => ({
+  user: { id: who.id, name: who.name, email: who.email, student_id: who.student_id }, club_role: who.club_role, status,
+  queue_position: status === 'waitlisted' ? 1 : null, last_registered_at: future(registered), confirmed_at: status === 'joined' ? future(registered) : null, left_at: left === null ? null : future(left), checked_in,
+}))
+// Newest first. Ada was accepted by Zara; Kai got Sam's seat from the waitlist.
+const history1 = [
+  [1, people1.noah, 'joined', 'left', 'joined', -0.1], [2, people1.kai, 'promoted', 'waitlisted', 'joined', -0.3], [3, people1.sam, 'left', 'joined', 'left', -0.6],
+  [4, people1.priya, 'waitlisted', null, 'waitlisted', -0.8], [5, people1.leo, 'left', 'joined', 'left', -1.2], [6, people1.noah, 'left', 'joined', 'left', -1.6],
+  [7, people1.jess, 'joined', null, 'joined', -2], [8, people1.kai, 'waitlisted', null, 'waitlisted', -2.2], [9, people1.zara, 'joined', null, 'joined', -2.5],
+  [10, people1.ada, 'joined', null, 'joined', -3, people1.zara], [11, people1.riley, 'joined', null, 'joined', -3.5], [12, people1.noah, 'joined', null, 'joined', -4],
+  [13, people1.leo, 'joined', null, 'joined', -4.2], [14, people1.sam, 'joined', null, 'joined', -4.5], [15, people1.morgan, 'joined', null, 'joined', -5],
+].map(([id, who, action, from_status, to_status, days, by]) => ({
+  id, action, from_status, to_status, occurred_at: future(days), reason: null,
+  user: { id: who.id, name: who.name, student_id: who.student_id }, club_role: who.club_role, by: by ? { id: by.id, name: by.name } : null,
+}))
+const history1Summary = () => {
+  const users = (test, rows = history1) => new Set(rows.filter(test).map(h => h.user.id)).size
+  return {
+    joined_people: users(h => ['joined', 'promoted'].includes(h.action)), quit_people: users(h => h.action === 'left'), promoted: users(h => h.action === 'promoted'),
+    rejoined_people: users(h => ['joined', 'promoted'].includes(h.action) && history1.some(l => l.action === 'left' && l.user.id === h.user.id && l.id > h.id)),
+    currently_joined: participants1.filter(p => p.status === 'joined').length, currently_waitlisted: participants1.filter(p => p.status === 'waitlisted').length,
+  }
+}
+const paged = (rows, url, extra = {}) => {
+  const size = Math.min(100, Math.max(1, Number(url.searchParams.get('page_size')) || 20)), page = Math.max(1, Number(url.searchParams.get('page')) || 1)
+  return { data: rows.slice((page - 1) * size, page * size), ...extra, meta: { page, page_size: size, total: rows.length } }
+}
 const list = (data, extra = {}) => ({ data, meta: { page: 1, page_size: 100, total: data.length, ...extra } })
 export function fixturePlugin() {
   // Preview-only state: one pending request (Zara Wong asked to remove Riley Chen) and the members removed so far.
@@ -232,7 +269,19 @@ export function fixturePlugin() {
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
       if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: isAdmin ? adminView(event) : event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
       if (url.pathname === '/events/36/join-requests') return send(200, list(joinRequests))
-      if (url.pathname === '/events/35/participants') return send(200, list([{ user: { id: 3, name: 'Riley Chen', email: 'riley@example.test', student_id: 'S3' }, status: 'joined', queue_position: null, checked_in: true }, { user: { id: 4, name: 'Zara Wong', email: 'zara@example.test', student_id: 'S4' }, status: 'joined', queue_position: null, checked_in: false }]))
+      // Organizer-only people views: the venue admin and a plain student get the same refusals as the real API.
+      const peopleRoute = url.pathname.match(/^\/events\/(\d+)\/(participants|participation-history)$/)
+      if (peopleRoute && (isAdmin || url.searchParams.get('preview') === 'student')) return events.some(e => e.id === Number(peopleRoute[1])) ? fail(403, 'FORBIDDEN', 'Only the club committee can see participants.') : fail(404, 'NOT_FOUND', 'That event does not exist.')
+      if (url.pathname === '/events/1/participants') {
+        const wanted = url.searchParams.get('status') || 'joined'
+        return send(200, paged(participants1.filter(p => p.status === wanted), url))
+      }
+      if (url.pathname === '/events/1/participation-history') {
+        const wanted = { quit: 'left' }[url.searchParams.get('action')] ?? url.searchParams.get('action')
+        return send(200, paged(history1.filter(h => !wanted || h.action === wanted), url, { summary: history1Summary() }))
+      }
+      if (peopleRoute?.[2] === 'participation-history') return send(200, { ...paged([], url), summary: { joined_people: 0, quit_people: 0, rejoined_people: 0, promoted: 0, currently_joined: 0, currently_waitlisted: 0 } })
+      if (url.pathname === '/events/35/participants') return send(200, list([{ user: { id: 3, name: 'Riley Chen', email: 'riley@example.test', student_id: 'S3' }, club_role: 'member', status: 'joined', queue_position: null, checked_in: true }, { user: { id: 4, name: 'Zara Wong', email: 'zara@example.test', student_id: 'S4' }, club_role: 'committee', status: 'joined', queue_position: null, checked_in: false }]))
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
       // Deliberately not sorted by role: the page puts the president first, then the committee, then members.
       if (url.pathname === '/clubs/1/removal-requests') return send(200, list(isAdmin ? [] : removals))
