@@ -3,6 +3,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
+import { build_report } from "../api_v1/effectiveness.js";
 import { create_utc_pool } from "../db/pool.js";
 import { create_password_hasher } from "../features/users/password_hasher.js";
 import { prepare_database, test_db_config } from "../../test/db_helper.js";
@@ -52,6 +53,29 @@ describe("demo seed", { skip }, () => {
     assert.equal(await count("SELECT COUNT(*) AS n FROM event_attendance"), EVENTS.filter((e) => e.flow === "past").reduce((n, e) => n + e.attend, 0));
     assert.equal(await count("SELECT COUNT(*) AS n FROM participations WHERE status = 'waitlisted'"), 2, "Lion Rock is over capacity");
     assert.ok(await count("SELECT COUNT(*) AS n FROM event_join_requests WHERE status = 'pending'") >= 3);
+  });
+
+  test("every club's activity report shows people leaving, rejoining, queueing and being promoted", async () => {
+    const [clubs] = await db.admin.query("SELECT id, name FROM clubs ORDER BY id");
+    assert.equal(clubs.length, CLUBS.length);
+    // Only the events that already happened: 2026-10-01 up to the seed's "now".
+    const range = { from: new Date("2026-10-01T00:00:00Z"), to: new Date("2026-11-16T04:00:00Z") };
+    for (const club of clubs) {
+      const { events } = await build_report(pool, { club_id: club.id, ...range });
+      assert.ok(events.length >= 1, `${club.name} has past events`);
+      const sum = (key) => events.reduce((n, event) => n + event[key], 0);
+      assert.ok(sum("dropped_out") >= 1, `${club.name}: someone dropped out`);
+      assert.ok(sum("promotions") >= 1, `${club.name}: a leave promoted someone`);
+      assert.ok(events.some((event) => event.peak_waitlist >= 1), `${club.name}: a waitlist formed`);
+      assert.ok(events.some((event) => event.median_promotion_wait_hours !== null && event.median_promotion_wait_hours > 0), `${club.name}: promotion wait is measured`);
+      assert.ok(events.some((event) => event.joins_24h_after_publish < event.ever_joined), `${club.name}: joins were spread over several days`);
+      assert.ok(events.some((event) => event.view_to_join > 0), `${club.name}: viewers became joiners`);
+      assert.ok(events.every((event) => event.attended <= event.joined_at_start), `${club.name}: attendance matches the seats held`);
+      assert.ok(await count("SELECT COUNT(*) AS n FROM participation_history h JOIN events e ON e.id = h.event_id WHERE e.club_id = ? AND h.action = 'left'", [club.id]) >= 2, `${club.name}: leave rows exist`);
+    }
+    assert.equal(await count("SELECT COUNT(*) AS n FROM participation_history WHERE occurred_at > ?", ["2026-11-16 04:00:00"]), 0, "nothing is dated in the future");
+    assert.equal(await count("SELECT COUNT(*) AS n FROM participation_history WHERE action = 'promoted'"), result.summary.promotions);
+    assert.equal(await count("SELECT COUNT(*) AS n FROM participation_history WHERE action = 'left'"), result.summary.leaves);
   });
 
   test("demo users can sign in with the shared password, and a second run does nothing", async () => {

@@ -12,7 +12,9 @@ import { campus_to_utc, slot_by_id, utc_to_campus_date } from "../shared/slots.j
 // Everything after the accounts goes through the real v1 API, so events,
 // bookings, sign-offs, registrations, waitlists, join requests, check-ins,
 // notifications and audit rows look exactly as if people had used the app.
-// Past events are created on a simulated clock that is moved back in time.
+// Past events are created on a simulated clock that is moved back in time, and
+// people register, queue, quit, rejoin and get promoted over several days
+// (the activity report reads all of that from the participation history).
 //
 // Every account shares one password (DEMO_ACCOUNT_PASSWORD; compose.yaml
 // defaults it to the documented demo password). All addresses use the
@@ -55,6 +57,13 @@ const EXTRA_MEMBERS = [["member1.photo", "film"], ["member2.hiking", "robotics"]
 const CLUB_REQUESTS = [["student1", "photo"], ["student2", "robotics"], ["student3", "hiking"]];
 
 // day: offset from today (Hong Kong). reg: how many people register.
+// plan: who does what and when, as [hours after publish, person, op] steps:
+// "+" registers (or asks to join, members-only), "-" leaves (or withdraws a
+// pending request), "ok" has the committee accept that person's request. The
+// person is an index into the event's registrants, and every step lands
+// before the event starts and no later than today. Without a plan, people
+// register a day or so apart (members-only: accepted two hours later, up to
+// `accept` of them).
 // attend: past events only, how many check in (the last one is marked by the
 // committee, the rest use the code). accept: members-only events, how many
 // requests the committee accepts (the rest stay pending).
@@ -62,33 +71,55 @@ const CLUB_REQUESTS = [["student1", "photo"], ["student2", "robotics"], ["studen
 // publish_signoff, cancelled.
 const EVENTS = [
   // Past, with attendance for the reports.
-  { club: "photo", venue: V.hall, day: -18, slot: "evening", title: "Golden Hour Photo Walk", capacity: 20, tags: ["arts", "social"], club_tags: ["Outdoor", "Beginner friendly"], reg: 7, attend: 5, flow: "past",
-    description: "Meet at Lok Yew Hall, then walk to the Centennial Campus terraces to shoot the sunset. Bring any camera, phones welcome.\n\nWhat happens:\n- First 20 minutes: meet at the hall entrance, quick tips on light and framing.\n- Middle hour: a slow walk to the terraces with stops for portraits and skyline shots.\n- Last 30 minutes: swap favourite frames and pick one to share.\n\nWho it's for: anyone, including complete beginners. Wear comfortable shoes and bring a water bottle and a light jacket. Free to join, 20 places. Please check in with the committee at the meeting point; if the weather turns, we shelter in the hall and run the tips session indoors." },
-  { club: "film", venue: V.cinema, day: -14, slot: "evening", title: "Hong Kong New Wave Screening", capacity: 60, tags: ["arts", "culture"], club_tags: ["Screening"], reg: 9, attend: 6, flow: "past",
-    description: "A screening of an early 1980s Hong Kong New Wave feature, followed by a short discussion led by the committee.\n\nWhat happens:\n- Doors open 15 minutes before the film, and seats are first come, first served among registered guests.\n- The feature plays in full, with English subtitles.\n- Afterwards, about 15 minutes of relaxed discussion on style, city and soundtrack.\n\nWho it's for: anyone curious about local cinema; no film background needed. Bring a light layer because the cinema runs cold, and silence your phone. Free entry with 60 places, and the committee will check names at the door. If the screening is full you can join the waitlist and we release seats at the start time." },
-  { club: "debate", venue: V.room, day: -12, slot: "afternoon", title: "Intro to British Parliamentary Debate", capacity: 30, tags: ["academic"], club_tags: ["BP format"], reg: 6, attend: 4, flow: "past",
-    description: "Learn the four-team BP format, the roles of each speaker and how adjudicators score a round. No experience needed.\n\nAgenda:\n- Opening 30 minutes: the four teams, speaking order and what each speaker must do.\n- Next hour: a short demonstration round with club members.\n- Final stretch: you try a mini round in small groups while adjudicators give live feedback.\n\nBring a notebook and a pen; laptops are optional. Wear whatever is comfortable, there is no dress code. Free to attend with 30 places in Main Building Room 230. Newcomers are warmly welcome, and nobody is forced to speak if they would rather watch and take notes first." },
-  { club: "hiking", venue: V.studio, day: -9, slot: "morning", title: "Dragon's Back Trail Briefing", capacity: 25, tags: ["sports"], club_tags: ["Beginner friendly"], reg: 6, attend: 6, flow: "past",
-    description: "Route, kit list and safety briefing before the club's first Dragon's Back hike.\n\nWhat we cover:\n- The route, timings and the MTR and bus plan for getting to the trailhead.\n- Kit list: trail shoes with grip, 1.5 litres of water, sun hat, snacks and a rain layer.\n- Safety: staying together, heat and hydration, what to do if someone slows down, and who carries the first aid kit.\n\nThis is a classroom-style session at the Sports Centre Studio, open to all levels and ideal if you have never hiked with a group. Free, 25 places. Please arrive on time and bring questions. Attendance is noted so we know who has heard the briefing before the hike itself." },
-  { club: "robotics", venue: V.union, day: -7, slot: "afternoon", title: "Line-Follower Robot Workshop", capacity: 12, visibility: "members_only", tags: ["tech"], club_tags: ["Hands-on"], reg: 4, accept: 4, attend: 3, flow: "past",
-    description: "Build a two-wheel line follower from the club's kit and tune its sensor thresholds. Members only, kits are limited.\n\nPlan for the session:\n- First 30 minutes: kit tour and wiring walkthrough.\n- Middle block: assemble the chassis, fit the sensors and upload the starter code.\n- Final hour: calibrate thresholds and race on the test track.\n\nPairs share one kit, so 12 places is a hard limit. Beginners are fine; a committee member will help at each bench. Bring a laptop with the Arduino software installed if you can, and tie back long hair and wear closed shoes near the soldering station. Free for members. Check in at the Student Union Activity Room door." },
-  { club: "photo", venue: V.room, day: -3, slot: "evening", title: "Portrait Lighting Basics", capacity: 10, visibility: "members_only", tags: ["arts"], club_tags: ["Beginner friendly"], reg: 4, accept: 4, attend: 3, flow: "past",
+  { club: "photo", venue: V.hall, day: -18, slot: "evening", title: "Golden Hour Photo Walk", capacity: 12, tags: ["arts", "social"], club_tags: ["Outdoor", "Beginner friendly"], reg: 14, attend: 5, flow: "past",
+    // Fills at 12, two people queue, then leaves promote them and one person leaves and rejoins.
+    plan: [[2, 0, "+"], [5, 1, "+"], [9, 2, "+"], [14, 3, "+"], [20, 4, "+"], [26, 5, "+"], [31, 6, "+"], [38, 7, "+"], [44, 8, "+"], [49, 9, "+"], [55, 10, "+"], [61, 11, "+"],
+      [66, 12, "+"], [72, 13, "+"], [80, 3, "-"], [90, 8, "-"], [100, 3, "+"], [104, 5, "-"]],
+    description: "Meet at Lok Yew Hall, then walk to the Centennial Campus terraces to shoot the sunset. Bring any camera, phones welcome.\n\nWhat happens:\n- First 20 minutes: meet at the hall entrance, quick tips on light and framing.\n- Middle hour: a slow walk to the terraces with stops for portraits and skyline shots.\n- Last 30 minutes: swap favourite frames and pick one to share.\n\nWho it's for: anyone, including complete beginners. Wear comfortable shoes and bring a water bottle and a light jacket. Free to join, 12 places, so join the waitlist if it fills up. Please check in with the committee at the meeting point; if the weather turns, we shelter in the hall and run the tips session indoors." },
+  { club: "film", venue: V.cinema, day: -14, slot: "evening", title: "Hong Kong New Wave Screening", capacity: 10, tags: ["arts", "culture"], club_tags: ["Screening"], reg: 12, attend: 6, flow: "past",
+    plan: [[3, 0, "+"], [8, 1, "+"], [12, 2, "+"], [19, 3, "+"], [27, 4, "+"], [33, 5, "+"], [40, 6, "+"], [52, 7, "+"], [58, 8, "+"], [64, 9, "+"],
+      [70, 10, "+"], [76, 11, "+"], [84, 2, "-"], [92, 6, "-"], [100, 2, "+"], [108, 4, "-"]],
+    description: "A screening of an early 1980s Hong Kong New Wave feature, followed by a short discussion led by the committee.\n\nWhat happens:\n- Doors open 15 minutes before the film, and seats are first come, first served among registered guests.\n- The feature plays in full, with English subtitles.\n- Afterwards, about 15 minutes of relaxed discussion on style, city and soundtrack.\n\nWho it's for: anyone curious about local cinema; no film background needed. Bring a light layer because the cinema runs cold, and silence your phone. Free entry. This is a small preview showing with 10 seats, and the committee will check names at the door. If it is full you can join the waitlist, and seats go to the queue as people drop out." },
+  { club: "debate", venue: V.room, day: -12, slot: "afternoon", title: "Intro to British Parliamentary Debate", capacity: 8, tags: ["academic"], club_tags: ["BP format"], reg: 10, attend: 4, flow: "past",
+    plan: [[4, 0, "+"], [10, 1, "+"], [16, 2, "+"], [26, 3, "+"], [35, 4, "+"], [47, 5, "+"], [55, 6, "+"], [63, 7, "+"],
+      [69, 8, "+"], [75, 9, "+"], [81, 1, "-"], [95, 5, "-"], [105, 1, "+"], [112, 3, "-"]],
+    description: "Learn the four-team BP format, the roles of each speaker and how adjudicators score a round. No experience needed.\n\nAgenda:\n- Opening 30 minutes: the four teams, speaking order and what each speaker must do.\n- Next hour: a short demonstration round with club members.\n- Final stretch: you try a mini round in small groups while adjudicators give live feedback.\n\nBring a notebook and a pen; laptops are optional. Wear whatever is comfortable, there is no dress code. Free to attend with 8 places in Main Building Room 230, so every newcomer gets real feedback. Newcomers are warmly welcome, and nobody is forced to speak if they would rather watch and take notes first." },
+  { club: "hiking", venue: V.studio, day: -9, slot: "morning", title: "Dragon's Back Trail Briefing", capacity: 8, tags: ["sports"], club_tags: ["Beginner friendly"], reg: 10, attend: 6, flow: "past",
+    // One person drops off the waitlist, a leave promotes the next in line, and a seat opens up for a rejoin.
+    plan: [[6, 0, "+"], [13, 1, "+"], [21, 2, "+"], [30, 3, "+"], [41, 4, "+"], [50, 5, "+"], [60, 6, "+"], [66, 7, "+"],
+      [72, 8, "+"], [78, 9, "+"], [85, 8, "-"], [90, 0, "-"], [98, 3, "-"], [101, 5, "-"], [106, 0, "+"]],
+    description: "Route, kit list and safety briefing before the club's first Dragon's Back hike.\n\nWhat we cover:\n- The route, timings and the MTR and bus plan for getting to the trailhead.\n- Kit list: trail shoes with grip, 1.5 litres of water, sun hat, snacks and a rain layer.\n- Safety: staying together, heat and hydration, what to do if someone slows down, and who carries the first aid kit.\n\nThis is a classroom-style session at the Sports Centre Studio, open to all levels and ideal if you have never hiked with a group. Free, 8 places. Please arrive on time and bring questions. Attendance is noted so we know who has heard the briefing before the hike itself." },
+  { club: "robotics", venue: V.union, day: -7, slot: "afternoon", title: "Line-Follower Robot Workshop", capacity: 3, visibility: "members_only", tags: ["tech"], club_tags: ["Hands-on"], reg: 4, attend: 3, flow: "past",
+    // Requests are accepted a couple of hours later; one is withdrawn while pending, the fourth waits for a seat.
+    plan: [[6, 0, "+"], [8, 0, "ok"], [20, 1, "+"], [22, 1, "ok"], [40, 2, "+"], [41, 2, "-"], [47, 2, "+"], [49, 2, "ok"], [55, 3, "+"], [57, 3, "ok"],
+      [72, 1, "-"], [90, 1, "+"], [92, 1, "ok"], [101, 0, "-"]],
+    description: "Build a two-wheel line follower from the club's kit and tune its sensor thresholds. Members only, kits are limited.\n\nPlan for the session:\n- First 30 minutes: kit tour and wiring walkthrough.\n- Middle block: assemble the chassis, fit the sensors and upload the starter code.\n- Final hour: calibrate thresholds and race on the test track.\n\nBuilders share the club's three kits, so 3 places is a hard limit. Beginners are fine; a committee member will help at each bench. Bring a laptop with the Arduino software installed if you can, and tie back long hair and wear closed shoes near the soldering station. Free for members. Check in at the Student Union Activity Room door." },
+  { club: "photo", venue: V.room, day: -3, slot: "evening", title: "Portrait Lighting Basics", capacity: 10, visibility: "members_only", tags: ["arts"], club_tags: ["Beginner friendly"], reg: 4, attend: 3, flow: "past",
+    plan: [[5, 0, "+"], [7, 0, "ok"], [20, 1, "+"], [22, 1, "ok"], [30, 2, "+"], [31, 2, "-"], [60, 2, "+"], [62, 2, "ok"], [45, 3, "+"], [47, 3, "ok"], [90, 1, "-"]],
     description: "One-light and two-light portrait set-ups with the society's speedlights.\n\nWhat happens:\n- First 20 minutes: how light direction and distance change a face.\n- Next hour: rotate through one-light stations, then add a second light for fill and rim.\n- Last 30 minutes: shoot each other and compare results on screen.\n\nMembers only, 10 places, free. Beginners are welcome as long as you know the basics of your camera. Bring a camera that can shoot manually, a charged battery and a memory card; the society supplies speedlights and stands. Wear plain, mid-tone clothes if you plan to model. Be kind to the gear and tell the committee about any cable you trip over." },
 
   // Upcoming and open for registration.
   { club: "photo", venue: V.hall, day: 2, slot: "night", title: "Night Photography on the Harbourfront", capacity: 25, tags: ["arts", "social"], club_tags: ["Outdoor"], reg: 6,
+    plan: [[4, 0, "+"], [9, 1, "+"], [15, 2, "+"], [27, 3, "+"], [40, 4, "+"], [55, 5, "+"], [70, 2, "-"], [85, 2, "+"]],
     description: "Long exposures of the harbour lights. Bring a tripod if you have one; the society lends a few.\n\nPlan:\n- Meet at Lok Yew Hall for a 20-minute primer on shutter speed, ISO and focus in the dark.\n- Travel together to the harbourfront by MTR and walk to the viewpoint.\n- Spend roughly an hour on long exposures, light trails and reflections on the water.\n\nOpen to everyone, 25 places, free. Wear dark, warm layers and non-slip shoes, and bring a torch or phone light, a spare battery and a remote or timer. Stay in the group, keep away from the water's edge and watch your tripod legs for passers-by. If rain is forecast we will tell registered students by notification before the start." },
   { club: "film", venue: V.cinema, day: 3, slot: "night", title: "Short Film Pitch Night", capacity: 80, tags: ["arts", "career"], club_tags: ["Workshop"], reg: 7,
+    plan: [[5, 0, "+"], [11, 1, "+"], [20, 2, "+"], [33, 3, "+"], [47, 4, "+"], [60, 5, "+"], [72, 6, "+"], [80, 3, "-"], [96, 3, "+"], [104, 1, "-"]],
     description: "Pitch a five-minute short film idea in two minutes. The best three pitches get the club's camera kit for a weekend.\n\nHow the night runs:\n- Opening 20 minutes: a quick guide to what makes a pitch land (character, conflict, one striking image).\n- Main block: each pitcher gets two minutes, then one minute of friendly questions.\n- Wrap-up: the committee and audience vote and announce the top three.\n\nOpen to all, with 80 places; you can pitch or just cheer from the audience. Prepare a few notes or one slide, nothing fancy. Free. Bring a pen for voting slips. If more people sign up to pitch than time allows, the committee draws names, and everyone else is welcome to watch." },
   { club: "debate", venue: V.union, day: 4, slot: "evening", title: "Debate Social: Pizza and Motions", capacity: 30, tags: ["social", "free-food"], club_tags: ["Social"], reg: 5,
+    plan: [[3, 0, "+"], [8, 1, "+"], [22, 2, "+"], [41, 3, "+"], [66, 4, "+"], [75, 1, "-"], [98, 1, "+"], [110, 3, "-"]],
     description: "Casual impromptu motions over pizza. A relaxed way to meet the club.\n\nWhat to expect:\n- First 30 minutes: pizza, drinks and name games so nobody stands alone.\n- Then three rounds of light-hearted motions (think pineapple, cats versus dogs, early lectures), two minutes of prep each, with speaking in pairs.\n- Last stretch: free chat and a quick look at upcoming club events.\n\nOpen to everyone, no debating experience required, and no pressure to speak. Free, with 30 places at the Student Union Activity Room. Tell the committee about dietary needs when you register so we can order vegetarian options. Bring a friend, an appetite and your best hot take." },
   { club: "hiking", venue: V.studio, day: 5, slot: "early_morning", title: "Lion Rock Sunrise Hike", capacity: 6, tags: ["sports"], club_tags: ["Advanced"], reg: 8,
+    // Six seats fill, two queue; one person cancels (the first in line gets the seat) and rejoins at the back, so two stay waitlisted.
+    plan: [[2, 0, "+"], [6, 1, "+"], [11, 2, "+"], [19, 3, "+"], [28, 4, "+"], [37, 5, "+"], [50, 6, "+"], [58, 7, "+"], [75, 1, "-"], [88, 1, "+"]],
     description: "An early, steep climb up Lion Rock. Places are limited to six per guide, so later sign-ups join the waitlist.\n\nPlan:\n- Meet at 06:00 in the dark with headtorches on; we leave promptly.\n- About 50 minutes of steady, steep climbing, a guide at the front and one at the back, reaching the ridge as the sun comes up.\n- Twenty minutes at the summit for sunrise photos, then a careful descent together, back by 08:00.\n\nThis is an advanced route: steep steps, loose rock and exposed sections. Wear proper hiking shoes, carry at least 1.5 litres of water, a headtorch, snacks and a windproof layer. Only join if you are comfortable with sustained climbing. Free. Capacity is six; waitlisted students are promoted if someone drops out, so cancel early if you cannot make it." },
   { club: "robotics", venue: V.hall, day: 6, slot: "afternoon", title: "Robot Sumo Tournament", capacity: 40, tags: ["tech", "social"], club_tags: ["Competition"], reg: 6,
+    plan: [[4, 0, "+"], [12, 1, "+"], [25, 2, "+"], [38, 3, "+"], [52, 4, "+"], [66, 5, "+"], [78, 0, "-"], [92, 0, "+"], [105, 4, "-"]],
     description: "Bring a robot under 500 g, or come to watch. Brackets are drawn on the day.\n\nSchedule:\n- First 30 minutes: weigh-in and safety check at the entrance.\n- Main block: knockout rounds in the ring, best of three pushes per match.\n- Final stretch: the final, a prize and a group photo.\n\nOpen to everyone with 40 places in total, free to enter. Beginners can borrow a spare club bot, ask the committee in advance. Rules: no flame, no liquids, no entanglement or flying parts, and robots must be switched off between matches. Watchers should stay behind the barrier and keep fingers out of the ring. Bring a spare battery and a screwdriver for quick fixes." },
   { club: "photo", venue: V.union, day: 7, slot: "afternoon", title: "Film Camera Swap Meet", capacity: 30, tags: ["arts", "social"], club_tags: [], reg: 4,
     description: "Swap, sell or just look at film cameras and lenses. The committee will test shutters on request.\n\nWhat happens:\n- Set up in the first 20 minutes: claim a table space and lay out what you want to trade.\n- Rest of the session: browse, haggle and chat, with a committee member testing shutters and light seals at a help table.\n- Final 30 minutes: a show-and-tell of the best find and a few sample frames.\n\nOpen to everyone with 30 places, free to attend. Bring cameras and lenses you want to trade, with small cash for deals (the club is not part of any sale). Beginners are welcome, and many sellers will happily explain how to load a roll. Handle other people's gear with care and keep bags off the tables." },
-  { club: "film", venue: V.cinema, day: 8, slot: "night", title: "Members' Screening: Classic Noir", capacity: 40, visibility: "members_only", tags: ["arts", "culture"], club_tags: ["Screening"], reg: 4, accept: 2,
+  { club: "film", venue: V.cinema, day: 8, slot: "night", title: "Members' Screening: Classic Noir", capacity: 40, visibility: "members_only", tags: ["arts", "culture"], club_tags: ["Screening"], reg: 4,
+    // Two requests accepted (one of them later leaves), one withdrawn while pending, one still waiting.
+    plan: [[6, 0, "+"], [8, 0, "ok"], [14, 1, "+"], [17, 1, "ok"], [30, 2, "+"], [44, 3, "+"], [60, 3, "-"], [75, 1, "-"]],
     description: "A members-only screening of a 1940s film noir classic. Popcorn provided.\n\nPlan for the night:\n- Doors open 15 minutes early; please bring your membership card or be ready for a name check.\n- The feature plays in full, with popcorn handed out at the door.\n- About 15 minutes of informal chat afterwards for favourite lines and shadows.\n\nMembers only, 40 places, free. If you want to bring a guest, ask the committee first, as non-members can request a place through the club page. Dress warmly because the cinema is cool, and keep your phone off. If you registered but cannot attend, please cancel early so someone on the waitlist can take the seat." },
   { club: "debate", venue: V.room, day: 9, slot: "morning", title: "Inter-Hall Debate Trials", capacity: 16, visibility: "members_only", tags: ["academic"], club_tags: ["BP format"], reg: 4, accept: 1,
     description: "Trials for the team that represents the club at the inter-hall competition. Members only.\n\nHow it works:\n- Opening 20 minutes: format reminder and draw of teams and rooms.\n- Two trial rounds with a short break between, each judged by senior members.\n- Final 30 minutes: feedback on delivery, structure and teamwork. The committee shares the final team shortly after.\n\nMembers only, 16 places, free. Previous debating experience helps but strong beginners are welcome to try. Bring a notebook, a pen and water. Dress is smart casual. Everyone gets feedback whether or not they make the squad, and the committee will confirm check-in at the door of Main Building Room 230." },
@@ -120,6 +151,12 @@ const EVENTS = [
     cancel_reason: "The drone cage is under repair. We will announce a new date soon.",
     description: "Watch FPV drone pilots race through the club's indoor course.\n\nWhat was planned:\n- First 20 minutes: a safety briefing and a look at the course gates.\n- Main block: pilots fly timed heats while spectators watch from behind the nets.\n- Final stretch: a short Q&A about building and flying your own drone.\n\nOpen to everyone, 20 places, free. Wear closed shoes and keep behind the safety barrier at all times. Because the drone cage is under repair, this event is cancelled and the club will announce a new date. Registered students will be notified, and nothing is lost: any waitlist places carry over to the new date." },
 ];
+
+// Registrations arrive over about four days, a little apart.
+function default_plan({ reg, accept = 0 }) {
+  const gap = Math.floor(84 / Math.max(reg, 1));
+  return Array.from({ length: reg }, (_, i) => [[6 + i * gap, i, "+"], ...(i < accept ? [[8 + i * gap, i, "ok"]] : [])]).flat();
+}
 
 const SOURCES = ["explore", "club", "inbox", "my_events", "share"];
 
@@ -157,6 +194,7 @@ class Client {
   get(path) { return this.request("GET", path); }
   post(path, body) { return this.request("POST", path, body); }
   put(path, body) { return this.request("PUT", path, body); }
+  del(path) { return this.request("DELETE", path); }
 }
 
 const add_days = (date, days) => utc_to_campus_date(new Date(campus_to_utc(date, "12:00").getTime() + days * DAY_MS));
@@ -241,7 +279,7 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
     return clients.get(key);
   };
 
-  const summary = { clubs: CLUBS.length, accounts: accounts.length, events: 0, registrations: 0, check_ins: 0 };
+  const summary = { clubs: CLUBS.length, accounts: accounts.length, events: 0, registrations: 0, leaves: 0, promotions: 0, check_ins: 0 };
   try {
     // Club tags, created by each president.
     const tag_ids = {};
@@ -264,7 +302,9 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
     for (const spec of ordered) {
       const date = add_days(today, spec.day);
       const start = campus_to_utc(date, slot_by_id(spec.slot).start);
-      set_clock(spec.flow === "past" ? new Date(start.getTime() - 6 * DAY_MS) : now);
+      // Events with registrations are published days before the event (past) or before today (upcoming), so their history has room to unfold.
+      const published_at = new Date(spec.flow === "past" ? start.getTime() - 6 * DAY_MS : spec.reg ? now.getTime() - 5 * DAY_MS : now.getTime());
+      set_clock(published_at);
       const club_id = club_ids[spec.club];
       const president = await as(`president.${spec.club}`);
       const committee = await as(`committee1.${spec.club}`);
@@ -301,20 +341,27 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
           if (!takers.includes(key)) takers.push(key);
         }
       }
-      for (const key of takers) {
-        const client = await as(key);
-        await client.post(`/events/${event.id}/views`, { source: SOURCES[rotation % SOURCES.length] });
-        await client.post(`/events/${event.id}/registration`, { allow_waitlist: true });
-        summary.registrations += 1;
-      }
       // A few people look without registering.
+      set_clock(new Date(published_at.getTime() + 20 * 3_600_000));
       for (const key of pool_keys.slice((rotation + 3) % pool_keys.length).slice(0, 3)) {
         await (await as(key)).post(`/events/${event.id}/views`, { source: "explore" });
       }
-      if (members_only) {
-        for (const key of takers.slice(0, spec.accept ?? 0)) {
-          await committee.post(`/events/${event.id}/join-requests/${users[key].id}/decision`, { decision: "accept" });
+      // Everyone follows the plan on the clock; each person looks at the event just before registering.
+      const steps = (spec.plan ?? default_plan({ reg: takers.length, accept: spec.accept })).map(([hours, who, op], order) => ({ hours, who, op, order })).sort((a, b) => a.hours - b.hours || a.order - b.order);
+      for (const { hours, who, op } of steps) {
+        set_clock(new Date(published_at.getTime() + hours * 3_600_000));
+        if (op === "ok") {
+          await committee.post(`/events/${event.id}/join-requests/${users[takers[who]].id}/decision`, { decision: "accept" });
+          continue;
         }
+        const client = await as(takers[who]);
+        if (op === "-") {
+          await client.del(`/events/${event.id}/registration`);
+          continue;
+        }
+        await client.post(`/events/${event.id}/views`, { source: SOURCES[rotation % SOURCES.length] });
+        await client.post(`/events/${event.id}/registration`, { allow_waitlist: true });
+        summary.registrations += 1;
       }
 
       if (spec.flow === "cancelled") {
@@ -336,6 +383,11 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
       }
     }
 
+    // Leaves and promotions are counted from the history the API wrote.
+    const [[counts]] = await pool.query("SELECT COALESCE(SUM(action = 'left'), 0) AS leaves, COALESCE(SUM(action = 'promoted'), 0) AS promotions FROM participation_history");
+    summary.leaves = Number(counts.leaves);
+    summary.promotions = Number(counts.promotions);
+
     // Club join requests waiting for the committee (today).
     set_clock(now);
     for (const [key, club] of CLUB_REQUESTS) await (await as(key)).put(`/clubs/${club_ids[club]}/membership`, {});
@@ -344,7 +396,7 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
     await new Promise((resolve) => server.close(resolve));
   }
 
-  log?.(`Demo data: ${summary.clubs} clubs, ${summary.accounts} accounts, ${summary.events} events, ${summary.registrations} registrations, ${summary.check_ins} check-ins.`);
+  log?.(`Demo data: ${summary.clubs} clubs, ${summary.accounts} accounts, ${summary.events} events, ${summary.registrations} registrations, ${summary.leaves} leaves, ${summary.promotions} promotions, ${summary.check_ins} check-ins.`);
   return { summary, accounts: accounts.map(({ email, name, platform_role, club, role }) => ({ email, name, platform_role, club, role })) };
 }
 
