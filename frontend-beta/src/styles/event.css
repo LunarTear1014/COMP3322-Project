@@ -5,7 +5,9 @@
    of itself. The frame clips the blur; the date tile hangs below it. */
 .event-hero .cs-cover { max-height: 260px; aspect-ratio: 3 / 2; }
 .event-hero .event-cover { aspect-ratio: auto; height: 260px; background: var(--club, var(--surface-sunk)); }
-.event-cover-frame { position: absolute; inset: 0; overflow: hidden; display: block; background: var(--club, var(--surface-sunk)); }
+/* z-index 0 makes the frame its own stacking context, so the photo's z-index
+   stays inside it and never covers the back link or the date tile. */
+.event-cover-frame { position: absolute; inset: 0; z-index: 0; overflow: hidden; display: block; background: var(--club, var(--surface-sunk)); }
 .event-hero .event-cover .event-cover-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; transform: scale(1.25); filter: blur(22px) brightness(.55) saturate(1.2); }
 .event-hero .event-cover .event-cover-photo { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain; }
 @media (min-width: 768px) {
