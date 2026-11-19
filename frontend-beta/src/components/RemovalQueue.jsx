@@ -32,18 +32,23 @@ export function RemovalQueue({ club, onChange }) {
     <section aria-labelledby={`removals-${club.club_id}`}>
       <h2 id={`removals-${club.club_id}`} className="section-title">Member removals waiting for your sign-off <span className="cs-meta">· {club.club_name}</span> <span className="cs-meta cs-nums">({items.length})</span></h2>
       <ErrorNotice error={action.error} />
-      <ul className="stack-list">
+      {/* Each request is its own card so a decision about a person stands
+          apart from the event lists around it. */}
+      <ul className="removal-cards">
         {items.map(request => (
-          <li key={request.id} className="signoff-item">
-            <div>
-              <h3>Remove {request.user.name}</h3>
-              <p className="cs-meta">
-                {request.requested_by ? `${request.requested_by.name} asked` : 'Asked'} · {timeLine(request.created_at)} Hong Kong time
-              </p>
-              {request.reason && <p className="cs-meta">Reason given: {request.reason}</p>}
+          <li key={request.id} className="removal-card" aria-labelledby={`removal-${request.id}`}>
+            <div className="removal-card-head">
+              <span className="removal-card-eyebrow">Member removal · {club.club_name}</span>
               <StatusChip state="awaiting_president" label="Needs your sign-off" />
             </div>
-            <RemovalDecision name={request.user.name} busy={action.busy} onDecide={(decision, reason) => decide(request, decision, reason)} />
+            <h3 id={`removal-${request.id}`} className="removal-card-title">Remove {request.user.name}</h3>
+            <p className="cs-meta">
+              {request.requested_by ? `${request.requested_by.name} asked` : 'Asked'} · {timeLine(request.created_at)} Hong Kong time
+            </p>
+            {request.reason && <blockquote className="removal-card-reason"><b>Reason: </b>{request.reason}</blockquote>}
+            <div className="removal-card-actions">
+              <RemovalDecision name={request.user.name} busy={action.busy} onDecide={(decision, reason) => decide(request, decision, reason)} />
+            </div>
           </li>
         ))}
       </ul>
