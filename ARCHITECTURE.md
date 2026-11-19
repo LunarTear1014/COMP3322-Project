@@ -23,7 +23,7 @@ Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :8
 - **web**: nginx serves the built SPA over HTTPS (self-signed certificate on
   the `web_certs` volume) and proxies `/api/` to the backend.
 - **backend**: the REST API under `/api/v1`. It keeps sessions in MySQL, checks
-  CSRF tokens and `Origin`, rate-limits logins, accepts cover uploads (stored on
+  CSRF tokens and `Origin`, rate-limits logins, accepts event cover and club icon uploads (stored on
   the `cover_data` volume) and streams live updates with Server-Sent Events.
 - **worker**: claims jobs from the `notification_jobs` outbox (written in the
   same transaction as each change) and sends reminders and daily club digests,
@@ -36,7 +36,7 @@ Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :8
 | Layer | Responsibility |
 | --- | --- |
 | Middleware (`src/middleware`) | Request ID, JSON body limit, CSRF and origin checks, and one error handler producing `{ error: { code, message, fields, request_id } }` |
-| Routers (`src/api_v1`) | One router per area: auth, clubs, events, registration, engagement, reports, covers, notifications, Google sign-in |
+| Routers (`src/api_v1`) | One router per area: auth, clubs, events, registration, engagement, reports, covers, club icons, notifications, Google sign-in |
 | Transactions and queries | Business rules run in MySQL transactions with a fixed lock order (venue → club → bookings → event → participations) |
 | Jobs and live delivery (`src/jobs`, `src/features/notifications`) | Durable job queue with lease tokens; an SSE hub that follows the `notifications` and `live_signals` tables |
 
@@ -44,7 +44,7 @@ Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :8
 
 The 17 domain tables of the final schema ([`backend-beta/db/schema.sql`](backend-beta/db/schema.sql)
 plus [`backend-beta/db/migrations/`](backend-beta/db/migrations/) up to
-`018_google_identity`). It was generated from the migrated database by
+`019_club_icons`). It was generated from the migrated database by
 [`docs/final-report/er-diagram.mjs`](docs/final-report/er-diagram.mjs).
 
 ![ClubSpace ER diagram](docs/final-report/er.svg)

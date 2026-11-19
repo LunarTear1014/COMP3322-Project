@@ -1,83 +1,36 @@
 # ClubSpace
 
 **University club event and venue management platform.** COMP3322 Group
-Project, Group 19 (PG19).
+Project, Group 19 (PG19): Chan Ka Ho Charlie, Lucien Balthazar Neale and
+Chan Ka Hei Aubrey.
+
+This README covers deployment and configuration. The project overview,
+feature list, team allocation, architecture, ER diagram and API reference are
+in the **final documentation**.
 
 | | |
 | --- | --- |
 | **Live deployment** | **https://c3322-pg19.cs.hku.hk** (connect to HKUVPN first; the certificate is self-signed, so accept the browser warning once) |
 | Demo password | `clubspacetest123` for every [demo account](#demo-accounts) |
 | Source | https://github.com/LunarTear1014/PG19-ClubSpace (`main` is what is deployed) |
-| **Final documentation** | [`ClubSpace-Final-Documentation-Group19.pdf`](ClubSpace-Final-Documentation-Group19.pdf): features, team allocation, architecture, ER diagram, API |
+| **Final documentation** | [`ClubSpace-Final-Documentation-Group19.pdf`](ClubSpace-Final-Documentation-Group19.pdf): overview, features, course requirements, team allocation, architecture, ER diagram, API, workflows, screenshots |
 | Proposal | [`proposal/Proposal.md`](proposal/Proposal.md) |
-| Architecture and ER diagram | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| Architecture summary | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| Full API contract | [`openspec/changes/expand-clubspace-workflows/handoff/api.md`](openspec/changes/expand-clubspace-workflows/handoff/api.md) |
 
 **Contents:**
-[Overview](#overview) ·
-[Course requirements](#how-clubspace-meets-the-course-requirements) ·
-[Architecture](#architecture) ·
+[What runs](#what-runs) ·
 [Demo accounts](#demo-accounts) ·
 [Rebuild from scratch (TAs)](#rebuild-from-scratch-for-tas-and-examiners) ·
 [Group 19 server](#deploy-to-the-group-19-server) ·
 [Operations](#operations) ·
 [Local development](#local-development) ·
 [Tests](#tests) ·
-[API](#api) ·
 [Credits](#credits-and-academic-integrity)
 
-## Overview
+## What runs
 
-ClubSpace coordinates university club events, venue requests and student
-participation. Club committee members prepare events and request venues; the
-club president signs off; a venue administrator approves the booking without
-double-booking a room; the event is then published. Students browse events,
-register (or join a waitlist when an event is full), check in on the day, and
-get live notifications. Club leaders see attendance and effectiveness
-reports.
-
-Team (details in the [proposal](proposal/Proposal.md)): Chan Ka Ho Charlie,
-Lucien Balthazar Neale, Chan Ka Hei Aubrey.
-
-### Features
-
-- **Accounts:** register, sign in, edit a profile, delete an account. Sessions
-  are cookies stored in MySQL, with CSRF tokens and origin checks on every
-  change.
-- **Clubs and roles:** members, committee and one president per club. Joining
-  a club is a request that the committee accepts or rejects. The president
-  promotes committee members and can hand over the presidency.
-- **Venues and bookings:** weekly venue calendars with three campus slots
-  (10:00–12:00, 13:00–15:00, 16:00–18:00 HKT). A venue administrator approves or
-  rejects requests; one confirmed booking per venue and slot is enforced in the
-  database, and an administrator cannot decide their own club's request.
-- **Event workflow:** draft → president sign-off → venue approval → publish,
-  with edit, cancel, cover images (JPEG/WebP up to 5 MB), campus and club tags,
-  and public or members-only visibility.
-- **Participation:** registration with capacity limits and an automatically
-  promoted waitlist; requests to join members-only events; check-in codes
-  during the event window; "My registrations".
-- **Real-time updates:** Server-Sent Events push notifications, seat counts,
-  waitlist changes and check-ins to open pages without a reload.
-- **Background worker:** event reminders, daily club digests and clean-up jobs,
-  with retries and a heartbeat.
-- **Reports:** attendance and effectiveness charts per club (fill rate,
-  turnout, drop-outs, view-to-join).
-- **Club action log:** a history of committee actions with undo.
-- **Credits page** at `/credits` for third-party libraries and assets.
-
-## How ClubSpace meets the course requirements
-
-| Requirement | ClubSpace |
-| --- | --- |
-| SPA with React, Angular or Vue 3; responsive | React 19 + React Router 7 + MUI, built with Vite ([`frontend-beta/`](frontend-beta/)); layouts adapt from phone to desktop with bottom tabs on small screens |
-| Node.js + Express RESTful API with correct status codes | Express 5 ([`backend-beta/`](backend-beta/)), versioned REST API under `/api/v1` using 200, 201, 202, 204, 400, 401, 403, 404, 409, 413, 415, 422, 429, 500 and 503 (see [API](#api)) |
-| MySQL only | MySQL 8.4; schema in [`backend-beta/db/schema.sql`](backend-beta/db/schema.sql) plus ordered migrations in [`backend-beta/db/migrations/`](backend-beta/db/migrations/) |
-| Docker Compose on a Linux VM | [`compose.yaml`](compose.yaml) with [`frontend-beta/Dockerfile`](frontend-beta/Dockerfile) and [`backend-beta/Dockerfile`](backend-beta/Dockerfile); starts with `docker compose up -d --build`; MySQL port 3306 is not published |
-| No real secrets committed | `.env` is git-ignored; [`.env.example`](.env.example) is the template and the deployment steps generate random passwords |
-| README with the public deployment URL and deployment instructions | This file: [live URL](#clubspace), [rebuild guide](#rebuild-from-scratch-for-tas-and-examiners) |
-| Credits page for third-party code | `/credits` in the app ([`Credits.jsx`](frontend-beta/src/pages/Credits.jsx)) |
-
-## Architecture
+`docker compose up -d --build` starts six services from [`compose.yaml`](compose.yaml):
 
 ```text
 Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :80 redirects)
@@ -89,8 +42,8 @@ Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :8
                       seed    (one-shot: demo data on an empty database)
 ```
 
-Cover images live on the `cover_data` volume shared by `backend` and `worker`.
-The ER diagram and design notes are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+Event covers and club icons live on the `cover_data` volume shared by
+`backend`, `worker` and `seed`; the TLS certificate lives on `web_certs`.
 
 ```text
 frontend-beta/   React + Vite SPA, its Dockerfile and nginx/ config
@@ -106,47 +59,24 @@ compose.yaml     Docker Compose deployment (all six services)
 On an empty database the one-shot `seed` service
 ([`backend-beta/src/ops/demo_seed.js`](backend-beta/src/ops/demo_seed.js))
 creates 5 clubs, 5 venues, 37 accounts and 25 events through the real API:
-6 past events with check-ins (for the reports), 15 upcoming events (one full
-with a waitlist, members-only events with pending requests), one cancelled
-event and three still in the approval workflow. Every account uses the
-password **`clubspacetest123`**; the names are fictional and the addresses use
-the reserved `.example` domain.
+past events with check-ins, upcoming events with a waitlist and pending
+requests, and requests still in the approval workflow. It also gives the five
+demo clubs generated icons. The names are fictional and the addresses use the
+reserved `.example` domain.
 
 **Password for every account: `clubspacetest123`**
 
-**Venue administrator:** `admin@clubspace.example` (approves or rejects venue
-requests).
-
-**Club accounts.** Each club has one president, two committee members and
-three members:
-
-| Club | President | Committee | Members |
-| --- | --- | --- | --- |
-| Photography Society | `president.photo@clubspace.example` | `committee1.photo@clubspace.example`<br>`committee2.photo@clubspace.example` | `member1.photo@clubspace.example`<br>`member2.photo@clubspace.example`<br>`member3.photo@clubspace.example` |
-| Film Society | `president.film@clubspace.example` | `committee1.film@clubspace.example`<br>`committee2.film@clubspace.example` | `member1.film@clubspace.example`<br>`member2.film@clubspace.example`<br>`member3.film@clubspace.example` |
-| Debate Club | `president.debate@clubspace.example` | `committee1.debate@clubspace.example`<br>`committee2.debate@clubspace.example` | `member1.debate@clubspace.example`<br>`member2.debate@clubspace.example`<br>`member3.debate@clubspace.example` |
-| Hiking Club | `president.hiking@clubspace.example` | `committee1.hiking@clubspace.example`<br>`committee2.hiking@clubspace.example` | `member1.hiking@clubspace.example`<br>`member2.hiking@clubspace.example`<br>`member3.hiking@clubspace.example` |
-| Robotics Lab | `president.robotics@clubspace.example` | `committee1.robotics@clubspace.example`<br>`committee2.robotics@clubspace.example` | `member1.robotics@clubspace.example`<br>`member2.robotics@clubspace.example`<br>`member3.robotics@clubspace.example` |
-
-Some members belong to a second club: `member1.photo` is also in Film
-Society, `member2.hiking` in Robotics Lab, `member3.debate` in Photography
-Society, and `student4` in Hiking Club.
-
-**Students:** `student1@clubspace.example` to `student6@clubspace.example`.
-`student1`, `student2` and `student3` have pending requests to join
-Photography Society, Robotics Lab and Hiking Club; `student5` and `student6`
-belong to no club.
-
-**What to try with each role:**
-
-| Sign in as | Try |
+| Role | Accounts |
 | --- | --- |
-| `admin@clubspace.example` | Admin → approve or reject the pending venue request for Film Society's Animation Night |
-| `president.photo@clubspace.example` | Organizer → sign off the venue request for the Exhibition Planning Meeting that `committee1.photo` drafted; accept `student1`'s join request; promote a member to committee |
-| `president.debate@clubspace.example` | Publish Debate Workshop: Rebuttals, which `committee1.debate` sent for approval |
-| `committee1.debate@clubspace.example` | Create an event and request a venue; review the join requests for the members-only Inter-Hall Debate Trials |
-| `member1.hiking@clubspace.example` | Events → Lion Rock Sunrise Hike is full with two people on the waitlist; My registrations lists your events |
-| `student1@clubspace.example` | Browse events, register for a public event, watch the seat count update live in a second browser |
+| Venue administrator | `admin@clubspace.example` |
+| Club president | `president.CLUB@clubspace.example` |
+| Committee | `committee1.CLUB@clubspace.example`, `committee2.CLUB@clubspace.example` |
+| Members | `member1.CLUB@clubspace.example` to `member3.CLUB@clubspace.example` |
+| Students | `student1@clubspace.example` to `student6@clubspace.example` |
+
+`CLUB` is one of `photo`, `film`, `debate`, `hiking` or `robotics`. Section 9
+of the final documentation lists who belongs to which club and what to try
+with each role.
 
 To use another password, put `DEMO_ACCOUNT_PASSWORD=...` (12+ characters) in
 `.env` before the first start; `DEMO_ACCOUNT_PASSWORD=` with no value starts
@@ -433,13 +363,13 @@ docker compose exec -T db sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" clu
 All commands run in `~/clubspace-pg19` on the server (or the repository
 folder of a rebuild).
 
-### Cover images, migrations and environment
+### Images, migrations and environment
 
-Event cover images are stored under `COVER_DIR` (`/app/data/covers` in the
-backend container) on the `cover_data` volume. Back it up with the database:
+Event covers and club icons (`*.icon.webp`) are stored under `COVER_DIR`
+(`/app/data/covers` in the backend container) on the `cover_data` volume. Back it up with the database:
 `docker run --rm -v clubspace-pg19_cover_data:/data -v "$PWD":/backup alpine
-tar -czf /backup/covers.tgz -C /data .`. A scheduled sweep removes files that
-no event references.
+tar -czf /backup/covers.tgz -C /data .`. A scheduled sweep in the worker removes
+files that no event or club references.
 
 The demo events get generated cover images from
 [`backend-beta/db/demo-images/`](backend-beta/db/demo-images/) when `seed`
@@ -451,8 +381,17 @@ is safe to run again:
 docker compose exec -T backend node src/ops/attach-demo-covers.js
 ```
 
-The `club-*.jpg` images in the same folder are not used yet, because clubs
-have no image field.
+The five demo clubs get generated icons from
+[`backend-beta/src/ops/demo_club_icons.js`](backend-beta/src/ops/demo_club_icons.js).
+`seed` adds any missing ones on every `docker compose up`, even on a database
+that already has data, and never replaces an icon a committee uploaded. To
+add them by hand:
+
+```bash
+docker compose exec -T backend node src/ops/attach-demo-club-icons.js
+```
+
+The `club-*.jpg` images in `backend-beta/db/demo-images/` are not used.
 
 Schema changes after the baseline are ordered migrations in
 `backend-beta/db/migrations`. The `migrate` service runs them on every
@@ -585,52 +524,9 @@ client (the `mysql` CLI, MySQL Workbench or Sequel Ace). On macOS:
   name without `test`.
 - **Frontend:** `cd frontend-beta && npm test`, `npm run lint`, `npm run build`.
 
-## API
-
-The SPA uses only the versioned REST API under **`/api/v1`**. The full
-contract (DTOs, filters, every error code) is in
-[`handoff/api.md`](openspec/changes/expand-clubspace-workflows/handoff/api.md)
-with the additions in
-[`handoff/beta-feedback.md`](openspec/changes/expand-clubspace-workflows/handoff/beta-feedback.md).
-
-**Conventions.** JSON bodies; success is `{ "data": ..., "meta": ... }` and
-errors are `{ "error": { "code", "message", "fields", "request_id" } }`. The
-session is an HttpOnly cookie; every change also needs the `X-CSRF-Token`
-header (from `GET /auth/csrf` or the sign-in response) and an `Origin` equal
-to `APP_ORIGIN`. Times are ISO 8601 UTC.
-
-| Status | Used for |
-| --- | --- |
-| `200` / `201` / `202` / `204` | Read or update / created / request queued for approval (join requests) / no body |
-| `400` | Malformed JSON |
-| `401` | Not signed in, or wrong credentials |
-| `403` | Not allowed, bad CSRF token or origin, deciding your own club's request |
-| `404` | Missing, or hidden from this user |
-| `409` | Conflicts: venue slot taken, event full, stale version, invalid state |
-| `413` / `415` / `422` | Upload too large / not JPEG or WebP / validation failed |
-| `429` | Rate limited (with `Retry-After`) |
-| `500` / `503` | Unexpected error / database unavailable |
-
-| Area | Endpoints (relative to `/api/v1`) |
-| --- | --- |
-| Auth and profile | `GET /auth/csrf`, `POST /auth/register`, `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`, `GET`/`PATCH /profile` |
-| Clubs | `GET /clubs`, `GET /me/memberships`, `PUT`/`DELETE /clubs/:id/membership`, `GET /clubs/:id/join-requests`, `POST /clubs/:id/join-requests/:request_id/review`, `GET /clubs/:id/members`, `PATCH /clubs/:id/members/:user_id`, `POST /clubs/:id/presidency` |
-| Venues and bookings | `GET /venues`, `GET /venues/:id/calendar`, `GET /bookings`, `POST /bookings/:id/decision`, `POST /bookings/:id/signoff` |
-| Events | `GET`/`POST /events`, `GET`/`PATCH /events/:id`, `POST /events/:id/publish`, `POST /events/:id/signoff`, `POST /events/:id/cancel`, `PUT`/`DELETE /events/:id/cover`, `GET /me/events`, `GET /me/signoffs` |
-| Participation | `POST`/`DELETE /events/:id/registration`, `GET /me/registrations`, `GET /events/:id/participants`, `GET /events/:id/join-requests`, `POST /events/:id/join-requests/:user_id/decision` |
-| Check-in | `POST /events/:id/checkin`, `POST /events/:id/attendance`, `GET /events/:id/attendance`, `PUT`/`DELETE /events/:id/attendance/:user_id` |
-| Tags | `GET`/`POST /tags`, `PATCH /tags/:id`, `GET`/`POST /clubs/:id/tags`, `DELETE /clubs/:id/tags/:tag_id` |
-| Notifications | `GET /notifications`, `PATCH /notifications/:id/read`, `GET /notifications/stream` (Server-Sent Events) |
-| Reports | `GET /clubs/:id/reports`, `GET /clubs/:id/reports/effectiveness`, `POST /events/:id/views` |
-
-`GET /api/health` (outside v1) returns `{"status":"ok"}` or `503`. The older
-unversioned beta routes (documented in
-[`backend-beta/API.md`](backend-beta/API.md)) are still mounted for
-compatibility, but no page uses them.
-
 ## Credits and academic integrity
 
 Third-party libraries, UI components and assets are credited on the in-app
 [credits page](https://c3322-pg19.cs.hku.hk/credits) (`/credits`). All project
-code was written by the team members listed above, with AI tools used as
+code was written by the team members named at the top, with AI tools used as
 allowed by the course policy.

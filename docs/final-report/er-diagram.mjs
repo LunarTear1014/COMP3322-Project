@@ -1,5 +1,5 @@
 // Generates er.svg (core ClubSpace entities) for the final documentation.
-// Columns and keys come from the schema after all migrations (018_google_identity).
+// Columns and keys come from the schema after all migrations (019_club_icons).
 //   node docs/final-report/er-diagram.mjs
 import { writeFileSync } from "node:fs";
 
@@ -12,7 +12,7 @@ function ent(name, col, y, cols, group) {
 }
 // [column, key badge]
 ent("club_tags", 0, 40, [["id", "PK"], ["club_id", "FK"], ["name", ""], ["name_key (generated)", "UQ*"]], "club");
-ent("clubs", 1, 40, [["id", "PK"], ["name", "UQ"], ["description", ""]], "club");
+ent("clubs", 1, 40, [["id", "PK"], ["name", "UQ"], ["description", ""], ["icon_key", ""], ["icon_updated_at", ""]], "club");
 ent("memberships", 2, 40, [["user_id", "PK FK"], ["club_id", "PK FK"], ["role", ""], ["president_club_id (gen.)", "UQ"], ["version", ""]], "club");
 ent("club_join_requests", 3, 40, [["id", "PK"], ["user_id", "FK"], ["club_id", "FK"], ["status", ""], ["reviewed_by", "FK"]], "club");
 ent("users", 4, 40, [["id", "PK"], ["email", "UQ"], ["password_hash", ""], ["name", ""], ["student_id", "UQ"], ["google_sub", "UQ"], ["platform_role", ""]], "user");
