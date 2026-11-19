@@ -189,7 +189,7 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     assert.equal((await app.client_for("admin@x.test").then((c) => c.get(`/clubs/1/reports?${range}`))).status, 404, "admin alone has no report access");
     assert.equal((await comm.get("/clubs/1/reports?from=2026-01-01T00:00:00Z&to=2027-06-01T00:00:00Z")).status, 422);
     const clipped = await comm.get(`/clubs/1/reports?from=${encodeURIComponent(new Date(`${date}T10:30:00+08:00`).toISOString())}&to=${encodeURIComponent(new Date(`${date}T11:30:00+08:00`).toISOString())}`);
-    assert.equal(clipped.body.data.venue_hours.find((v) => v.venue_id === 1).hours, 1, "a 2h booking clipped to a 1h window");
+    assert.equal(clipped.body.data.venue_hours.find((v) => v.venue_id === 1).hours, 1, "a 3h booking clipped to a 1h window");
   });
 
   test("effectiveness report matches hand-built fixtures", async () => {
@@ -199,7 +199,7 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     const mk = async (slot_id, capacity, tag) => published_event(app, ids, { date, slot_id, capacity, ...(tag ? { campus_tag_ids: [tag] } : {}) });
     const [{ id: tag }] = (await comm.get("/tags")).body.data.filter((t) => t.slug === "sports");
     const e = await mk("morning", 2, tag);
-    // Hand-built history (event start is `date` 10:00 HKT = 02:00Z). u1: join, leave, rejoin; u2: join; u3: waitlisted then promoted (no check-in); u4: waitlisted, never promoted.
+    // Hand-built history (event start is `date` 09:00 HKT = 01:00Z). u1: join, leave, rejoin; u2: join; u3: waitlisted then promoted (no check-in); u4: waitlisted, never promoted.
     const t = (h) => new Date(Date.parse(e.start_at) - h * 3_600_000).toISOString().replace("T", " ").replace("Z", "000");
     const H = async (user, action, from, to, hours_before, actor = user) => app.admin.query(
       "INSERT INTO participation_history (event_id, user_id, actor_user_id, action_id, action, from_status, to_status, occurred_at) VALUES (?, ?, ?, UUID(), ?, ?, ?, ?)", [e.id, user, actor, action, from, to, t(hours_before)]);

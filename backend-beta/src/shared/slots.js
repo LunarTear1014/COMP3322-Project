@@ -6,15 +6,17 @@ import { parse_campus_date } from "./validate.js";
 const CAMPUS_TIMEZONE = "Asia/Hong_Kong";
 const CAMPUS_OFFSET_HOURS = 8;
 
+// The slots run back to back from 06:00 to 21:00; an end time is exclusive,
+// so a slot ending at 09:00 does not clash with one starting at 09:00.
 // Bookings conflict by time overlap, not by slot id. The full-day slot spans
 // every other slot, so it blocks the venue's whole bookable day and any
 // shorter booking that day blocks it.
 const SLOTS = [
-  { id: "early_morning", name: "Early morning", start: "06:00", end: "08:00" },
-  { id: "morning", name: "Morning", start: "10:00", end: "12:00" },
-  { id: "afternoon", name: "Afternoon", start: "13:00", end: "15:00" },
-  { id: "evening", name: "Evening", start: "16:00", end: "18:00" },
-  { id: "night", name: "Night", start: "19:00", end: "21:00" },
+  { id: "early_morning", name: "Early morning", start: "06:00", end: "09:00" },
+  { id: "morning", name: "Morning", start: "09:00", end: "12:00" },
+  { id: "afternoon", name: "Afternoon", start: "12:00", end: "15:00" },
+  { id: "evening", name: "Evening", start: "15:00", end: "18:00" },
+  { id: "night", name: "Night", start: "18:00", end: "21:00" },
   { id: "full_day", name: "Full day", start: "06:00", end: "21:00" },
 ];
 const SLOT_IDS = SLOTS.map((slot) => slot.id);
@@ -23,7 +25,7 @@ function slot_by_id(slot_id) {
   return SLOTS.find((slot) => slot.id === slot_id) ?? null;
 }
 
-// "2026-11-12" + "10:00" Hong Kong -> Date at 2026-11-12T02:00:00Z.
+// "2026-11-12" + "09:00" Hong Kong -> Date at 2026-11-12T01:00:00Z.
 function campus_to_utc(date, time) {
   const day = parse_campus_date(date);
   if (!day) return null;

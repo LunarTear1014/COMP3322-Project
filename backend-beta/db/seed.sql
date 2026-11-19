@@ -19,21 +19,21 @@ SELECT 2, id, 'committee' FROM clubs WHERE name = 'Photography Society';
 
 INSERT INTO bookings (venue_id, club_id, start_time, end_time)
 SELECT v.id, c.id,
-  TIMESTAMP(DATE_ADD(CURDATE(), INTERVAL 5 DAY), '16:00:00'),
+  TIMESTAMP(DATE_ADD(CURDATE(), INTERVAL 5 DAY), '15:00:00'),
   TIMESTAMP(DATE_ADD(CURDATE(), INTERVAL 5 DAY), '18:00:00')
 FROM venues v CROSS JOIN clubs c
 WHERE v.name = 'Lok Yew Hall' AND c.name = 'Photography Society';
 
 INSERT INTO bookings (venue_id, club_id, start_time, end_time)
 SELECT v.id, c.id,
-  TIMESTAMP(DATE_ADD(CURDATE(), INTERVAL 1 DAY), '16:00:00'),
+  TIMESTAMP(DATE_ADD(CURDATE(), INTERVAL 1 DAY), '15:00:00'),
   TIMESTAMP(DATE_ADD(CURDATE(), INTERVAL 1 DAY), '18:00:00')
 FROM venues v CROSS JOIN clubs c
 WHERE v.name = 'GoldenScene Cinema' AND c.name = 'Film Society';
 
 INSERT INTO bookings (venue_id, club_id, start_time, end_time)
 SELECT v.id, c.id,
-  TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 7 DAY), '13:00:00'),
+  TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 7 DAY), '12:00:00'),
   TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL 7 DAY), '15:00:00')
 FROM venues v CROSS JOIN clubs c
 WHERE v.name = 'Main Building Room 230' AND c.name = 'Debate Club';

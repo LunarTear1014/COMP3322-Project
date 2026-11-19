@@ -32,7 +32,7 @@ describe('request flow', () => {
 
   it('disables booked and past slots with their reason, and keeps the week and slot in the URL', async () => {
     // Pin the clock to a Tuesday morning in Hong Kong and open that day: with
-    // the real clock, every slot of the first day is past after 18:00, which
+    // the real clock, every slot of the first day is past after 21:00, which
     // made this test fail every evening. Only Date is faked, so waitFor runs.
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-11-17T01:00:00Z')) // Tue 09:00 Hong Kong
@@ -58,7 +58,7 @@ describe('request flow', () => {
     vi.stubGlobal('fetch', fetch)
     render(<App />)
     fireEvent.change(await screen.findByRole('combobox', { name: 'Club' }), { target: { value: '1' } })
-    await waitFor(() => expect(screen.getByRole('button', { name: /10:00–12:00\s*Selected/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /09:00–12:00\s*Selected/ })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Next: event details' }))
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Camera workshop' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Practice.' } })
@@ -110,7 +110,7 @@ describe('request flow', () => {
     vi.stubGlobal('fetch', fixtureFetch())
     render(<App />)
     await screen.findByRole('combobox', { name: 'Club' })
-    await waitFor(() => expect(screen.getByRole('button', { name: /10:00–12:00\s*Selected/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /09:00–12:00\s*Selected/ })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Next: event details' }))
     fireEvent.click(screen.getByRole('button', { name: 'Next: review' }))
     expect(await screen.findByText('Give the event a title.')).toBeTruthy()

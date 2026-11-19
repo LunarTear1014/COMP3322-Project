@@ -26,7 +26,7 @@ describe("v1 booking, publication and sign-off workflow", { skip }, () => {
     assert.equal(refused.status, 422, "a campus tag is required (TAG-01)");
     assert.ok(refused.body.error.fields.campus_tag_ids);
     assert.equal((await pres.post("/events", create_body(app, { date: future_date(app, 12), campus_tag_ids: [] }))).status, 422);
-    assert.match(event.start_at, /T02:00:00\.000Z$/, "morning slot is 10:00 HKT");
+    assert.match(event.start_at, /T01:00:00\.000Z$/, "morning slot is 09:00 HKT");
     const admin = await app.client_for("admin@x.test");
     const approved = await admin.post(`/bookings/${event.booking.id}/decision`, { expected_version: 1, decision: "approve" });
     assert.equal(approved.status, 200);

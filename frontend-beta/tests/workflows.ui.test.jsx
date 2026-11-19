@@ -258,7 +258,7 @@ describe('frontend preview workflows', () => {
     const table = await screen.findByRole('table', { name: 'Harbour Room time slots' })
     expect(within(table).getAllByRole('columnheader')).toHaveLength(8)
     expect(within(table).getAllByRole('rowheader').map(header => header.textContent))
-      .toEqual(['06:00–08:00', '10:00–12:00', '13:00–15:00', '16:00–18:00', '19:00–21:00', '06:00–21:00'])
+      .toEqual(['06:00–09:00', '09:00–12:00', '12:00–15:00', '15:00–18:00', '18:00–21:00', '06:00–21:00'])
     const today = campusDate(new Date())
     expect(table.querySelector('time[aria-current="date"]').dateTime).toBe(today)
     const dayPicker = screen.getByLabelText('Choose a day')
@@ -275,7 +275,7 @@ describe('frontend preview workflows', () => {
     expect(dayPicker.value).toBe(today)
 
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
-    const available = await screen.findAllByRole('link', { name: /^Available, select .* 10:00 to 12:00$/ })
+    const available = await screen.findAllByRole('link', { name: /^Available, select .* 09:00 to 12:00$/ })
     const selectedSlot = available[0]
     const params = new URL(selectedSlot.href).searchParams
     fireEvent.click(selectedSlot)
@@ -285,12 +285,17 @@ describe('frontend preview workflows', () => {
     expect(params.get('venue_id')).toBe('1')
     expect(params.get('slot_id')).toBe('morning')
     expect(window.location.search).toContain(`date=${date}`)
-    await waitFor(() => expect(document.querySelector('.selected-slot').textContent).toMatch(/Harbour Room.*10:00–12:00/))
-    expect((await screen.findByRole('button', { name: /10:00–12:00\s*Selected/ })).getAttribute('aria-pressed')).toBe('true')
+    await waitFor(() => expect(document.querySelector('.selected-slot').textContent).toMatch(/Harbour Room.*09:00–12:00/))
+    expect((await screen.findByRole('button', { name: /09:00–12:00\s*Selected/ })).getAttribute('aria-pressed')).toBe('true')
   })
 
 
+  // The figures are a lazy chunk that pulls in MUI X charts. Transforming it
+  // can take several seconds while the whole suite runs in parallel, so load
+  // it first (with its own time allowance); the page's lazy import then
+  // resolves from the module cache.
   it('renders report totals and exact values from the preview response', async () => {
+    await import('../src/ReportFigures.jsx')
     window.history.replaceState({}, '', '/organizer/clubs/1/reports')
     vi.stubGlobal('fetch', previewFetch())
     render(<App />)
@@ -302,7 +307,7 @@ describe('frontend preview workflows', () => {
     expect(within(actionSection).getByRole('cell', { name: '4' })).toBeTruthy()
     const hoursSection = screen.getByRole('heading', { name: 'Confirmed venue hours' }).closest('section')
     expect(within(hoursSection).getByRole('cell', { name: '1.5' })).toBeTruthy()
-  })
+  }, 30_000)
 
 
   it('refreshes the report for a new period and identifies incomplete history', async () => {
@@ -388,7 +393,7 @@ describe('frontend preview workflows', () => {
 
     const club = await screen.findByRole('combobox', { name: 'Club' })
     fireEvent.change(club, { target: { value: '1' } })
-    await waitFor(() => expect(screen.getByRole('button', { name: /10:00–12:00\s*Selected/ })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: /09:00–12:00\s*Selected/ })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Next: event details' }))
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Camera workshop' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A practical session.' } })

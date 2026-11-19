@@ -86,23 +86,30 @@ describe("validation helpers", () => {
 });
 
 describe("Hong Kong slot mapping", () => {
-  test("morning slot maps to 02:00Z-04:00Z", () => {
+  test("morning slot maps to 01:00Z-04:00Z", () => {
     const { start, end } = resolve_slot("2026-11-12", "morning", new Date("2026-11-01T00:00:00Z"));
-    assert.equal(start.toISOString(), "2026-11-12T02:00:00.000Z");
+    assert.equal(start.toISOString(), "2026-11-12T01:00:00.000Z");
     assert.equal(end.toISOString(), "2026-11-12T04:00:00.000Z");
   });
 
   test("new slots map to Hong Kong times", () => {
     const now = new Date("2026-11-01T00:00:00Z");
     const span = (id) => { const { start, end } = resolve_slot("2026-11-12", id, now); return [start.toISOString(), end.toISOString()]; };
-    assert.deepEqual(span("early_morning"), ["2026-11-11T22:00:00.000Z", "2026-11-12T00:00:00.000Z"]);
-    assert.deepEqual(span("night"), ["2026-11-12T11:00:00.000Z", "2026-11-12T13:00:00.000Z"]);
+    assert.deepEqual(span("early_morning"), ["2026-11-11T22:00:00.000Z", "2026-11-12T01:00:00.000Z"]);
+    assert.deepEqual(span("night"), ["2026-11-12T10:00:00.000Z", "2026-11-12T13:00:00.000Z"]);
     assert.deepEqual(span("full_day"), ["2026-11-11T22:00:00.000Z", "2026-11-12T13:00:00.000Z"]);
   });
 
   test("slot spans are unique, so reports can group by them", () => {
     const spans = SLOTS.map((slot) => `${slot.start}-${slot.end}`);
     assert.equal(new Set(spans).size, spans.length);
+  });
+
+  test("the part-day slots run back to back from 06:00 to 21:00", () => {
+    const parts = SLOTS.filter((slot) => slot.id !== "full_day").sort((a, b) => a.start.localeCompare(b.start));
+    assert.equal(parts[0].start, "06:00");
+    assert.equal(parts.at(-1).end, "21:00");
+    for (let i = 1; i < parts.length; i += 1) assert.equal(parts[i].start, parts[i - 1].end, parts[i].id);
   });
 
   test("full day spans every other slot", () => {
@@ -117,13 +124,13 @@ describe("Hong Kong slot mapping", () => {
   });
 
   test("impossible dates, unknown slots and the past are rejected", () => {
-    const now = new Date("2026-11-12T01:00:00Z");
+    const now = new Date("2026-11-12T00:00:00Z");
     assert.ok(fields_of(() => resolve_slot("2027-02-29", "morning", now)).date);
     assert.ok(fields_of(() => resolve_slot("2026-11-12", "midnight", now)).slot_id);
-    // The morning slot starts exactly at 02:00Z; now is before it, so valid.
+    // The morning slot starts exactly at 01:00Z; now is before it, so valid.
     assert.ok(resolve_slot("2026-11-12", "morning", now));
     // At or after the start instant the slot is no longer in the future.
-    assert.ok(fields_of(() => resolve_slot("2026-11-12", "morning", new Date("2026-11-12T02:00:00Z"))).date);
+    assert.ok(fields_of(() => resolve_slot("2026-11-12", "morning", new Date("2026-11-12T01:00:00Z"))).date);
     assert.ok(fields_of(() => resolve_slot("2026-11-12", "morning", new Date("2026-11-12T03:00:00Z"))).date);
   });
 
