@@ -31,7 +31,7 @@ const pool = create_utc_pool({
 });
 const cover_dir = process.env.COVER_DIR || "./data/covers";
 try {
-  await assert_schema_version(pool, "021_club_photos");
+  await assert_schema_version(pool, "022_member_removal_requests");
   const result = await seed_demo({ pool, password });
   if (result.skipped) {
     console.log(`Skipping demo data: ${result.skipped}`);

@@ -3,8 +3,9 @@ import { with_transaction } from "../db/transaction.js";
 import { ApiError } from "../shared/errors.js";
 import { PAGE_QUERY, pagination, validate_body, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
-import { end_members_only_places, list_actions, log_action, undo_action } from "./club_actions.js";
+import { list_actions, log_action, undo_action } from "./club_actions.js";
 import { promote_locked } from "./registration.js";
+import { member_delete_handlers, register_removal_routes } from "./removal_requests.js";
 import { icon_dto } from "../features/covers/icon_service.js";
 import { photo_dto } from "../features/covers/photo_service.js";
 import { audit, id_param, iso, membership_dto, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
@@ -222,31 +223,11 @@ function create_clubs_router({ pool, clock }) {
       });
       res.json({ data: result });
     })],
-    // Committee and president remove a plain member (beta "kick"). Their
-    // upcoming members-only places end and pending requests close.
-    delete: [require_user, wrap(async (req, res) => {
-      const club_id = id_param(req, "club_id");
-      const target_id = id_param(req, "user_id");
-      const now = clock();
-      await with_transaction(pool, async (conn) => {
-        const [[club]] = await conn.query("SELECT id, name FROM clubs WHERE id = ? FOR UPDATE", [club_id]);
-        const actor = club && await committee_of(conn, req.user.id, club_id, { lock: true });
-        if (!club || !actor) throw new ApiError("NOT_FOUND", "That club does not exist.");
-        if (!is_committee(actor)) throw new ApiError("FORBIDDEN", "Only the committee can remove members.");
-        if (target_id === req.user.id) throw new ApiError("INVALID_STATE", "You can’t remove yourself.");
-        const target = await committee_of(conn, target_id, club_id, { lock: true });
-        if (!target) throw new ApiError("NOT_FOUND", "That person is not a member.");
-        if (target.role !== "member") throw new ApiError("FORBIDDEN", "Only plain members can be removed. Ask the president to change their role first.");
-        await end_members_only_places(conn, { club_id, user_id: target_id, actor: req.user.id, now, promote_locked });
-        await conn.query("DELETE FROM memberships WHERE user_id = ? AND club_id = ?", [target_id, club_id]);
-        await audit(conn, { actor: req.user.id, entity_type: "membership", entity_id: club_id, action: "member.left", details: { user_id: target_id, removed: true }, now });
-        await log_action(conn, { club, actor_id: req.user.id, target_id, type: "member_removed", description: "Removed a regular member from the club." });
-        await notify(conn, { users: [target_id], type: "club_membership", club_id, now, key: `removed:${club_id}:${target_id}:${to_db(now)}`,
-          title: `You were removed from ${club.name}`, body: "A committee member removed you from the club. Its members-only events are closed to you." });
-      });
-      res.status(204).end();
-    })],
+    // The president removes at once; committee ask for sign-off (removal_requests.js).
+    delete: member_delete_handlers({ pool, clock }),
   });
+
+  register_removal_routes(router, { pool, clock });
 
   // A committee member steps down to member (beta "leave committee").
   define_route(router, "/clubs/:club_id/committee", {

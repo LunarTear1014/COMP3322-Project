@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { PageHeading, Resource } from '../components/common'
 import { SignoffQueue } from '../components/SignoffQueue'
+import { RemovalQueue } from '../components/RemovalQueue'
 import { EventCard } from '../components/EventCard'
 import { ButtonLink, EmptyState, StatusChip } from '../components/ui'
 import { useAllOptions } from '../hooks/resources'
@@ -43,7 +44,8 @@ export function Organizer({ session }) {
   const managed = useMemo(() => new Set((events.data ?? []).map(event => event.id)), [events.data])
   useLiveSignal(anyEventIn(managed), events.refresh, { wait: 1500 })
   const committeeClubs = session.memberships.filter(isOrganizer)
-  const president = session.memberships.some(item => item.role === 'president')
+  const presidentClubs = session.memberships.filter(item => item.role === 'president')
+  const president = presidentClubs.length > 0
   const groups = groupManaged((events.data || []).filter(event => !club || String(event.club?.id) === club))
   return (
     <main className="page">
@@ -63,6 +65,7 @@ export function Organizer({ session }) {
       <p>Reports: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/reports`}>{item.club_name}</Link> </span>)}</p>
       <p>Activity logs: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/members#action-log-title`} aria-label={`${item.club_name} activity log`}>{item.club_name}</Link> </span>)}</p>
       {president && <SignoffQueue onChange={events.refresh} />}
+      {presidentClubs.filter(item => !club || String(item.club_id) === club).map(item => <RemovalQueue key={item.club_id} club={item} />)}
       <Resource value={events} allowEmpty>
         {events.data?.length === 0 ? (
           <EmptyState title="No managed events yet" actions={<ButtonLink variant="primary" to="/bookings/new">Request a venue</ButtonLink>}>Request a venue to create your first event.</EmptyState>

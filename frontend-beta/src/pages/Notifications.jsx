@@ -4,6 +4,8 @@ import { Link } from 'react-router'
 import { request, query } from '../api'
 import { PageHeading, Resource, Pagination, Feedback } from '../components/common'
 import { Button, EmptyState, useToast } from '../components/ui'
+import { RemovalDecision } from '../components/RemovalDecision'
+import { decideRemoval } from '../components/RemovalQueue'
 import { useResource, useAction } from '../hooks/resources'
 import { timeLine } from '../lib/format'
 import { groupByDay, notificationMeta } from '../lib/notificationTypes'
@@ -16,6 +18,13 @@ function NotificationRow({ item, action }) {
     `/clubs/${item.club_id}/join-requests/${item.join_request_id}/review`, 'POST', { decision },
     decision === 'accept' ? 'Join request approved.' : 'Join request rejected.',
   )
+  // The inbox item only carries the request's id; the decision needs its current version.
+  async function decideRemovalRequest(decision, reason) {
+    const listed = await action.run(`/clubs/${item.club_id}/removal-requests`, 'GET')
+    const found = listed?.data?.find(row => row.id === item.removal_request_id)
+    if (listed && !found) { await action.run(`/notifications/${item.id}/read`, 'PATCH', {}, 'Someone already decided this request.'); return }
+    if (found) await decideRemoval(action, item.club_id, found, decision, reason)
+  }
   return (
     <li className={`notification${item.read_at ? '' : ' is-unread'}`}>
       <span className="notification-icon" aria-hidden="true"><Icon className="cs-icon" /></span>
@@ -32,6 +41,9 @@ function NotificationRow({ item, action }) {
             <Button disabled={action.busy} onClick={() => review('accept')}>Approve request</Button>
             <Button disabled={action.busy} onClick={() => review('reject')}>Reject request</Button>
           </div>
+        )}
+        {item.type === 'member_removal_request' && item.removal_request_id && (
+          <RemovalDecision name={item.body.match(/asked to remove (.+)\.$/)?.[1] ?? 'this member'} busy={action.busy} onDecide={decideRemovalRequest} />
         )}
         <div>
           {item.read_at

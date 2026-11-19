@@ -35,7 +35,12 @@ describe("v1 club management and action log", { skip }, () => {
     assert.equal((await mem.delete(`/clubs/1/members/${ids.s1}`)).status, 403, "plain members can't remove anyone");
     assert.equal((await comm.delete(`/clubs/1/members/${ids.pres}`)).status, 403, "only plain members can be removed");
     assert.equal((await comm.delete(`/clubs/1/members/${ids.comm}`)).body.error.code, "INVALID_STATE");
-    assert.equal((await comm.delete(`/clubs/1/members/${ids.s1}`)).status, 204);
+    // A committee removal waits for the president (see removal_requests.db.test.js).
+    const asked = await comm.delete(`/clubs/1/members/${ids.s1}`);
+    assert.equal(asked.status, 202);
+    assert.equal(await role(ids.s1), "member");
+    const pres = await app.client_for("pres@x.test");
+    assert.equal((await pres.post(`/clubs/1/removal-requests/${asked.body.data.id}/decision`, { decision: "approve", expected_version: asked.body.data.version })).status, 200);
     assert.equal(await role(ids.s1), null);
     const [[gone]] = await app.admin.query("SELECT status FROM participations WHERE event_id = ? AND user_id = ?", [event.id, ids.s1]);
     assert.equal(gone.status, "left");
@@ -45,9 +50,9 @@ describe("v1 club management and action log", { skip }, () => {
     assert.equal(Number(told.n), 1);
 
     // The president undoes it; membership (not the event seat) comes back.
-    const pres = await app.client_for("pres@x.test");
     const entry = await latest(pres);
     assert.equal(entry.type, "member_removed");
+    assert.match(entry.description, /requested by comm/);
     assert.equal(entry.target.id, ids.s1);
     assert.equal(entry.undoable, true);
     assert.equal((await pres.post(`/clubs/1/actions/${entry.id}/undo`, {})).status, 200);
@@ -154,7 +159,7 @@ describe("v1 club management and action log", { skip }, () => {
     const pres = await app.client_for("pres@x.test");
     const comm = await app.client_for("comm@x.test");
     const mem = await app.client_for("mem@x.test");
-    await comm.delete(`/clubs/1/members/${ids.s2}`);
+    await pres.delete(`/clubs/1/members/${ids.s2}`);
     const seen_by_president = (await pres.get("/clubs/1/actions")).body.data;
     assert.ok(seen_by_president.some((row) => row.undoable), "the president is offered undo");
     const response = await comm.get("/clubs/1/actions");

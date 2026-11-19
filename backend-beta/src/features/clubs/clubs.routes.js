@@ -430,6 +430,9 @@ router.delete(
       if (result.reason === "forbidden") {
         return res.status(403).json({ message: "Only committee members or the president can remove club members." });
       }
+      if (result.reason === "president_required") {
+        return res.status(403).json({ message: "Committee members ask the president to remove a member. Use a removal request." });
+      }
       if (result.reason === "cannot_remove_self") {
         return res.status(400).json({ message: "You cannot remove yourself from the club." });
       }

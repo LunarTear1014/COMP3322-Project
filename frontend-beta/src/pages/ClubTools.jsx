@@ -12,6 +12,8 @@ import { PHOTO_HELP, photoForm, photoProblem } from '../lib/clubPhoto'
 import { clubColour } from '../lib/club'
 import { useAction, useAllOptions, useResource } from '../hooks/resources'
 import { useNotificationSignal } from '../hooks/useLiveSignal'
+import { RemovalDecision } from '../components/RemovalDecision'
+import { REMOVAL_NOTES, decideRemoval } from '../components/RemovalQueue'
 import { isOrganizer } from '../lib/roles'
 
 const ROLE = { president: 'President', committee: 'Committee', member: 'Member' }
@@ -113,8 +115,9 @@ export function ClubTools({ session, refreshSession }) {
 
 // One table row per member. A confirmation (make president, remove) replaces
 // the row's buttons in the Actions cell, so it stays next to the person it is about.
-function MemberRow({ member, mine, onChange, onRemove, busy, self }) {
+function MemberRow({ member, mine, onChange, onRemove, onAskRemoval, onWithdraw, onDecide, request, viewerId, busy, self }) {
   const [confirming, setConfirming] = useState(null)
+  const [reason, setReason] = useState('')
   const president = mine === 'president'
   const name = member.user.name
   let actions = null
@@ -127,6 +130,17 @@ function MemberRow({ member, mine, onChange, onRemove, busy, self }) {
           <Button onClick={() => setConfirming(null)}>Cancel</Button>
         </div>
       </div>
+    )
+  } else if (confirming === 'remove' && !president) {
+    actions = (
+      <form className="inline-confirm member-confirm" aria-label={`Ask the president to remove ${name}`} onSubmit={async event => { event.preventDefault(); setConfirming(null); await onAskRemoval(member, reason.trim()); setReason('') }}>
+        <span>Ask the president to remove {name}? Nothing changes until the president approves, and {name} is not told about the request.</span>
+        <TextField label="Reason" optional hint="The president sees this." maxLength={500} value={reason} onChange={event => setReason(event.target.value)} />
+        <div className="cs-row">
+          <Button variant="primary" type="submit" busy={busy}>Send request</Button>
+          <Button type="button" onClick={() => { setConfirming(null); setReason('') }}>Cancel</Button>
+        </div>
+      </form>
     )
   } else if (confirming === 'remove') {
     actions = (
@@ -147,8 +161,18 @@ function MemberRow({ member, mine, onChange, onRemove, busy, self }) {
       buttons.push(<Button key="demote" disabled={busy} aria-label={`Remove ${name} from the committee`} onClick={() => onChange(member, 'member')}>Remove from committee</Button>)
       buttons.push(<Button key="president" disabled={busy} aria-label={`Make ${name} president`} onClick={() => setConfirming('president')}>Make president</Button>)
     }
-    if (mine && mine !== 'member' && member.role === 'member' && !self) {
+    const removable = mine && mine !== 'member' && member.role === 'member' && !self
+    if (request && president) {
+      buttons.push(<RemovalDecision key="decide" name={name} busy={busy} onDecide={(decision, why) => onDecide(request, decision, why)} />)
+    }
+    if (request && request.requested_by?.id === viewerId) {
+      buttons.push(<Button key="withdraw" disabled={busy} aria-label={`Withdraw the removal request for ${name}`} onClick={() => onWithdraw(request)}>Withdraw request</Button>)
+    }
+    if (removable && president) {
       buttons.push(<Button key="remove" disabled={busy} aria-label={`Remove ${name} from the club`} onClick={() => setConfirming('remove')}>Remove from club</Button>)
+    }
+    if (removable && !president && !request) {
+      buttons.push(<Button key="ask" disabled={busy} aria-label={`Request removal of ${name}`} onClick={() => setConfirming('remove')}>Request removal</Button>)
     }
     actions = buttons.length ? <div className="cs-row">{buttons}</div> : <span className="cs-meta" aria-label="No actions available">—</span>
   }
@@ -157,7 +181,15 @@ function MemberRow({ member, mine, onChange, onRemove, busy, self }) {
       <th scope="row" className="member-name">{name}{self && <span className="cs-meta"> (you)</span>}</th>
       <td><StatusChip state="joined" label={ROLE[member.role]} /></td>
       <td className="cs-nums">{member.joined_at ? dateLabel(member.joined_at) : '—'}</td>
-      <td className="member-actions">{actions}</td>
+      <td className="member-actions">
+        {request && (
+          <div className="removal-pending">
+            <StatusChip state="awaiting_president" label="Removal pending" />
+            {(president || request.requested_by?.id === viewerId) && request.requested_by && <p className="cs-meta">Asked by {request.requested_by.id === viewerId ? 'you' : request.requested_by.name}{request.reason ? `: ${request.reason}` : ''}</p>}
+          </div>
+        )}
+        {actions}
+      </td>
     </tr>
   )
 }
@@ -210,14 +242,16 @@ export function ClubMembers({ session, refreshSession }) {
   const toast = useToast()
   const [search, setSearch] = useState('')
   const members = useAllOptions(`/clubs/${id}/members`)
+  const removals = useAllOptions(`/clubs/${id}/removal-requests`)
   const mine = session.memberships.find(item => String(item.club_id) === id)?.role
   const [changes, setChanges] = useState(0)
-  const refresh = () => { members.refresh(); refreshSession?.(); setChanges(count => count + 1) }
+  const refresh = () => { members.refresh(); removals.refresh(); refreshSession?.(); setChanges(count => count + 1) }
   const action = useAction(refresh)
   // A role or membership change made in another session refreshes the roster,
   // the log and this user's own controls (F08).
-  useNotificationSignal(note => ['role_changed', 'club_membership', 'club_join_request'].includes(note?.type) && String(note.club_id) === id, () => {
+  useNotificationSignal(note => ['role_changed', 'club_membership', 'club_join_request', ...REMOVAL_NOTES].includes(note?.type) && String(note.club_id) === id, () => {
     members.refresh()
+    removals.refresh()
     setChanges(count => count + 1)
   })
   // President first, then the committee, then members; alphabetical within a role.
@@ -240,9 +274,24 @@ export function ClubMembers({ session, refreshSession }) {
     if (result) toast.show({ message: `${member.user.name} was removed from the club.`, tone: 'info' })
   }
 
+  // Committee members ask; the president decides.
+  async function askRemoval(member, reason) {
+    const result = await action.run(`/clubs/${id}/members/${member.user.id}`, 'DELETE', reason ? { reason } : {})
+    if (result) toast.show({ message: `Asked the president to remove ${member.user.name}. Nothing changes until they approve.`, tone: 'info' })
+  }
+  async function withdraw(request) {
+    const result = await action.run(`/clubs/${id}/removal-requests/${request.id}`, 'DELETE', {})
+    if (result) toast.show({ message: `Withdrew the request to remove ${request.user.name}.`, tone: 'info' })
+  }
+  async function decide(request, decision, reason) {
+    const result = await decideRemoval(action, id, request, decision, reason)
+    if (result) toast.show({ message: decision === 'approve' ? `${request.user.name} was removed from the club.` : `${request.user.name} stays in the club.`, tone: 'info' })
+  }
+  const pendingByUser = new Map((removals.data ?? []).map(request => [request.user.id, request]))
+
   return (
     <main className="page">
-      <PageHeading title="Members and roles" description={mine === 'president' ? 'Appoint committee members, remove them, or hand over the presidency.' : 'Only the president can change roles. Committee members can remove plain members.'} />
+      <PageHeading title="Members and roles" description={mine === 'president' ? 'Appoint committee members, remove them, or hand over the presidency.' : 'Only the president can change roles. Committee members can ask the president to remove plain members.'} />
       <ErrorNotice error={action.error} />
       <Resource value={members} empty="No members yet.">
         <TextField label="Search members" type="search" name="member-search" value={search} onChange={event => setSearch(event.target.value)} />
@@ -252,7 +301,7 @@ export function ClubMembers({ session, refreshSession }) {
               <caption className="cs-sr">President, committee and members of this club</caption>
               <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Joined</th><th scope="col">Actions</th></tr></thead>
               <tbody>
-                {shown.map(member => <MemberRow key={member.user.id} member={member} mine={mine} self={member.user.id === session.user.id} busy={action.busy} onChange={change} onRemove={remove} />)}
+                {shown.map(member => <MemberRow key={member.user.id} member={member} mine={mine} self={member.user.id === session.user.id} viewerId={session.user.id} request={pendingByUser.get(member.user.id)} busy={action.busy} onChange={change} onRemove={remove} onAskRemoval={askRemoval} onWithdraw={withdraw} onDecide={decide} />)}
               </tbody>
             </table>
           </div>

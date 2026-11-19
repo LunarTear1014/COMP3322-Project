@@ -1,6 +1,6 @@
 import {
   Bell, CalendarX, CalendarCheck, CalendarClock, ChartColumn, ClipboardCheck, Clock, Megaphone, PenLine,
-  QrCode, ShieldCheck, Ticket, UserCog, UserPlus, Users,
+  QrCode, ShieldCheck, Ticket, UserCog, UserMinus, UserPlus, Users,
 } from 'lucide-react'
 import { campusDate, addDays } from '../apiShared.js'
 
@@ -22,6 +22,8 @@ export const NOTIFICATION_TYPES = {
   activity_digest: { icon: ChartColumn, label: 'Daily digest' },
   club_join_request: { icon: UserPlus, label: 'Join request' },
   event_join_request: { icon: UserPlus, label: 'Event request' },
+  member_removal_request: { icon: UserMinus, label: 'Removal request' },
+  member_removal_decided: { icon: UserMinus, label: 'Removal decision' },
   club_membership: { icon: Users, label: 'Club membership' },
   event: { icon: CalendarClock, label: 'Event' },
 }

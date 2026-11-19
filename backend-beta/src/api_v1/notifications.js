@@ -5,7 +5,7 @@ import { to_dto } from "../features/notifications/notifications.repository.js";
 import { define_route } from "./router.js";
 import { id_param, page_meta, require_user, to_db, wrap } from "./common.js";
 
-const COLUMNS = "id, user_id, event_id, booking_id, club_id, club_join_request_id, type, title, body, event_title, message, created_at, read_at";
+const COLUMNS = "id, user_id, event_id, booking_id, club_id, club_join_request_id, member_removal_request_id, type, title, body, event_title, message, created_at, read_at";
 
 // Own inbox only. Marking read is idempotent and keeps the first read_at;
 // DELETE on the same path marks it unread again (MSG-01).

@@ -66,10 +66,22 @@ Only the club's president SHALL cancel a published event. Committee members SHAL
 - **THEN** the existing atomic cancellation runs, and participants and committee are notified
 
 ### Requirement: Member removal and committee step-down
-The committee and president SHALL be able to remove a plain member from the club, which ends that student's upcoming members-only registrations (promoting waiters as usual) and closes their pending event requests. A committee member SHALL be able to step down to member themselves. Neither action SHALL apply to the president.
+The president SHALL be able to remove a plain member from the club at once. A committee member SHALL only be able to request the removal, which needs the president's sign-off, and the president SHALL be notified. Removal ends that student's upcoming members-only registrations (promoting waiters as usual) and closes their pending event requests. A committee member SHALL be able to step down to member themselves. Neither action SHALL apply to the president.
+
+#### Scenario: Committee member requests a removal
+- **WHEN** a committee member asks to remove a plain member
+- **THEN** a pending removal request is created, the president is notified with Approve and Reject, the member stays in the club and is not told, and asking again returns the same request
+
+#### Scenario: President rejects a removal request
+- **WHEN** the president rejects a pending request with a reason
+- **THEN** the member stays, the requesting committee member is notified with the reason, and the action is logged
+
+#### Scenario: Requester withdraws
+- **WHEN** the committee member who asked withdraws a pending request
+- **THEN** the request is closed as withdrawn and the president's actionable notification is removed
 
 #### Scenario: Remove a member with a members-only seat
-- **WHEN** a committee member removes a plain member who holds a seat at an upcoming members-only event
+- **WHEN** the president removes (or approves the removal of) a plain member who holds a seat at an upcoming members-only event
 - **THEN** the membership is deleted, the seat is released to the first eligible waiter, and the removed student is notified
 
 #### Scenario: Committee member steps down

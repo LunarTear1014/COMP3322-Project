@@ -1,4 +1,5 @@
-// Read-only local preview data. This module is loaded only by `npm run dev:fixtures`.
+// Local preview data. Everything is read-only except member removal requests, which live in memory so the committee
+// and president flows can be tried (they reset when the dev server restarts). This module is loaded only by `npm run dev:fixtures`.
 const token = 'local-preview-token'
 // Two preview accounts. A venue administrator holds no club role and never registers for events,
 // so the committee organizer and the venue admin are separate people (password: preview12345).
@@ -121,8 +122,15 @@ const bookingRequests = [
   { id: 11, event_id: 3, event_title: 'Student film showcase and conversation with emerging filmmakers', club_id: 2, venue_id: 2, start_at: future(12), end_at: future(12.08), status: 'pending', version: 1, expired: false },
   { id: 12, event_id: 4, event_title: 'Photography workshop', club_id: 1, venue_id: 1, start_at: future(15), end_at: future(15.08), status: 'pending', version: 1, expired: false },
 ]
+const removalNames = { 3: 'Riley Chen', 4: 'Zara Wong', 6: 'Ada Ng' }
+const removalRequest = (id, userId, requestedBy, reason = null) => ({ id, club_id: 1, status: 'pending', version: 1, reason, created_at: future(-0.4), decided_at: null, decision_reason: null,
+  user: { id: userId, name: removalNames[userId] }, requested_by: { id: requestedBy, name: requestedBy === user.id ? user.name : removalNames[requestedBy] }, decided_by: null })
 const list = (data, extra = {}) => ({ data, meta: { page: 1, page_size: 100, total: data.length, ...extra } })
 export function fixturePlugin() {
+  // Preview-only state: one pending request (Zara Wong asked to remove Riley Chen) and the members removed so far.
+  let removals = [removalRequest(501, 3, 4, 'Has not attended any event this term.')]
+  let nextRemoval = 502
+  const removedMembers = new Set()
   return { name: 'clubspace-local-preview', configureServer(server) {
     server.middlewares.use('/api/v1', (req, res) => {
       const url = new URL(req.url, 'http://localhost')
@@ -154,6 +162,53 @@ export function fixturePlugin() {
         req.on('end', () => send(200, { data: { club_id: clubId, photo: clubPhoto(clubId, raw.match(/name="alt"\r?\n\r?\n([^\r\n]*)/)?.[1] || 'Club photo') } }))
         return
       }
+      // Member removal requests: the one write the preview supports. The president scenario decides; committee ask and withdraw.
+      const removalRoute = url.pathname.match(/^\/clubs\/1\/(members\/(\d+)|removal-requests\/(\d+)\/decision|removal-requests\/(\d+))$/)
+      if (removalRoute && (req.method === 'DELETE' || req.method === 'POST')) {
+        if (isAdmin) return fail(404, 'NOT_FOUND', 'That club does not exist.')
+        const asPresident = url.searchParams.get('preview') === 'president'
+        let raw = ''
+        req.on('data', chunk => { raw += chunk })
+        req.on('end', () => {
+          let body = {}
+          try { body = raw ? JSON.parse(raw) : {} } catch { return fail(400, 'INVALID_JSON', 'Invalid request.') }
+          const open = id => removals.find(item => item.id === Number(id))
+          if (removalRoute[2] && req.method === 'DELETE') {
+            const target = Number(removalRoute[2])
+            const known = [3, 6].includes(target) && !removedMembers.has(target)
+            if (!known) return fail(403, 'FORBIDDEN', 'Only plain members can be removed. Ask the president to change their role first.')
+            if (asPresident) {
+              removedMembers.add(target)
+              removals = removals.filter(item => item.user.id !== target)
+              res.statusCode = 204
+              return res.end()
+            }
+            const existing = removals.find(item => item.user.id === target)
+            if (existing) return send(202, { data: existing })
+            const created = removalRequest(nextRemoval++, target, user.id, typeof body.reason === 'string' ? body.reason : null)
+            removals.push(created)
+            return send(202, { data: created })
+          }
+          if (removalRoute[3] && req.method === 'POST') {
+            if (!asPresident) return fail(403, 'FORBIDDEN', 'Only the president can decide removal requests.')
+            const item = open(removalRoute[3])
+            if (!item) return fail(404, 'NOT_FOUND', 'That removal request does not exist.')
+            if (body.decision === 'reject' && !String(body.reason || '').trim()) return send(422, { error: { code: 'VALIDATION_FAILED', message: 'Say why you are not approving this.', fields: { reason: 'A reason is required to reject.' }, request_id: 'local-fixture' } })
+            removals = removals.filter(entry => entry.id !== item.id)
+            if (body.decision === 'approve') removedMembers.add(item.user.id)
+            return send(200, { data: { ...item, status: body.decision === 'approve' ? 'approved' : 'rejected', version: item.version + 1, decision_reason: body.reason ?? null } })
+          }
+          if (removalRoute[4] && req.method === 'DELETE') {
+            const item = open(removalRoute[4])
+            if (!item) return fail(404, 'NOT_FOUND', 'That removal request does not exist.')
+            if (!asPresident && item.requested_by.id !== user.id) return fail(403, 'FORBIDDEN', 'Only the person who asked can withdraw this request.')
+            removals = removals.filter(entry => entry.id !== item.id)
+            return send(200, { data: { ...item, status: 'withdrawn', version: item.version + 1 } })
+          }
+          return fail(405, 'METHOD_NOT_ALLOWED', 'That method is not supported here.')
+        })
+        return
+      }
       if (req.method !== 'GET') {
         if (/^\/bookings\/\d+\/decision$/.test(url.pathname)) return fail(409, 'VENUE_UNAVAILABLE', 'The venue is no longer available. Review the updated request before trying again.')
         return fail(503, 'PREVIEW_READ_ONLY', 'This is a read-only preview. Changes require the real backend.')
@@ -180,13 +235,14 @@ export function fixturePlugin() {
       if (url.pathname === '/events/35/participants') return send(200, list([{ user: { id: 3, name: 'Riley Chen', email: 'riley@example.test', student_id: 'S3' }, status: 'joined', queue_position: null, checked_in: true }, { user: { id: 4, name: 'Zara Wong', email: 'zara@example.test', student_id: 'S4' }, status: 'joined', queue_position: null, checked_in: false }]))
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
       // Deliberately not sorted by role: the page puts the president first, then the committee, then members.
+      if (url.pathname === '/clubs/1/removal-requests') return send(200, list(isAdmin ? [] : removals))
       if (url.pathname === '/clubs/1/members') return send(200, list([
         { user_id: user.id, name: user.name, role: 'committee', club_id: 1, version: 1, joined_at: '2026-01-01T00:00:00Z', user: { id: user.id, name: user.name } },
         { user_id: 3, name: 'Riley Chen', role: 'member', club_id: 1, version: 2, joined_at: '2026-03-12T00:00:00Z', user: { id: 3, name: 'Riley Chen' } },
         { user_id: 4, name: 'Zara Wong', role: 'committee', club_id: 1, version: 1, joined_at: '2026-02-02T00:00:00Z', user: { id: 4, name: 'Zara Wong' } },
         { user_id: 2, name: 'Morgan Lee', role: 'president', club_id: 1, version: 1, joined_at: '2025-09-01T00:00:00Z', user: { id: 2, name: 'Morgan Lee' } },
         { user_id: 6, name: 'Ada Ng', role: 'member', club_id: 1, version: 1, joined_at: '2026-04-20T00:00:00Z', user: { id: 6, name: 'Ada Ng' } },
-      ]))
+      ].filter(member => !removedMembers.has(member.user_id))))
       // The committee reads the log; undo is the president's, so nothing is undoable here.
       if (url.pathname === '/clubs/1/actions') return send(200, list([
         { id: 22, type: 'member_promoted', description: 'Appointed a member to the committee.', actor: { id: 2, name: 'Morgan Lee' }, target: { id: 4, name: 'Zara Wong' }, undoable: false, created_at: future(-3), undone_at: null },
@@ -258,7 +314,11 @@ export function fixturePlugin() {
       const pageSize = Number(params.get('page_size')) || 20
       const eventList = { data: filteredEvents.slice((page - 1) * pageSize, page * pageSize).map(event => (isAdmin ? adminView(event) : event)), meta: { page, page_size: pageSize, total: filteredEvents.length } }
       const pagedList = rows => ({ data: rows.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: rows.length } })
-      const routes = { '/profile': { data: me }, '/clubs': pagedList(isAdmin ? clubs.map(club => ({ ...club, my_role: null })) : clubs), '/me/memberships': pagedList(empty || isAdmin ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list(empty || isAdmin ? [] : organizerEvents), '/me/registrations': pagedList(empty || isAdmin ? [] : myRegistrations), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list(empty ? [] : inbox, { unread_count: empty ? 0 : inbox.filter(n => !n.read_at).length }) }
+      // The president also hears about each pending removal request.
+      const inboxRows = url.searchParams.get('preview') === 'president' && !isAdmin
+        ? [...removals.map(item => ({ id: 600 + item.id, type: 'member_removal_request', event_id: null, booking_id: null, club_id: 1, join_request_id: null, removal_request_id: item.id, title: 'Removal request: Photography Society', body: `${item.requested_by.name} asked to remove ${item.user.name}.`, created_at: item.created_at, read_at: null })), ...inbox]
+        : inbox
+      const routes = { '/profile': { data: me }, '/clubs': pagedList(isAdmin ? clubs.map(club => ({ ...club, my_role: null })) : clubs), '/me/memberships': pagedList(empty || isAdmin ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list(empty || isAdmin ? [] : organizerEvents), '/me/registrations': pagedList(empty || isAdmin ? [] : myRegistrations), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list(empty ? [] : inboxRows, { unread_count: empty ? 0 : inboxRows.filter(n => !n.read_at).length }) }
       return routes[url.pathname] ? send(200, routes[url.pathname]) : fail(404, 'NOT_FOUND', 'This endpoint is not included in the preview.')
     })
   } }

@@ -3,7 +3,9 @@ import { vi } from 'vitest'
 import { fixturePlugin } from '../../dev/fixtures.js'
 
 let handler
-fixturePlugin().configureServer({ middlewares: { use(_path, callback) { handler = callback } } })
+// A fresh plugin also resets the preview's in-memory removal requests.
+export function resetFixtures() { fixturePlugin().configureServer({ middlewares: { use(_path, callback) { handler = callback } } }) }
+resetFixtures()
 
 // A fetch stub backed by the local preview fixtures. `override(url, options)`
 // may return a Response to replace a fixture answer; `log` records every call.

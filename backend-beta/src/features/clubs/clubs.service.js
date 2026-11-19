@@ -517,6 +517,11 @@ async function remove_club_member(club_id, member_user_id, user_id) {
       await connection.rollback();
       return { ok: false, reason: "forbidden" };
     }
+    if (organizer.role !== "president") {
+      // A committee removal needs the president's sign-off (v1 removal requests).
+      await connection.rollback();
+      return { ok: false, reason: "president_required" };
+    }
     if (member_user_id === user_id) {
       await connection.rollback();
       return { ok: false, reason: "cannot_remove_self" };

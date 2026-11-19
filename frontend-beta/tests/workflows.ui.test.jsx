@@ -120,24 +120,27 @@ describe('frontend preview workflows', () => {
     await waitFor(() => expect(fetch.mock.calls.some(([url, o]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/committee' && o.method === 'DELETE')).toBe(true))
   })
 
-  it('lets a committee member search the roster and remove a plain member after confirming', async () => {
+  it('lets a committee member search the roster and ask the president to remove a plain member', async () => {
     window.history.replaceState({}, '', '/organizer/clubs/1/members')
     const fetch = previewFetch()
     vi.stubGlobal('fetch', fetch)
     render(<App />)
 
     const search = await screen.findByRole('searchbox', { name: 'Search members' })
-    fireEvent.change(search, { target: { value: 'riley' } })
-    expect(screen.getByText('Riley Chen')).toBeTruthy()
+    fireEvent.change(search, { target: { value: 'ada' } })
+    expect(screen.getByText('Ada Ng')).toBeTruthy()
     expect(screen.queryByText('Zara Wong')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Appoint Riley Chen to the committee' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Riley Chen from the club' }))
-    fireEvent.click(within(screen.getByRole('group', { name: 'Remove Riley Chen from the club' })).getByRole('button', { name: 'Remove from club' }))
+    expect(screen.queryByRole('button', { name: 'Appoint Ada Ng to the committee' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remove Ada Ng from the club' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Request removal of Ada Ng' }))
+    const form = screen.getByRole('form', { name: 'Ask the president to remove Ada Ng' })
+    expect(within(form).getByText(/Nothing changes until the president approves/)).toBeTruthy()
+    fireEvent.click(within(form).getByRole('button', { name: 'Send request' }))
     await waitFor(() => {
-      const removal = fetch.mock.calls.find(([url, o]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/members/3' && o?.method === 'DELETE')
-      expect(removal).toBeTruthy()
+      const request = fetch.mock.calls.find(([url, o]) => new URL(url, 'http://localhost').pathname === '/api/v1/clubs/1/members/6' && o?.method === 'DELETE')
+      expect(request).toBeTruthy()
     })
-    expect(await screen.findByText('Riley Chen was removed from the club.')).toBeTruthy()
+    expect(await screen.findByText(/Asked the president to remove Ada Ng/)).toBeTruthy()
     // Committee members see the log too, read-only.
     expect(screen.getByRole('heading', { name: 'Club activity log' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^Undo/ })).toBeNull()

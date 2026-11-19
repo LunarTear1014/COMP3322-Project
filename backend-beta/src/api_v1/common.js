@@ -90,13 +90,13 @@ async function audit(conn, { actor, entity_type, entity_id, action, details = {}
 
 // Notification rows are written inside the source transaction. The legacy NOT
 // NULL columns (event_title, message) are filled from title and body.
-async function notify(conn, { users, type, title, body, event_id = null, booking_id = null, club_id = null, club_join_request_id = null, key, now, exclude = null }) {
+async function notify(conn, { users, type, title, body, event_id = null, booking_id = null, club_id = null, club_join_request_id = null, member_removal_request_id = null, key, now, exclude = null }) {
   const recipients = [...new Set(users)].filter((id) => id !== exclude).slice(0, 1500);
   for (const user_id of recipients) {
     await conn.query(
-      `INSERT IGNORE INTO notifications (user_id, event_id, booking_id, club_id, club_join_request_id, type, dedup_key, title, body, event_title, message, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user_id, event_id, booking_id, club_id, club_join_request_id, type, `${key}:${user_id}`, title, body, title.slice(0, 255), body.slice(0, 1000), to_db(now)]);
+      `INSERT IGNORE INTO notifications (user_id, event_id, booking_id, club_id, club_join_request_id, member_removal_request_id, type, dedup_key, title, body, event_title, message, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user_id, event_id, booking_id, club_id, club_join_request_id, member_removal_request_id, type, `${key}:${user_id}`, title, body, title.slice(0, 255), body.slice(0, 1000), to_db(now)]);
   }
   return recipients.length;
 }
