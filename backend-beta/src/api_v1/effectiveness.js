@@ -12,8 +12,10 @@ const round3 = (n) => Math.round(n * 1000) / 1000;
 const rate = (num, den) => (den > 0 ? round3(num / den) : null);
 const SOURCES = ["explore", "club", "inbox", "my_events", "share", "other"];
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-// Report groups by start hour, so each slot needs its own start hour.
-const SLOTS = Object.fromEntries(CAMPUS_SLOTS.map((slot) => [Number(slot.start.slice(0, 2)), [slot.id, slot.name]]));
+// Events are grouped by their Hong Kong start and end time ("06:00-21:00"),
+// because early morning and full day share a start hour. Times that match no
+// slot (legacy bookings) keep a group of their own, named by the times.
+const SLOTS = new Map(CAMPUS_SLOTS.map((slot) => [`${slot.start}-${slot.end}`, [slot.id, slot.name]]));
 
 function median(values) {
   if (!values.length) return null;
@@ -116,14 +118,15 @@ async function build_report(pool, { club_id, from, to }) {
   const [h, a, v, t] = [bucket(history), bucket(attendance), bucket(views), bucket(tags)];
   const metrics = events.map((event) => ({ event, ...event_metrics(event, h.get(event.event_id) ?? [], a.get(event.event_id) ?? [], v.get(event.event_id) ?? []) }));
   const rows = metrics.map(({ event, ...rest }) => rest);
-  const tagged = metrics.map(({ event, ...rest }) => ({ ...rest, _tags: (t.get(event.event_id) ?? []).map((tag) => tag.slug), _start: asDate(event.start_time) }));
+  const tagged = metrics.map(({ event, ...rest }) => ({ ...rest, _tags: (t.get(event.event_id) ?? []).map((tag) => tag.slug), _start: asDate(event.start_time), _end: asDate(event.end_time ?? event.start_time) }));
   const tag_names = new Map(tags.map((tag) => [tag.slug, tag.name]));
   const hk = (date) => new Date(date.getTime() + 8 * 3_600_000);
+  const hhmm = (date) => hk(date).toISOString().slice(11, 16);
   return {
     club_id, from: from.toISOString(), to: to.toISOString(), campus_timezone: CAMPUS_TIMEZONE, events: rows,
     by_tag: group(tagged, (item) => item._tags, (slug) => tag_names.get(slug) ?? slug).map(({ key, ...rest }) => ({ slug: key, ...rest })),
     by_weekday: group(tagged, (item) => hk(item._start).getUTCDay(), (day) => WEEKDAYS[day]).map(({ key, name, ...rest }) => ({ weekday: key, name, ...rest })),
-    by_slot: group(tagged, (item) => hk(item._start).getUTCHours(), (hour) => SLOTS[hour]?.[1] ?? `${hour}:00`).map(({ key, name, ...rest }) => ({ slot: SLOTS[key]?.[0] ?? String(key), name, ...rest })),
+    by_slot: group(tagged, (item) => `${hhmm(item._start)}-${hhmm(item._end)}`, (span) => SLOTS.get(span)?.[1] ?? span).map(({ key, name, ...rest }) => ({ slot: SLOTS.get(key)?.[0] ?? key, name, ...rest })),
   };
 }
 

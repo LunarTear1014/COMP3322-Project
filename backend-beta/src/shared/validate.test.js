@@ -97,12 +97,17 @@ describe("Hong Kong slot mapping", () => {
     const span = (id) => { const { start, end } = resolve_slot("2026-11-12", id, now); return [start.toISOString(), end.toISOString()]; };
     assert.deepEqual(span("early_morning"), ["2026-11-11T22:00:00.000Z", "2026-11-12T00:00:00.000Z"]);
     assert.deepEqual(span("night"), ["2026-11-12T11:00:00.000Z", "2026-11-12T13:00:00.000Z"]);
-    assert.deepEqual(span("full_day"), ["2026-11-12T01:00:00.000Z", "2026-11-12T10:00:00.000Z"]);
+    assert.deepEqual(span("full_day"), ["2026-11-11T22:00:00.000Z", "2026-11-12T13:00:00.000Z"]);
   });
 
-  test("slot start hours are unique, so reports can group by them", () => {
-    const hours = SLOTS.map((slot) => slot.start.slice(0, 2));
-    assert.equal(new Set(hours).size, hours.length);
+  test("slot spans are unique, so reports can group by them", () => {
+    const spans = SLOTS.map((slot) => `${slot.start}-${slot.end}`);
+    assert.equal(new Set(spans).size, spans.length);
+  });
+
+  test("full day spans every other slot", () => {
+    const full = SLOTS.find((slot) => slot.id === "full_day");
+    for (const slot of SLOTS) assert.ok(full.start <= slot.start && slot.end <= full.end, slot.id);
   });
 
   test("Hong Kong midnight is 16:00Z the previous day", () => {

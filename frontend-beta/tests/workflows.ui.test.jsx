@@ -258,7 +258,7 @@ describe('frontend preview workflows', () => {
     const table = await screen.findByRole('table', { name: 'Harbour Room time slots' })
     expect(within(table).getAllByRole('columnheader')).toHaveLength(8)
     expect(within(table).getAllByRole('rowheader').map(header => header.textContent))
-      .toEqual(['06:00–08:00', '10:00–12:00', '13:00–15:00', '16:00–18:00', '19:00–21:00', '09:00–18:00'])
+      .toEqual(['06:00–08:00', '10:00–12:00', '13:00–15:00', '16:00–18:00', '19:00–21:00', '06:00–21:00'])
     const today = campusDate(new Date())
     expect(table.querySelector('time[aria-current="date"]').dateTime).toBe(today)
     const dayPicker = screen.getByLabelText('Choose a day')
