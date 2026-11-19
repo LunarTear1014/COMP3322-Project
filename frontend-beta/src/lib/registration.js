@@ -4,7 +4,7 @@ import { deadlineLabel, seatSummary } from './format.js'
 // and `my_registration`. The server stays authoritative: every action is
 // re-checked on write, and 409s are shown, not retried.
 //
-// kinds: join | waitlist | leave | leave_waitlist | cancel_request | join_club | none
+// kinds: join | waitlist | leave | leave_waitlist | cancel_request | join_club | admin | none
 const ACTIVE = ['joined', 'pending', 'waitlisted']
 
 export function registrationView(event) {
@@ -37,6 +37,10 @@ export function registrationView(event) {
       kind: 'cancel_request', chip: 'requested', headline: 'Request sent',
       detail: 'The committee will accept or reject it. You can cancel until then.', label: 'Cancel request',
     }
+  }
+  // Venue administrators manage events and never register for them.
+  if (reason === 'VENUE_ADMIN') {
+    return { kind: 'admin', chip: 'admin', headline: 'Managed by venue administrators', detail: 'Venue administrators manage events and don’t register for them.', label: 'Manage event' }
   }
   if (reason === 'MEMBERSHIP_REQUIRED') {
     return { kind: 'join_club', chip: 'members_only', headline: 'Members only', detail: 'Join the club to register for this event.', label: 'Join club to register' }

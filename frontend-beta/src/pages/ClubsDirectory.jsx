@@ -7,7 +7,7 @@ import { ClubIcon } from '../components/ClubIcon'
 import { clubColour } from '../lib/club'
 import { isOrganizer } from '../lib/roles'
 
-function ClubCard({ club, membership, busy, onJoin, onLeave, onWithdraw }) {
+function ClubCard({ club, membership, busy, admin, onJoin, onLeave, onWithdraw }) {
   const [confirming, setConfirming] = useState(false)
   const colour = clubColour(club.id)
   const organizer = membership && isOrganizer(membership)
@@ -25,7 +25,7 @@ function ClubCard({ club, membership, busy, onJoin, onLeave, onWithdraw }) {
           </span>
         )}
         {club.description && <p className="clamp-2">{club.description}</p>}
-        {confirming ? (
+        {admin ? null : confirming ? (
           <div className="inline-confirm" role="group" aria-label={`Leave ${club.name}`}>
             <p>Leave {club.name}? To join again you’ll send a new request, and the committee has to approve it.</p>
             <div className="cs-row">
@@ -65,7 +65,9 @@ function ClubCard({ club, membership, busy, onJoin, onLeave, onWithdraw }) {
 }
 
 // Clubs tab: the viewer's clubs first, then every other club with its join action.
-export function ClubsDirectory({ refreshSession }) {
+export function ClubsDirectory({ session, refreshSession }) {
+  // Venue administrators manage venues and events; they can browse clubs but hold no club role.
+  const admin = session?.user?.platform_role === 'venue_admin'
   const clubs = useAllOptions('/clubs')
   const memberships = useAllOptions('/me/memberships')
   const toast = useToast()
@@ -92,7 +94,7 @@ export function ClubsDirectory({ refreshSession }) {
 
   return (
     <main className="page">
-      <PageHeading title="Clubs" description="Find your people. Join a club to register for its members-only events." />
+      <PageHeading title="Clubs" description={admin ? 'Browse the clubs on campus. Venue administrators manage venues and events and don’t join clubs.' : 'Find your people. Join a club to register for its members-only events.'} />
       <Feedback action={action} />
       <Resource value={clubs} allowEmpty>
         <Resource value={memberships} allowEmpty>
@@ -100,18 +102,18 @@ export function ClubsDirectory({ refreshSession }) {
             <EmptyState title="No clubs yet" actions={<ButtonLink to="/events">Explore events</ButtonLink>}>Clubs will appear here as soon as they are added.</EmptyState>
           ) : (
             <>
-              <section aria-labelledby="your-clubs">
+              {!admin && <section aria-labelledby="your-clubs">
                 <h2 id="your-clubs" className="section-title">Your clubs</h2>
                 {mine.length ? (
-                  <div className="card-grid">{mine.map(club => <ClubCard key={club.id} club={club} membership={membershipFor(club.id)} busy={action.busy} onJoin={join} onLeave={leave} onWithdraw={withdraw} />)}</div>
+                  <div className="card-grid">{mine.map(club => <ClubCard key={club.id} club={club} admin={admin} membership={membershipFor(club.id)} busy={action.busy} onJoin={join} onLeave={leave} onWithdraw={withdraw} />)}</div>
                 ) : (
                   <p className="cs-meta">You haven’t joined a club yet. Pick one below.</p>
                 )}
-              </section>
+              </section>}
               <section aria-labelledby="discover-clubs">
-                <h2 id="discover-clubs" className="section-title">Discover clubs</h2>
+                <h2 id="discover-clubs" className="section-title">{admin ? 'All clubs' : 'Discover clubs'}</h2>
                 {others.length ? (
-                  <div className="card-grid">{others.map(club => <ClubCard key={club.id} club={club} busy={action.busy} onJoin={join} onLeave={leave} onWithdraw={withdraw} />)}</div>
+                  <div className="card-grid">{others.map(club => <ClubCard key={club.id} club={club} admin={admin} busy={action.busy} onJoin={join} onLeave={leave} onWithdraw={withdraw} />)}</div>
                 ) : (
                   <p className="cs-meta">You’re in every club. Nice.</p>
                 )}

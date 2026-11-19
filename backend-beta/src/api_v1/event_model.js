@@ -27,6 +27,7 @@ async function event_rows(db, { viewer_id, where = "1 = 1", params = [], order =
                AND (q.queued_at < mine.queued_at OR (q.queued_at = mine.queued_at AND q.user_id <= mine.user_id))) AS my_position,
             mem.role AS my_role,
             (SELECT r.status FROM event_join_requests r WHERE r.event_id = e.id AND r.user_id = ?) AS my_request,
+            (SELECT u.platform_role = 'venue_admin' FROM users u WHERE u.id = ?) AS viewer_admin,
             (SELECT COUNT(*) FROM event_join_requests r WHERE r.event_id = e.id AND r.status = 'pending') AS pending_requests
      FROM events e
      JOIN clubs c ON c.id = e.club_id
@@ -36,7 +37,7 @@ async function event_rows(db, { viewer_id, where = "1 = 1", params = [], order =
      LEFT JOIN memberships mem ON mem.club_id = e.club_id AND mem.user_id = ?
      WHERE ${where}
      ORDER BY ${order}${limit ? " LIMIT ? OFFSET ?" : ""}`,
-    [viewer_id, viewer_id, viewer_id, ...params, ...(limit ? [limit, offset] : [])]);
+    [viewer_id, viewer_id, viewer_id, viewer_id, ...params, ...(limit ? [limit, offset] : [])]);
   return rows;
 }
 
@@ -74,6 +75,8 @@ function eligibility(row, now) {
   if (row.status !== "published" || row.b_status !== "confirmed") return no("NOT_PUBLISHED");
   if (["joined", "waitlisted"].includes(status)) return no("ALREADY_REGISTERED");
   if (status === "requested") return no("REQUEST_PENDING");
+  // Venue administrators manage events; they never register for them.
+  if (Number(row.viewer_admin)) return no("VENUE_ADMIN");
   if (new Date(`${row.registration_closes_at.replace(" ", "T")}Z`) <= now || new Date(`${row.start_time.replace(" ", "T")}Z`) <= now) return no("REGISTRATION_CLOSED");
   if (row.visibility === "members_only" && !row.my_role) return no("MEMBERSHIP_REQUIRED");
   if (joined < Number(row.capacity)) return { can_register: true, can_waitlist: false, requires_approval, reason: null };

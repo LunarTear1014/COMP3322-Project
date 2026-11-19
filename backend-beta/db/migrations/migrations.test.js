@@ -26,7 +26,7 @@ test("shipped migrations load in order with unique numbers", async () => {
   assert.deepEqual(migrations.map((migration) => migration.version), [
     "001_preflight", "002_workflow_columns", "003_support_tables", "004_backfill_utc", "005_constraints_indexes", "006_cutover_marker", "010_club_president", "011_signoff_states",
     "012_tags", "013_attendance_views", "014_notifications_live", "015_events_cover", "016_join_requests", "017_live_signals",
-    "018_google_identity", "019_club_icons",
+    "018_google_identity", "019_club_icons", "020_admin_no_club_roles",
   ]);
   for (const migration of migrations) assert.match(migration.checksum, /^[0-9a-f]{64}$/);
 });
@@ -50,4 +50,12 @@ test("010 refuses clubs that already have two presidents", async () => {
   const [migration] = (await load_migrations(directory)).filter((m) => m.version === "010_club_president");
   const context = { query: async () => [{ club_id: 7, presidents: 2 }] };
   await assert.rejects(() => migration.up(context), (error) => error.code === "PREFLIGHT_FAILED" && /7/.test(error.message));
+});
+
+test("020 refuses venue admins that still hold club roles", async () => {
+  const [migration] = (await load_migrations(directory)).filter((m) => m.version === "020_admin_no_club_roles");
+  const context = { query: async (sql) => (/FROM memberships/.test(sql) ? [{ user_id: 9, email: "admin@example.test", club_id: 3, role: "committee" }] : []) };
+  await assert.rejects(() => migration.up(context), (error) => error.code === "PREFLIGHT_FAILED" && /admin@example\.test/.test(error.message) && /club 3/.test(error.message));
+  const pending = { query: async (sql) => (/club_join_requests/.test(sql) ? [{ user_id: 9, email: "a@example.test", club_id: 4 }] : []) };
+  await assert.rejects(() => migration.up(pending), (error) => error.code === "PREFLIGHT_FAILED" && /club 4/.test(error.message));
 });

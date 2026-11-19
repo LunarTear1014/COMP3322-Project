@@ -113,6 +113,7 @@ function create_registration_router({ pool, clock }) {
     post: [require_user, wrap(async (req, res) => {
       const id = id_param(req, "event_id");
       const body = validate_body(req.body, REGISTER);
+      if (req.user.platform_role === "venue_admin") throw new ApiError("FORBIDDEN", "Venue administrators manage events and can't register for them.");
       const now = clock();
       const [[ref]] = await pool.query("SELECT club_id FROM events WHERE id = ?", [id]);
       if (!ref || !(await load_event(pool, req.user, id, now))) throw new ApiError("NOT_FOUND", "That event does not exist.");

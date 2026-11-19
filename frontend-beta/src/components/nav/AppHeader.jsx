@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router'
 import { AccountMenu } from './AccountMenu'
-import { PRIMARY_TABS, badgeText, isActive } from './navigation'
+import { badgeText, isActive, primaryTabs } from './navigation'
 
 // Top bar. From 768 px up it also carries the four primary links; on phones
 // those move to the TabBar and the header keeps just the brand and the account.
@@ -15,7 +15,7 @@ export function AppHeader({ session, unread, showLinks, onSignOut }) {
         </Link>
         {showLinks && (
           <nav className="header-links" aria-label="Main">
-            {PRIMARY_TABS.map(tab => {
+            {primaryTabs(session).map(tab => {
               const text = tab.badge ? badgeText(unread) : undefined
               return (
                 <Link key={tab.to} to={tab.to} className="header-link" aria-current={isActive(tab, pathname) ? 'page' : undefined}>

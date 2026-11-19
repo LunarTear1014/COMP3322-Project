@@ -74,7 +74,7 @@ function previewFetch(scenario = '') {
     const request = Readable.from(body ? [body] : [])
     request.url = `${url.pathname.replace('/api/v1', '')}${url.search}`
     request.method = options.method || 'GET'
-    request.headers = { cookie: 'clubspace_preview=1' }
+    request.headers = { cookie: scenario === 'admin' ? 'clubspace_preview=admin' : 'clubspace_preview=1' }
     const headers = new Headers()
     const response = {
       statusCode: 200,
@@ -292,7 +292,7 @@ describe('frontend preview workflows', () => {
 
   it('shows venue admins every venue\'s approved bookings by day, with filters and flags', async () => {
     window.history.replaceState({}, '', '/admin/schedule')
-    vi.stubGlobal('fetch', previewFetch())
+    vi.stubGlobal('fetch', previewFetch('admin'))
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Venue schedule' })).toBeTruthy()
@@ -372,10 +372,65 @@ describe('frontend preview workflows', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(trigger)
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    for (const name of ['Profile', 'Organizer', 'Booking review', 'Venue schedule']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    for (const name of ['Profile', 'Organizer']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    for (const name of ['Booking review', 'Venue schedule']) expect(screen.queryByRole('link', { name })).toBeNull()
     fireEvent.keyDown(screen.getByRole('link', { name: 'Profile' }), { key: 'Escape' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('gives a venue administrator the venue tools and no organizer link', async () => {
+    window.history.replaceState({}, '', '/events')
+    vi.stubGlobal('fetch', previewFetch('admin'))
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Find your next event.' })
+    fireEvent.click(screen.getByRole('button', { name: /Account/ }))
+    for (const name of ['Profile', 'Booking review', 'Venue schedule']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Organizer' })).toBeNull()
+  })
+
+  it('swaps My events for Schedule in a venue administrator\'s bottom bar', async () => {
+    window.matchMedia = query => ({ matches: query.includes('max-width: 767.98px'), addEventListener() {}, removeEventListener() {} })
+    window.history.replaceState({}, '', '/admin/schedule')
+    vi.stubGlobal('fetch', previewFetch('admin'))
+    render(<App />)
+
+    const bar = await screen.findByRole('navigation', { name: 'Main' })
+    expect(within(bar).getAllByRole('link').map(link => link.textContent.replace(/\d.*$/, '').trim())).toEqual(['Explore', 'Schedule', 'Clubs', 'Inbox'])
+    expect(within(bar).getByRole('link', { name: 'Schedule' }).getAttribute('href')).toBe('/admin/schedule')
+    expect(within(bar).getByRole('link', { name: 'Schedule' }).getAttribute('aria-current')).toBe('page')
+    expect(within(bar).queryByRole('link', { name: /My events/ })).toBeNull()
+    expect(document.documentElement.style.getPropertyValue('--bars-height')).toBe('68px')
+    delete window.matchMedia
+  })
+
+  it('shows a venue administrator the event without a way to register, and a way to manage it', async () => {
+    window.history.replaceState({}, '', '/events/1')
+    vi.stubGlobal('fetch', previewFetch('admin'))
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Campus photo walk' })).toBeTruthy()
+    expect((await screen.findAllByText('Venue administrators manage events and don’t register for them.')).length).toBeGreaterThan(0)
+    for (const name of [/^Join event/, /Join waitlist/, /Request to join/]) expect(screen.queryByRole('button', { name })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Manage event' }).getAttribute('href')).toBe('/organizer/events/1')
+  })
+
+  it('offers a venue administrator no way to join a club', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    vi.stubGlobal('fetch', previewFetch('admin'))
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Film Society' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Request to join/ })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Your clubs' })).toBeNull()
+  })
+
+  it('shows a student their join action on the same event and clubs', async () => {
+    window.history.replaceState({}, '', '/clubs')
+    vi.stubGlobal('fetch', previewFetch())
+    render(<App />)
+    expect((await screen.findAllByRole('button', { name: /Request to join/ })).length).toBeGreaterThan(0)
   })
 
   it('hides the Inbox badge at zero unread and shows header links on desktop', async () => {
@@ -440,7 +495,7 @@ describe('frontend preview workflows', () => {
 
   it('retains a decision reason after a booking conflict', async () => {
     window.history.replaceState({}, '', '/admin/bookings')
-    vi.stubGlobal('fetch', previewFetch())
+    vi.stubGlobal('fetch', previewFetch('admin'))
     render(<App />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Review Student film showcase and conversation with emerging filmmakers' }))

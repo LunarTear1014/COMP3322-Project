@@ -9,6 +9,7 @@ const ROLE_LABEL = { president: 'President', committee: 'Committee', member: 'Me
 
 // Account details. Joining and leaving clubs lives in the Clubs tab.
 export function Profile({ session, refreshSession }) {
+  const admin = session.user.platform_role === 'venue_admin'
   const profile = useResource('/profile')
   const memberships = useAllOptions('/me/memberships')
   // Join requests still waiting for a committee decision show here too (CLUB-06).
@@ -32,7 +33,7 @@ export function Profile({ session, refreshSession }) {
 
   return (
     <main className="page narrow">
-      <PageHeading title="Profile" description="Your account details and the clubs you belong to." />
+      <PageHeading title="Profile" description={admin ? 'Your account details.' : 'Your account details and the clubs you belong to.'} />
       <Resource value={profile}>
         {form && profile.data && (
           <form className="profile-form" onSubmit={save}>
@@ -45,6 +46,7 @@ export function Profile({ session, refreshSession }) {
       </Resource>
       <Feedback action={action} />
 
+      {!admin && <>
       <h2 className="section-title">Your clubs</h2>
       <Resource value={memberships} allowEmpty>
         {memberships.data?.length ? (
@@ -71,6 +73,7 @@ export function Profile({ session, refreshSession }) {
         )}
         <p><Link to="/clubs">{pending.length ? 'Join or leave clubs, or cancel a request' : 'Join or leave clubs'}</Link></p>
       </Resource>
+      </>}
     </main>
   )
 }

@@ -1,5 +1,5 @@
 // A small world for v1 DB tests: two clubs, two venues, an admin, a president,
-// committee, members and students.
+// committee, members and students. Venue admins (admin, admin_c) hold no club role.
 async function build_world(app) {
   const { admin } = app;
   await admin.query(`INSERT INTO clubs (id, name) VALUES (1, 'Photo'), (2, 'Film');
@@ -11,8 +11,8 @@ async function build_world(app) {
   // Events need a campus tag; the tags migration seeds Social.
   const [[social]] = await admin.query("SELECT id FROM campus_tags WHERE slug = 'social'");
   app.campus_tag_id = social.id;
-  await admin.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, 1, 'president'), (?, 1, 'committee'), (?, 1, 'member'), (?, 2, 'president'), (?, 1, 'committee')",
-    [ids.pres, ids.comm, ids.mem, ids.pres2, ids.admin_c]);
+  await admin.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, 1, 'president'), (?, 1, 'committee'), (?, 1, 'member'), (?, 2, 'president')",
+    [ids.pres, ids.comm, ids.mem, ids.pres2]);
   return ids;
 }
 

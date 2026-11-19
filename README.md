@@ -395,6 +395,20 @@ docker compose exec -T backend node src/ops/attach-demo-club-icons.js
 
 The `club-*.jpg` images in `backend-beta/db/demo-images/` are not used.
 
+Venue administrators hold no club role. Migration 020 refuses to run while a
+venue admin still has a club membership or a pending join request, so on a
+database that predates that rule clear them first. The command is a dry run
+unless you pass `--apply`, and it stops without changing anything if a venue
+admin is a club's president (give that club a new president first). While
+the migration is blocked the backend does not start, so run it through the
+`migrate` service, which has the same image and database settings:
+
+```bash
+docker compose run --rm migrate node src/ops/clear-admin-club-roles.js
+docker compose run --rm migrate node src/ops/clear-admin-club-roles.js --apply
+docker compose up -d
+```
+
 Schema changes after the baseline are ordered migrations in
 `backend-beta/db/migrations`. The `migrate` service runs them on every
 `docker compose up`, before the API and worker start. The runner takes a

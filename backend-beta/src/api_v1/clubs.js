@@ -65,6 +65,8 @@ function create_clubs_router({ pool, clock }) {
   define_route(router, "/clubs/:club_id/membership", {
     put: [require_user, wrap(async (req, res) => {
       const club_id = id_param(req, "club_id");
+      // Venue administrators manage venues and events and hold no club role.
+      if (req.user.platform_role === "venue_admin") throw new ApiError("FORBIDDEN", "Venue administrators manage venues and events, so they can't join clubs.");
       const now = clock();
       const result = await with_transaction(pool, async (conn) => {
         const [[club]] = await conn.query("SELECT id, name FROM clubs WHERE id = ? FOR UPDATE", [club_id]);

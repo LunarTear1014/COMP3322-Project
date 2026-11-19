@@ -113,13 +113,29 @@ describe('organizer pages', () => {
   })
 })
 
+const admin = { account: 'admin' }
+
 describe('admin review', () => {
-  it('lists pending requests with a count and blocks reviewing your own club', async () => {
+  it('lists pending requests with a count for the venue administrator', async () => {
     window.history.replaceState({}, '', '/admin/bookings')
-    vi.stubGlobal('fetch', fixtureFetch())
+    vi.stubGlobal('fetch', fixtureFetch(null, admin))
     render(<App />)
     expect(await screen.findByRole('heading', { name: /Pending requests \(2\)/ })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Pending requests' }).tabIndex).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Review Photography workshop' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Review request' })
+    expect(within(dialog).queryByText('You can’t review your own club’s request.')).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Approve' }).disabled).toBe(false)
+  })
+
+  it('still blocks a decision on a club the administrator belongs to (data from before venue admins lost club roles)', async () => {
+    window.history.replaceState({}, '', '/admin/bookings')
+    const legacy = url => (url.pathname === '/api/v1/auth/session'
+      ? json({ data: { user: { id: 9, name: 'Jordan Ho', email: 'admin@clubspace.test', student_id: 'PREVIEW-02', platform_role: 'venue_admin' }, memberships: [{ club_id: 1, club_name: 'Photography Society', role: 'committee', joined_at: '2026-01-01T00:00:00Z' }], csrf_token: 'local-preview-token' } })
+      : null)
+    vi.stubGlobal('fetch', fixtureFetch(legacy, admin))
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: /Pending requests \(2\)/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Review Photography workshop' }))
     const dialog = await screen.findByRole('dialog', { name: 'Review request' })
     expect(within(dialog).getByText('You can’t review your own club’s request.')).toBeTruthy()
@@ -129,7 +145,7 @@ describe('admin review', () => {
 
   it('approves with the booking version and confirms that the event stays a draft', async () => {
     window.history.replaceState({}, '', '/admin/bookings')
-    const fetch = fixtureFetch((url, options) => (/decision$/.test(url.pathname) && options.method === 'POST' ? json({ data: { id: 11 } }) : null))
+    const fetch = fixtureFetch((url, options) => (/decision$/.test(url.pathname) && options.method === 'POST' ? json({ data: { id: 11 } }) : null), admin)
     vi.stubGlobal('fetch', fetch)
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: /^Review Student film showcase/ }))
@@ -142,7 +158,7 @@ describe('admin review', () => {
 
   it('shows an empty state when nothing is waiting', async () => {
     window.history.replaceState({}, '', '/admin/bookings')
-    vi.stubGlobal('fetch', fixtureFetch(url => (url.pathname === '/api/v1/bookings' ? json({ data: [], meta: { page: 1, page_size: 20, total: 0 } }) : null)))
+    vi.stubGlobal('fetch', fixtureFetch(url => (url.pathname === '/api/v1/bookings' ? json({ data: [], meta: { page: 1, page_size: 20, total: 0 } }) : null), admin))
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'No requests waiting' })).toBeTruthy()
   })

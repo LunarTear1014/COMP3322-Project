@@ -6,12 +6,12 @@ import { fixturePlugin } from '../dev/fixtures.js'
 let handler
 fixturePlugin().configureServer({ middlewares: { use(_path, callback) { handler = callback } } })
 
-function call(path, { method = 'GET', authenticated = true, body = '' } = {}) {
+function call(path, { method = 'GET', authenticated = true, body = '', as = 'student' } = {}) {
   return new Promise(resolve => {
     const req = Readable.from(body ? [body] : [])
     req.url = path
     req.method = method
-    req.headers = { cookie: authenticated ? 'clubspace_preview=1' : '' }
+    req.headers = { cookie: authenticated ? (as === 'admin' ? 'clubspace_preview=admin' : 'clubspace_preview=1') : '' }
     const res = {
       statusCode: 200,
       setHeader() {},
@@ -69,13 +69,13 @@ test('preview report and booking review expose populated and restricted states',
   const student = await call('/auth/session?preview=student')
   assert.equal(student.body.data.user.platform_role, 'student')
   assert.deepEqual(student.body.data.memberships, [])
-  assert.equal((await call('/bookings')).body.meta.total, 2)
-  assert.equal((await call('/bookings?preview=empty')).body.meta.total, 0)
+  assert.equal((await call('/bookings', { as: 'admin' })).body.meta.total, 2)
+  assert.equal((await call('/bookings?preview=empty', { as: 'admin' })).body.meta.total, 0)
   const zeroReport = await call(`/clubs/1/reports?preview=empty&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
   assert.ok(zeroReport.body.data.daily_actions.length > 0)
   assert.ok(zeroReport.body.data.daily_actions.every(day => day.joined === 0))
   assert.equal((await call(`/clubs/1/reports?preview=error&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).status, 503)
-  const conflict = await call('/bookings/11/decision', { method: 'POST', body: '{}' })
+  const conflict = await call('/bookings/11/decision', { method: 'POST', body: '{}', as: 'admin' })
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.error.code, 'VENUE_UNAVAILABLE')
   assert.equal((await call('/bookings', { authenticated: false })).status, 401)
@@ -106,4 +106,61 @@ test('preview config is public and calendar results respect venue and interval',
   assert.equal(occupied.body.data.bookings[0].title, null)
   assert.equal((await call(`/venues/2/calendar?${range(0, 2)}`)).body.data.bookings.length, 0)
   assert.equal((await call(`/venues/1/calendar?${range(3, 4)}`)).body.data.bookings.length, 0)
+})
+
+test('the default preview account is a student who is on the Photography Society committee', async () => {
+  const session = (await call('/auth/session')).body.data
+  assert.equal(session.user.platform_role, 'student')
+  assert.deepEqual(session.memberships.map(item => [item.club_id, item.role]), [[1, 'committee']])
+  assert.equal((await call('/profile')).body.data.email, 'preview@clubspace.test')
+})
+
+test('the venue administrator account holds no club role and signs in with its own cookie', async () => {
+  const session = (await call('/auth/session', { as: 'admin' })).body.data
+  assert.equal(session.user.platform_role, 'venue_admin')
+  assert.equal(session.user.email, 'admin@clubspace.test')
+  assert.deepEqual(session.memberships, [])
+  assert.equal((await call('/auth/session?preview=admin')).body.data.user.platform_role, 'venue_admin')
+  assert.deepEqual((await call('/me/memberships', { as: 'admin' })).body.data, [])
+  assert.ok((await call('/clubs', { as: 'admin' })).body.data.every(club => club.my_role === null))
+  assert.deepEqual((await call('/me/registrations', { as: 'admin' })).body.data, [])
+  assert.equal((await call('/profile', { as: 'admin' })).body.data.platform_role, 'venue_admin')
+  assert.equal((await call('/auth/session?preview=admin', { authenticated: false })).status, 401)
+})
+
+test('login answers for the account whose credentials were used', async () => {
+  let cookie = null
+  const login = (email, password = 'preview12345') => new Promise(resolve => {
+    const req = Readable.from([JSON.stringify({ email, password })])
+    req.url = '/auth/login'
+    req.method = 'POST'
+    req.headers = {}
+    handler(req, { statusCode: 200, setHeader(name, value) { if (name === 'Set-Cookie') cookie = value }, end(payload) { resolve({ status: this.statusCode, body: JSON.parse(payload) }) } })
+  })
+  const admin = await login('admin@clubspace.test')
+  assert.equal(admin.body.data.user.platform_role, 'venue_admin')
+  assert.match(cookie, /^clubspace_preview=admin;/)
+  const student = await login('preview@clubspace.test')
+  assert.equal(student.body.data.user.platform_role, 'student')
+  assert.match(cookie, /^clubspace_preview=1;/)
+  assert.equal((await login('admin@clubspace.test', 'wrong-password')).status, 401)
+})
+
+test('venue administration needs the administrator account', async () => {
+  for (const path of ['/bookings', '/admin/schedule?from=2026-11-16T00:00:00Z&to=2026-11-23T00:00:00Z']) {
+    assert.equal((await call(path)).status, 403, path)
+    assert.equal((await call(path, { as: 'admin' })).status, 200, path)
+  }
+  assert.equal((await call('/bookings/11/decision', { method: 'POST', body: '{}' })).status, 403)
+})
+
+test('events carry VENUE_ADMIN eligibility for the administrator and stay registrable for the student', async () => {
+  const forAdmin = (await call('/events/1', { as: 'admin' })).body.data
+  assert.equal(forAdmin.eligibility.reason, 'VENUE_ADMIN')
+  assert.equal(forAdmin.eligibility.can_register, false)
+  assert.equal(forAdmin.my_registration.status, 'none')
+  assert.equal((await call('/events/10', { as: 'admin' })).body.data.my_registration.status, 'none')
+  assert.equal((await call('/events/5?preview=admin')).body.data.eligibility.reason, 'EVENT_CANCELLED')
+  assert.ok((await call('/events?preview=admin')).body.data.every(event => event.eligibility.reason !== null))
+  assert.equal((await call('/events/1')).body.data.eligibility.can_register, true)
 })

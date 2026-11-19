@@ -74,7 +74,7 @@ describe("v1 booking, publication and sign-off workflow", { skip }, () => {
       y.post(`/bookings/${second.booking.id}/decision`, { expected_version: 1, decision: "approve" }),
     ]);
     const statuses = results.map((r) => r.status).sort();
-    // admin_c is on club 1's committee, so deciding club 1's request is a self-decision; club 2's is fine.
+    // Two venue admins race for the same venue slot: one approval wins, the other conflicts.
     const [[confirmed]] = await app.admin.query("SELECT COUNT(*) AS n FROM bookings WHERE venue_id = 1 AND status = 'confirmed' AND start_time = (SELECT start_time FROM bookings WHERE id = ?)", [first.booking.id]);
     assert.equal(Number(confirmed.n), 1, `exactly one confirmed (${statuses})`);
     assert.ok(results.some((r) => r.status === 409 || r.status === 403));
@@ -106,7 +106,14 @@ describe("v1 booking, publication and sign-off workflow", { skip }, () => {
     const event = (await pres.post("/events", create_body(app, { date: future_date(app, 16) }))).body.data;
     const path = `/bookings/${event.booking.id}/decision`;
     assert.equal((await pres.post(path, { expected_version: 1, decision: "approve" })).status, 403, "students cannot decide");
-    assert.equal((await adminc.post(path, { expected_version: 1, decision: "approve" })).body.error.code, "SELF_DECISION_FORBIDDEN");
+    // The API can no longer give a venue admin a club role, so this state is built by hand:
+    // the self-decision check stays as defence in depth for data that predates the rule.
+    await app.admin.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, 1, 'committee')", [ids.admin_c]);
+    try {
+      assert.equal((await adminc.post(path, { expected_version: 1, decision: "approve" })).body.error.code, "SELF_DECISION_FORBIDDEN");
+    } finally {
+      await app.admin.query("DELETE FROM memberships WHERE user_id = ? AND club_id = 1", [ids.admin_c]);
+    }
     assert.ok((await admin.post(path, { expected_version: 1, decision: "reject" })).body.error.fields.reason);
     assert.equal((await admin.post(path, { decision: "approve" })).status, 422);
     assert.equal((await admin.post(path, { expected_version: 9, decision: "approve" })).body.error.code, "STALE_VERSION");
@@ -154,7 +161,7 @@ describe("v1 booking, publication and sign-off workflow", { skip }, () => {
     const published = await pres.post(`/events/${event.id}/signoff`, { expected_version: 2, decision: "publish" });
     assert.equal(published.body.data.state, "published");
     const members = (await app.admin.query("SELECT COUNT(*) AS n FROM notifications WHERE type = 'event_published' AND event_id = ?", [event.id]))[0][0];
-    assert.equal(Number(members.n), 3, "all other club members hear about it (actor excluded)");
+    assert.equal(Number(members.n), 2, "all other club members hear about it (actor excluded)");
     assert.equal((await comm.post(`/events/${event.id}/cancel`, { expected_version: 3, reason: "x" })).status, 403);
     assert.equal((await pres.post(`/events/${event.id}/cancel`, { expected_version: 3, reason: "Weather" })).body.data.state, "cancelled");
   });

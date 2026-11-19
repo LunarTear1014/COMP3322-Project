@@ -186,6 +186,8 @@ function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, detail
       return <Button variant="primary" busy={busy} onClick={onRegister}>{busy ? (view.approval ? 'Sending request…' : view.kind === 'join' ? 'Joining…' : 'Joining waitlist…') : view.label}</Button>
     case 'join_club':
       return <ButtonLink variant="primary" to="/clubs">{view.label}</ButtonLink>
+    case 'admin':
+      return <ButtonLink to={`/organizer/events/${details.id}`}>{view.label}</ButtonLink>
     case 'leave':
       return <Button onClick={() => onCalendar(details)}><CalendarPlus className="cs-icon" aria-hidden="true" />Add to calendar</Button>
     case 'leave_waitlist':

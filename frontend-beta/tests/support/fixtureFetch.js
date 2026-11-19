@@ -7,7 +7,8 @@ fixturePlugin().configureServer({ middlewares: { use(_path, callback) { handler 
 
 // A fetch stub backed by the local preview fixtures. `override(url, options)`
 // may return a Response to replace a fixture answer; `log` records every call.
-export function fixtureFetch(override) {
+// `account: 'admin'` signs in as the venue administrator instead of the student organizer.
+export function fixtureFetch(override, { account = 'student' } = {}) {
   return vi.fn((input, options = {}) => new Promise(resolve => {
     const url = new URL(input, 'http://localhost')
     const replaced = override?.(url, options)
@@ -16,7 +17,7 @@ export function fixtureFetch(override) {
     const request = Readable.from(body ? [body] : [])
     request.url = `${url.pathname.replace('/api/v1', '')}${url.search}`
     request.method = options.method || 'GET'
-    request.headers = { cookie: 'clubspace_preview=1' }
+    request.headers = { cookie: account === 'admin' ? 'clubspace_preview=admin' : 'clubspace_preview=1' }
     const headers = new Headers()
     handler(request, {
       statusCode: 200,

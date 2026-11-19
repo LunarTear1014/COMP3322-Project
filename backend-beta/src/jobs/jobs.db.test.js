@@ -188,7 +188,7 @@ describe("background jobs", { skip }, () => {
     assert.equal(await scan_digests(app.pool, new Date(nine.getTime() + 60_000)), 0, "no duplicate job");
     await run_once(app.pool, nine, { limit: 10 });
     const sent = (await app.admin.query("SELECT user_id, body FROM notifications WHERE type = 'activity_digest'"))[0];
-    assert.deepEqual(sent.map((r) => r.user_id).sort(), [ids.pres, ids.comm, ids.admin_c].sort());
+    assert.deepEqual(sent.map((r) => r.user_id).sort(), [ids.pres, ids.comm].sort());
     assert.match(sent[0].body, /2 joined, 1 left, 0 new members, 1 left the club/);
     assert.equal(await scan_digests(app.pool, new Date("2026-11-17T09:00:00Z")), 0, "already sent");
     // The worker was down: a later start still delivers the missed day.

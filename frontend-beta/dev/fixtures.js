@@ -1,6 +1,10 @@
 // Read-only local preview data. This module is loaded only by `npm run dev:fixtures`.
 const token = 'local-preview-token'
-const user = { id: 1, name: 'Alex Chan', email: 'preview@clubspace.test', student_id: 'PREVIEW-01', platform_role: 'venue_admin' }
+// Two preview accounts. A venue administrator holds no club role and never registers for events,
+// so the committee organizer and the venue admin are separate people (password: preview12345).
+const user = { id: 1, name: 'Alex Chan', email: 'preview@clubspace.test', student_id: 'PREVIEW-01', platform_role: 'student' }
+const adminUser = { id: 9, name: 'Jordan Ho', email: 'admin@clubspace.test', student_id: 'PREVIEW-02', platform_role: 'venue_admin' }
+const adminSession = { user: adminUser, memberships: [], csrf_token: token }
 const memberships = [{ club_id: 1, club_name: 'Photography Society', role: 'committee', joined_at: '2026-01-01T00:00:00Z' }]
 const session = { user, memberships, csrf_token: token }
 const venues = [{ id: 1, name: 'Harbour Room', location: 'Student Centre · Level 2', description: 'A flexible space for workshops and club gatherings.', capacity: 80, is_active: true }, { id: 2, name: 'The Studio', location: 'Arts Building · Level 1', description: 'A bright space for creative sessions and small events.', capacity: 40, is_active: true }]
@@ -61,6 +65,12 @@ const organizerEvents = [
   { ...pastEvent, id: 24, club: { id: 1, name: 'Photography Society' } },
 ]
 events.push(...organizerEvents.filter(event => event.id >= 21))
+// What a venue administrator sees of an event: never registered, never eligible to register.
+const adminView = event => ({
+  ...event,
+  my_registration: { status: 'none', queue_position: null },
+  eligibility: { can_register: false, can_waitlist: false, reason: event.state === 'cancelled' ? 'EVENT_CANCELLED' : event.state === 'published' ? 'VENUE_ADMIN' : 'NOT_PUBLISHED' },
+})
 const byId = id => events.find(event => event.id === id)
 const registration = (event, status, queue_position = null) => ({ event, status, queue_position, last_registered_at: future(-3), confirmed_at: status === 'joined' ? future(-3) : null, left_at: status === 'left' ? future(-1) : null })
 const myRegistrations = [
@@ -116,13 +126,22 @@ export function fixturePlugin() {
       const url = new URL(req.url, 'http://localhost')
       const send = (status, payload) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(payload)) }
       const fail = (status, code, message) => send(status, { error: { code, message, fields: {}, request_id: 'local-fixture' } })
-      const signedIn = (req.headers.cookie || '').split(';').some(c => c.trim() === 'clubspace_preview=1')
+      // The cookie names the signed-in account: 1 is the student organizer, admin is the venue administrator.
+      // ?preview=admin answers as the administrator for a signed-in cookie (used by tests).
+      const cookieValue = (req.headers.cookie || '').split(';').map(c => c.trim().match(/^clubspace_preview=(.+)$/)?.[1]).find(Boolean)
+      const signedIn = cookieValue === '1' || cookieValue === 'admin'
+      const isAdmin = signedIn && (cookieValue === 'admin' || url.searchParams.get('preview') === 'admin')
+      const me = isAdmin ? adminUser : user
       if (url.pathname === '/config' && req.method === 'GET') return send(200, { data: { campus_timezone: 'Asia/Hong_Kong', slots } })
       if (url.pathname === '/auth/csrf' && req.method === 'GET') return send(200, { data: { csrf_token: token } })
-      if (url.pathname === '/auth/login' && req.method === 'POST') { let raw = ''; req.on('data', chunk => { raw += chunk }); req.on('end', () => { try { const body = JSON.parse(raw); if (body.email !== user.email || body.password !== 'preview12345') return fail(401, 'INVALID_CREDENTIALS', 'Invalid preview credentials.'); res.setHeader('Set-Cookie', 'clubspace_preview=1; HttpOnly; SameSite=Strict; Path=/'); send(200, { data: session }) } catch { fail(400, 'INVALID_JSON', 'Invalid request.') } }); return }
-      if (url.pathname === '/auth/session' && req.method === 'GET') return signedIn ? send(200, { data: url.searchParams.get('preview') === 'student' ? { ...session, user: { ...user, platform_role: 'student' }, memberships: [] } : url.searchParams.get('preview') === 'president' ? { ...session, user: { ...user, platform_role: 'student' }, memberships: [{ ...memberships[0], role: 'president' }] } : session }) : fail(401, 'AUTHENTICATION_REQUIRED', 'Sign in to the local preview.')
+      if (url.pathname === '/auth/login' && req.method === 'POST') { let raw = ''; req.on('data', chunk => { raw += chunk }); req.on('end', () => { try { const body = JSON.parse(raw); const account = body.email === user.email ? 'student' : body.email === adminUser.email ? 'admin' : null; if (!account || body.password !== 'preview12345') return fail(401, 'INVALID_CREDENTIALS', 'Invalid preview credentials.'); res.setHeader('Set-Cookie', `clubspace_preview=${account === 'admin' ? 'admin' : '1'}; HttpOnly; SameSite=Strict; Path=/`); send(200, { data: account === 'admin' ? adminSession : session }) } catch { fail(400, 'INVALID_JSON', 'Invalid request.') } }); return }
+      if (url.pathname === '/auth/session' && req.method === 'GET') return signedIn ? send(200, { data: isAdmin ? adminSession : url.searchParams.get('preview') === 'student' ? { ...session, user: { ...user, platform_role: 'student' }, memberships: [] } : url.searchParams.get('preview') === 'president' ? { ...session, user: { ...user, platform_role: 'student' }, memberships: [{ ...memberships[0], role: 'president' }] } : session }) : fail(401, 'AUTHENTICATION_REQUIRED', 'Sign in to the local preview.')
       if (!signedIn) return fail(401, 'AUTHENTICATION_REQUIRED', 'Sign in to the local preview.')
       if (url.pathname === '/auth/logout' && req.method === 'POST') { res.statusCode = 204; res.setHeader('Set-Cookie', 'clubspace_preview=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'); return res.end() }
+      // Venue administration is for venue administrators only, as in the real API.
+      if ((url.pathname === '/bookings' && req.method === 'GET') || url.pathname === '/admin/schedule' || /^\/bookings\/\d+\/decision$/.test(url.pathname)) {
+        if (!isAdmin) return fail(403, 'FORBIDDEN', 'Only venue administrators can do this.')
+      }
       if (req.method !== 'GET') {
         if (/^\/bookings\/\d+\/decision$/.test(url.pathname)) return fail(409, 'VENUE_UNAVAILABLE', 'The venue is no longer available. Review the updated request before trying again.')
         return fail(503, 'PREVIEW_READ_ONLY', 'This is a read-only preview. Changes require the real backend.')
@@ -137,7 +156,7 @@ export function fixturePlugin() {
         return res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400"><rect width="600" height="400" fill="hsl(${hue} 70% 55%)"/><circle cx="440" cy="150" r="90" fill="hsl(${(hue + 40) % 360} 85% 75%)"/><path d="M0 330 L170 210 L300 300 L420 230 L600 340 V400 H0Z" fill="hsl(${hue} 60% 35%)"/></svg>`)
       }
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
-      if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
+      if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: isAdmin ? adminView(event) : event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
       if (url.pathname === '/events/36/join-requests') return send(200, list(joinRequests))
       if (url.pathname === '/events/35/participants') return send(200, list([{ user: { id: 3, name: 'Riley Chen', email: 'riley@example.test', student_id: 'S3' }, status: 'joined', queue_position: null, checked_in: true }, { user: { id: 4, name: 'Zara Wong', email: 'zara@example.test', student_id: 'S4' }, status: 'joined', queue_position: null, checked_in: false }]))
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
@@ -187,7 +206,7 @@ export function fixturePlugin() {
       }
       if (url.pathname === '/tags') return send(200, { data: campusTags })
       if (/^\/clubs\/\d+\/tags$/.test(url.pathname)) return send(200, { data: clubTags })
-      if (url.pathname === '/me/signoffs') return send(200, { data: user.id && !empty ? { bookings: [awaitingBooking], events: [awaitingEvent] } : { bookings: [], events: [] } })
+      if (url.pathname === '/me/signoffs') return send(200, { data: !empty && !isAdmin ? { bookings: [awaitingBooking], events: [awaitingEvent] } : { bookings: [], events: [] } })
       if (/^\/events\/\d+\/attendance$/.test(url.pathname)) return send(200, { data: { joined_at_open: 12, attended: attendanceRecords.length, records: attendanceRecords }, meta: { page: 1, page_size: 20, total: attendanceRecords.length } })
       if (url.pathname === '/clubs/1/reports/effectiveness') return empty ? send(200, { data: { ...effectiveness, events: [], by_tag: [], by_weekday: [], by_slot: [] } }) : send(200, { data: effectiveness })
       if (url.pathname === '/notifications/stream') {
@@ -210,9 +229,9 @@ export function fixturePlugin() {
         && (!params.getAll('tag').length || event.campus_tags?.some(tag => params.getAll('tag').includes(tag.slug))))
       const page = Number(params.get('page')) || 1
       const pageSize = Number(params.get('page_size')) || 20
-      const eventList = { data: filteredEvents.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: filteredEvents.length } }
+      const eventList = { data: filteredEvents.slice((page - 1) * pageSize, page * pageSize).map(event => (isAdmin ? adminView(event) : event)), meta: { page, page_size: pageSize, total: filteredEvents.length } }
       const pagedList = rows => ({ data: rows.slice((page - 1) * pageSize, page * pageSize), meta: { page, page_size: pageSize, total: rows.length } })
-      const routes = { '/profile': { data: user }, '/clubs': pagedList(clubs), '/me/memberships': pagedList(empty ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list(empty ? [] : organizerEvents), '/me/registrations': pagedList(empty ? [] : myRegistrations), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list(empty ? [] : inbox, { unread_count: empty ? 0 : inbox.filter(n => !n.read_at).length }) }
+      const routes = { '/profile': { data: me }, '/clubs': pagedList(isAdmin ? clubs.map(club => ({ ...club, my_role: null })) : clubs), '/me/memberships': pagedList(empty || isAdmin ? [] : memberships), '/venues': pagedList(venues), '/events': eventList, '/me/events': list(empty || isAdmin ? [] : organizerEvents), '/me/registrations': pagedList(empty || isAdmin ? [] : myRegistrations), '/bookings': list(empty ? [] : bookingRequests), '/notifications': list(empty ? [] : inbox, { unread_count: empty ? 0 : inbox.filter(n => !n.read_at).length }) }
       return routes[url.pathname] ? send(200, routes[url.pathname]) : fail(404, 'NOT_FOUND', 'This endpoint is not included in the preview.')
     })
   } }

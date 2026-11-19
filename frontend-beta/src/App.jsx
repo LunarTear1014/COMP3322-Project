@@ -223,7 +223,7 @@ function Shell({ streamOverride }) {
           <Route path="*" element={<NotFound signedIn />} />
         </Routes>
       </div>
-      {phone && <TabBar unread={unread} />}
+      {phone && <TabBar session={session} unread={unread} />}
     </>
   )
 }
