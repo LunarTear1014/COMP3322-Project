@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import { create_utc_pool } from "../db/pool.js";
 import { create_password_hasher } from "../features/users/password_hasher.js";
 import { prepare_database, test_db_config } from "../../test/db_helper.js";
+import { attach_demo_club_icons } from "./demo_club_icons.js";
 import { CLUBS, EVENTS, seed_demo } from "./demo_seed.js";
 
 const { skip } = test_db_config();
@@ -55,5 +59,24 @@ describe("demo seed", { skip }, () => {
     const again = await seed_demo({ pool, password: "demo-password-123", hasher: FAST, log: null });
     assert.ok(again.skipped);
     assert.equal(await count("SELECT COUNT(*) AS n FROM events"), EVENTS.length);
+  });
+  test("club icons: every demo club gets one, a second run changes nothing and an uploaded icon is never replaced", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "club-icons-"));
+    try {
+      const first = await attach_demo_club_icons({ pool, cover_dir: dir, now: new Date("2026-11-16T04:00:00Z"), log: null });
+      assert.deepEqual(first, { attached: CLUBS.length, already: 0, missing: 0 });
+      assert.equal(await count("SELECT COUNT(*) AS n FROM clubs WHERE icon_key IS NULL"), 0);
+      assert.equal((await readdir(dir)).filter((name) => name.endsWith(".icon.webp")).length, CLUBS.length);
+      assert.equal(await count("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'club.icon_set' AND actor_user_id IS NOT NULL"), CLUBS.length);
+      const again = await attach_demo_club_icons({ pool, cover_dir: dir, log: null });
+      assert.deepEqual(again, { attached: 0, already: CLUBS.length, missing: 0 });
+      assert.equal((await readdir(dir)).length, CLUBS.length, "no extra files written");
+      const custom = "c".repeat(32);
+      await db.admin.query("UPDATE clubs SET icon_key = ? WHERE name = 'Debate Club'", [custom]);
+      await attach_demo_club_icons({ pool, cover_dir: dir, log: null });
+      assert.equal(await count("SELECT COUNT(*) AS n FROM clubs WHERE icon_key = ?", [custom]), 1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

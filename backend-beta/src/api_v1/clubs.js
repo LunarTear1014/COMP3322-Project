@@ -5,6 +5,7 @@ import { PAGE_QUERY, pagination, validate_body, validate_query } from "../shared
 import { define_route } from "./router.js";
 import { end_members_only_places, list_actions, log_action, undo_action } from "./club_actions.js";
 import { promote_locked } from "./registration.js";
+import { icon_dto } from "../features/covers/icon_service.js";
 import { audit, id_param, iso, membership_dto, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
 
 const WAITING = "('waitlisted', 'pending')";
@@ -39,11 +40,11 @@ function create_clubs_router({ pool, clock }) {
       const query = pagination(validate_query(req.query, PAGE_QUERY));
       const [[{ total }]] = await pool.query("SELECT COUNT(*) AS total FROM clubs");
       const [rows] = await pool.query(
-        `SELECT c.id, c.name, c.description, m.role AS my_role,
+        `SELECT c.id, c.name, c.description, c.icon_key, c.icon_updated_at, m.role AS my_role,
            EXISTS(SELECT 1 FROM club_join_requests r WHERE r.club_id = c.id AND r.user_id = ? AND r.status = 'pending') AS request_pending
          FROM clubs c LEFT JOIN memberships m ON m.club_id = c.id AND m.user_id = ? ORDER BY c.id LIMIT ? OFFSET ?`,
         [req.user.id, req.user.id, query.page_size, (query.page - 1) * query.page_size]);
-      res.json({ data: rows.map((row) => ({ id: row.id, name: row.name, description: row.description, my_role: row.my_role,
+      res.json({ data: rows.map((row) => ({ id: row.id, name: row.name, description: row.description, icon: icon_dto(row.id, row), my_role: row.my_role,
         request_status: !row.my_role && Number(row.request_pending) ? "pending" : null })), meta: page_meta(total, query) });
     })],
   });
@@ -53,7 +54,7 @@ function create_clubs_router({ pool, clock }) {
       const query = pagination(validate_query(req.query, PAGE_QUERY));
       const [[{ total }]] = await pool.query("SELECT COUNT(*) AS total FROM memberships WHERE user_id = ?", [req.user.id]);
       const [rows] = await pool.query(
-        `SELECT m.club_id, c.name AS club_name, m.role, m.version, m.joined_at FROM memberships m JOIN clubs c ON c.id = m.club_id
+        `SELECT m.club_id, c.name AS club_name, c.icon_key, c.icon_updated_at, m.role, m.version, m.joined_at FROM memberships m JOIN clubs c ON c.id = m.club_id
          WHERE m.user_id = ? ORDER BY m.club_id LIMIT ? OFFSET ?`, [req.user.id, query.page_size, (query.page - 1) * query.page_size]);
       res.json({ data: rows.map(membership_dto), meta: page_meta(total, query) });
     })],

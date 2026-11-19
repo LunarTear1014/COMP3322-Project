@@ -103,6 +103,9 @@ h1, h2, h3, h4 { text-wrap: balance; }
 
 /* Club and venue cards share the event card shell */
 .cs-clubhead { height: 72px; position: relative; background-color: var(--club); background-image: repeating-linear-gradient(135deg, var(--sheen-soft) 0 12px, transparent 12px 24px); border-bottom: 2px solid var(--outline); }
+.cs-clubbadge.has-icon { object-fit: cover; padding: 0; background: var(--surface); }
+.club-icon-preview { width: 64px; height: 64px; flex: none; border-radius: 18px; background: var(--club, var(--line)); border: 2px solid var(--outline); display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--on-pop); object-fit: cover; overflow: hidden; }
+.club-icon-editor { border: 1px dashed var(--line); border-radius: 12px; padding: var(--space-3); display: grid; gap: var(--space-2); }
 .cs-clubbadge { position: absolute; left: 14px; bottom: -24px; width: 52px; height: 52px; border-radius: 16px; background: var(--club); border: 2px solid var(--outline); box-shadow: var(--shadow-sticker); display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 22px; color: var(--on-pop); }
 .cs-card-actions { position: relative; z-index: 2; display: flex; gap: var(--space-2); align-items: center; justify-content: space-between; margin-top: var(--space-2); }
 .cs-amenities { position: relative; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; }

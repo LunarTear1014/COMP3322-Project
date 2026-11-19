@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ApiError } from "../shared/errors.js";
+import { icon_dto } from "../features/covers/icon_service.js";
 import { from_mysql_utc, to_mysql_utc } from "../shared/slots.js";
 
 // Small helpers shared by the v1 route modules.
@@ -30,13 +31,15 @@ const session_save = (req) => new Promise((resolve, reject) => req.session.save(
 
 async function load_memberships(db, user_id) {
   const [rows] = await db.query(
-    `SELECT m.club_id, c.name AS club_name, m.role, m.version, m.joined_at
+    `SELECT m.club_id, c.name AS club_name, c.icon_key, c.icon_updated_at, m.role, m.version, m.joined_at
      FROM memberships m JOIN clubs c ON c.id = m.club_id WHERE m.user_id = ? ORDER BY m.club_id`, [user_id]);
   return rows.map(membership_dto);
 }
 
 const membership_dto = (row) => ({
   club_id: row.club_id, club_name: row.club_name, role: row.role, version: Number(row.version ?? 1), joined_at: iso(row.joined_at),
+  // Only rows that selected the icon columns carry the field.
+  ...(row.icon_key === undefined ? {} : { club_icon: icon_dto(row.club_id, row) }),
 });
 
 const user_dto = (row) => ({

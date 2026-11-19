@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { campusTime, query } from '../api'
 import { ErrorNotice, PageHeading, Pagination, Resource } from '../components/common'
 import { Button, StatusChip, TextField, useToast } from '../components/ui'
+import { ClubIconEditor } from '../components/ClubIconEditor'
+import { iconForm } from '../lib/clubIcon'
+import { clubColour } from '../lib/club'
 import { useAction, useAllOptions, useResource } from '../hooks/resources'
 import { useNotificationSignal } from '../hooks/useLiveSignal'
 import { isOrganizer } from '../lib/roles'
@@ -16,6 +19,8 @@ export function ClubTools({ session, refreshSession }) {
   const toast = useToast()
   const [confirming, setConfirming] = useState(null)
   const action = useAction(() => refreshSession?.())
+  const iconAction = useAction(() => refreshSession?.())
+  const [iconClub, setIconClub] = useState(null)
 
   async function leaveCommittee(club) {
     const result = await action.run(`/clubs/${club.club_id}/committee`, 'DELETE', {})
@@ -23,16 +28,30 @@ export function ClubTools({ session, refreshSession }) {
     if (result) toast.show({ message: `You left the ${club.club_name} committee and remain a member.` })
   }
 
+  async function saveIcon(club, file) {
+    setIconClub(club.club_id)
+    const result = await iconAction.run(`/clubs/${club.club_id}/icon`, 'PUT', iconForm(file))
+    if (result) toast.show({ message: `${club.club_name} icon saved.` })
+    return Boolean(result)
+  }
+  async function removeIcon(club) {
+    setIconClub(club.club_id)
+    const result = await iconAction.run(`/clubs/${club.club_id}/icon`, 'DELETE', {})
+    if (result) toast.show({ message: `${club.club_name} icon removed.`, tone: 'info' })
+  }
+  const iconError = club => (iconAction.error && iconClub === club.club_id ? iconAction.error.fields?.file || iconAction.error.message : '')
+
   return (
     <main className="page">
       <PageHeading title="Your clubs" description="Members, roles and reports for the clubs you run." />
       <ErrorNotice error={action.error} />
       <div className="card-grid">
         {clubs.map(club => (
-          <article key={club.club_id} className="cs-card is-flat has-actions">
+          <article key={club.club_id} className="cs-card is-flat has-actions" style={{ '--club': clubColour(club.club_id).cssVar }}>
             <div className="cs-card-body">
               <h2 className="cs-card-title">{club.club_name}</h2>
               <StatusChip state="joined" label={ROLE[club.role]} />
+              <ClubIconEditor clubName={club.club_name} current={club.club_icon} busy={iconAction.busy && iconClub === club.club_id} serverError={iconError(club)} onSave={file => saveIcon(club, file)} onRemove={() => removeIcon(club)} />
               <p><Link to={`/organizer/clubs/${club.club_id}/members`}>Members and roles</Link></p>
               <p><Link to={`/organizer/clubs/${club.club_id}/reports`}>Activity report</Link></p>
               <p><Link to={`/organizer/clubs/${club.club_id}/reports/effectiveness`}>Event effectiveness</Link></p>

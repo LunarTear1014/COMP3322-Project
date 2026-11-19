@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { PageHeading, Resource, Feedback } from '../components/common'
 import { Button, ButtonLink, EmptyState, StatusChip, useToast } from '../components/ui'
 import { useAction, useAllOptions } from '../hooks/resources'
+import { ClubIcon } from '../components/ClubIcon'
 import { clubColour } from '../lib/club'
 import { isOrganizer } from '../lib/roles'
 
@@ -13,7 +14,7 @@ function ClubCard({ club, membership, busy, onJoin, onLeave, onWithdraw }) {
   const pending = club.request_status === 'pending'
   return (
     <article className="cs-card has-actions" style={{ '--club': colour.cssVar }}>
-      <div className="cs-clubhead"><span className="cs-clubbadge" aria-hidden="true">{[...club.name][0]}</span></div>
+      <div className="cs-clubhead"><ClubIcon name={club.name} icon={club.icon} /></div>
       <div className="cs-card-body">
         <h3 className="cs-card-title">{club.name}</h3>
         {(club.member_count != null || club.event_count != null) && (

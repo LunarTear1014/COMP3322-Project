@@ -7,6 +7,8 @@ COPY --chown=node:node src ./src
 COPY --chown=node:node db/migrations ./db/migrations
 # Cover images for the demo events (seed-demo.js, attach-demo-covers.js).
 COPY --chown=node:node db/demo-images ./db/demo-images
+# Club icons for the demo clubs (seed-demo.js, attach-demo-club-icons.js).
+COPY --chown=node:node db/demo-icons ./db/demo-icons
 # Event cover images live on a named volume mounted here (see compose.yaml).
 RUN mkdir -p /app/data/covers && chown -R node:node /app/data
 USER node

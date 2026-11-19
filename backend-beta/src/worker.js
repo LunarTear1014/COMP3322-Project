@@ -7,6 +7,7 @@ import { create_utc_pool } from "./db/pool.js";
 import { assert_schema_version } from "./db/migrate.js";
 import { maintenance, run_once, scan_digests, scan_reminders } from "./jobs/handlers.js";
 import { sweep_orphan_covers } from "./features/covers/cover_service.js";
+import { sweep_orphan_icons } from "./features/covers/icon_service.js";
 import { to_mysql_utc } from "./shared/slots.js";
 
 const POLL_MS = 5000;
@@ -41,6 +42,8 @@ async function run_worker({ pool, clock = () => new Date(), cover_dir = process.
         await maintenance(pool, now);
         const [rows] = await pool.query("SELECT cover_key FROM events WHERE cover_key IS NOT NULL");
         await sweep_orphan_covers(cover_dir, rows.map((row) => row.cover_key));
+        const [icons] = await pool.query("SELECT icon_key FROM clubs WHERE icon_key IS NOT NULL");
+        await sweep_orphan_icons(cover_dir, icons.map((row) => row.icon_key));
       }
       await run_once(pool, now);
     } catch (error) {
@@ -57,7 +60,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { default: dotenv } = await import("dotenv");
   dotenv.config({ path: new URL("../../.env", import.meta.url), quiet: true });
   const pool = create_utc_pool({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT || 3306), database: process.env.DB_NAME, user: process.env.DB_USER, password: process.env.DB_PASSWORD, connection_limit: 4 });
-  await assert_schema_version(pool, "018_google_identity");
+  await assert_schema_version(pool, "019_club_icons");
   await run_worker({ pool });
   await pool.end();
 }
