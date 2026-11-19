@@ -115,7 +115,7 @@
     <li><span class="n">2</span>Feature list<span class="d">must-have, bonus and extra features; course requirements</span></li>
     <li><span class="n">3</span>Team task allocation<span class="d">who built what</span></li>
     <li><span class="n">4</span>System architecture<span class="d">containers, backend layers, design decisions</span></li>
-    <li><span class="n">5</span>Database design and ER diagram<span class="d">26 MySQL tables, keys, integrity rules</span></li>
+    <li><span class="n">5</span>Database design and ER diagram<span class="d">27 MySQL tables, keys, integrity rules</span></li>
     <li><span class="n">6</span>API documentation<span class="d">REST conventions, status codes, all endpoints</span></li>
     <li><span class="n">7</span>Key workflows and business logic<span class="d">lifecycle, waitlist, concurrency, real-time</span></li>
     <li><span class="n">8</span>User interface<span class="d">screenshots of the deployed app</span></li>
@@ -139,8 +139,8 @@
   <h3>Target users</h3>
   <div class="grid2" style="grid-template-columns:1fr 1fr 1fr">
     <div class="card"><h4>Students</h4><p>Discover events across clubs, see eligibility and remaining places, register or wait-list, check in, and get reminders.</p></div>
-    <div class="card"><h4>Club committee and president</h4><p>Request venues, draft and manage events, accept join requests, mark attendance and read reports. The president manages roles, signs off venue requests and publications, can hand over the presidency, and can undo club actions.</p></div>
-    <div class="card"><h4>Venue administrators</h4><p>Review pending venue requests across clubs. Availability is re-checked when they decide, and they cannot decide a request for a club they serve on.</p></div>
+    <div class="card"><h4>Club committee and president</h4><p>Request venues, draft and manage events, accept join requests, mark attendance and read reports. The president manages roles, signs off venue requests, publications and member removals, can hand over the presidency, and can undo club actions.</p></div>
+    <div class="card"><h4>Venue administrators</h4><p>Review pending venue requests across clubs and see every approved booking on a venue schedule. Availability is re-checked when they decide. They hold no club role and never register for events.</p></div>
   </div>
 
   <h3>Problem</h3>
@@ -150,8 +150,8 @@
   <table>
     <tr><th style="width:26%">Layer</th><th>Technology</th></tr>
     <tr><td>Frontend (SPA)</td><td>React 19, React Router 7, MUI 9 and MUI X Charts, built with Vite; responsive, with bottom tabs on phones.</td></tr>
-    <tr><td>Backend (REST API)</td><td>Node.js 22 and Express 5, a versioned REST API under <code>/api/v1</code>, express-session, Multer and sharp for event covers and club icons, and openid-client for Google sign-in.</td></tr>
-    <tr><td>Database</td><td>MySQL 8.4 accessed through mysql2, with a baseline schema and 16 ordered, checksummed migrations (up to <code>019_club_icons</code>).</td></tr>
+    <tr><td>Backend (REST API)</td><td>Node.js 22 and Express 5, a versioned REST API under <code>/api/v1</code>, express-session, Multer and sharp for event covers, club icons and club photos, and openid-client for Google sign-in.</td></tr>
+    <tr><td>Database</td><td>MySQL 8.4 accessed through mysql2, with a baseline schema and 20 ordered, checksummed migrations (up to <code>023_view_membership</code>).</td></tr>
     <tr><td>Asynchronous processing</td><td>Durable job queue (transactional outbox) with a separate worker; Server-Sent Events for live updates.</td></tr>
     <tr><td>Deployment</td><td>Docker Compose on the Ubuntu VM <code>c3322-pg19.cs.hku.hk</code>, with nginx serving HTTPS through a self-signed certificate.</td></tr>
   </table>
@@ -165,22 +165,25 @@
   <table>
     <tr><th style="width:24%">Area</th><th>What users can do</th><th style="width:14%">Scope</th></tr>
     <tr><td><strong>Accounts and profiles</strong></td><td>Register, sign in and out, and edit a persistent profile. Sessions are HttpOnly cookies stored in MySQL. Every change needs a CSRF token and a matching <code>Origin</code>. Logins are rate-limited.</td><td><span class="pill">Must-have</span></td></tr>
-    <tr><td><strong>Clubs and membership</strong></td><td>Browse clubs, request to join (the committee accepts or rejects), cancel a pending request, and leave. Belong to several clubs with club-specific roles: member, committee or president. Only one president per club is enforced in the database.</td><td><span class="pill">Must-have</span></td></tr>
-    <tr><td><strong>Venues and calendar</strong></td><td>Weekly venue calendars with three campus slots (10:00–12:00, 13:00–15:00, 16:00–18:00 HKT). Private bookings show only "Reserved". Pending requests do not reserve a slot.</td><td><span class="pill">Must-have</span></td></tr>
-    <tr><td><strong>Venue requests and approval</strong></td><td>Create an event draft and venue request together. The venue administrator approves or rejects with a reason. Overlaps are re-checked under row locks when approving, and administrators cannot decide their own club's request.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Clubs and membership</strong></td><td>Browse clubs, request to join (the committee accepts or rejects), cancel a pending request, and leave. Belong to several clubs with club-specific roles: member, committee or president. Only one president per club is enforced in the database. Venue administrators hold no club role, so they cannot join clubs or register for events.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Venues and calendar</strong></td><td>Weekly venue calendars with six back-to-back campus slots from 06:00 to 21:00 HKT (early morning, morning, afternoon, evening, night, and a full-day slot that blocks the whole day). Private bookings show only "Reserved". Pending requests do not reserve a slot.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Venue requests and approval</strong></td><td>Create an event draft and venue request together. The venue administrator approves or rejects with a reason. Overlaps are re-checked under row locks when approving. Venue administrators hold no club role, so they can never decide their own club's request, and the server still checks it.</td><td><span class="pill">Must-have</span></td></tr>
     <tr><td><strong>Event management</strong></td><td>Publish separately after approval. Edit with optimistic version checks. Cancel, which cancels the booking, registrations and pending requests in one transaction. Public or members-only visibility, and participant lists for the committee.</td><td><span class="pill">Must-have</span></td></tr>
     <tr><td><strong>Discovery and participation</strong></td><td>Search and filter events by date, club, visibility and tags, and see upcoming and past events. Register or withdraw subject to eligibility, deadline and capacity. A first-in, first-out waitlist promotes the next student automatically, and "My events" lists your registrations.</td><td><span class="pill">Must-have</span></td></tr>
     <tr><td><strong>Notifications and reminders</strong></td><td>Persistent in-app inbox for workflow changes (mark one as read or unread, or mark all as read), with event reminders and a daily 09:00 HKT club digest produced by a background worker. Retries are capped, and duplicates are prevented by unique keys.</td><td><span class="pill">Must-have</span></td></tr>
-    <tr><td><strong>Organiser reports</strong></td><td>Registration counts, daily registration actions and booked venue hours as charts, each with an equivalent data table.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Organiser reports</strong></td><td>Registration counts, daily registration actions and booked venue hours as charts, each with an equivalent data table. The activity report also shows event page visits by club members and non-members, and how many of them then clicked Join.</td><td><span class="pill">Must-have</span></td></tr>
     <tr><td><strong>Reliability and deployment</strong></td><td>Layered API, data-preserving migrations, consistent JSON errors with request IDs, concurrency tests for final-seat and conflicting approvals, and Docker Compose deployment.</td><td><span class="pill">Must-have</span></td></tr>
     <tr><td><strong>Google sign-in</strong></td><td>"Continue with Google" via OpenID Connect with backend token verification. New users complete their profile (student ID). Accounts are linked by verified email.</td><td><span class="pill bonus">Bonus</span></td></tr>
     <tr><td><strong>President sign-off</strong></td><td>Committee venue requests and publications wait for the president, who sends them on or returns them with a reason. The president can also transfer the presidency.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Live updates (SSE)</strong></td><td>Notifications, seat counts, waitlist changes and check-ins reach open pages within about two seconds over Server-Sent Events, without reloading.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Check-in and attendance</strong></td><td>A four-digit check-in code is shown during the event window, or the committee marks attendance by hand.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Effectiveness report</strong></td><td>Fill rate, turnout, drop-outs, no-shows, peak waitlist, promotions and view-to-join by source, with comparisons by tag, weekday and slot.</td><td><span class="pill extra">Extra</span></td></tr>
-    <tr><td><strong>Tags and covers</strong></td><td>Admin-curated campus tags (1–3 per event, at least one required) and club tags (0–5 per event), both filterable. Event cover images (JPEG or WebP up to 5 MB) are resized by sharp.</td><td><span class="pill extra">Extra</span></td></tr>
-    <tr><td><strong>Club action log</strong></td><td>The president sees a history of committee actions and can undo the ones that are safe to undo. Undo is refused once a later action affects the same people.</td><td><span class="pill extra">Extra</span></td></tr>
-    <tr><td><strong>Club icons</strong></td><td>The committee uploads, replaces or removes a club icon (JPEG, PNG or WebP, at least 128 × 128 px, up to 2 MB), checked in the browser and again on the server. sharp crops it to a square 256 px WebP. Icons appear on the Clubs page, and a club without one shows its colour badge with its first letter. The demo clubs get GPT-generated icons from the seed.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Tags and covers</strong></td><td>Admin-curated campus tags (1–3 per event, at least one required) and club tags (0–5 per event), both filterable. Event cover images (JPEG or WebP up to 5 MB) are resized by sharp and shown whole on the event page, with tag pills and formatted descriptions.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Club action log</strong></td><td>The committee and president can read a history of club actions. Only the president can undo the ones that are safe to undo, and undo is refused once a later action affects the same people.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Club icons and photos</strong></td><td>The committee uploads, replaces or removes a club icon (JPEG, PNG or WebP, at least 128 × 128 px, up to 2 MB) and a club photo (at least 600 × 400 px, up to 5 MB, with alt text). Both are checked in the browser and again on the server, and sharp crops them to a 256 px square icon and 600 × 400 and 1200 × 800 photo renditions (WebP, metadata removed). The Clubs and Organizer pages show the photo as a banner with the icon on it, and a club without them shows its colour pattern and first letter. The demo clubs get GPT-generated icons and photos from the seed.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Venue schedule</strong></td><td>Venue administrators see a week of approved bookings across every venue, grouped by Hong Kong day, with each event's state and registrations and a flag when its capacity is over the venue's. They can filter by venue and move week by week.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Member removal sign-off</strong></td><td>A committee member who removes a plain member sends a request instead. The president is notified, and approves it or rejects it with a reason, from the Organizer page or the inbox. The president can still remove a member at once. The log records every step.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Join and quit activity</strong></td><td>The committee sees each participant's club role (member, committee, president or non-member) and a history of who joined, quit, rejoined or was promoted from the waitlist, with a summary for the whole event.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Members-only join requests</strong></td><td>Students outside a club can request a place at a members-only event, and the committee decides.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Credits, privacy and terms</strong></td><td>An in-app <code>/credits</code> page as the guideline requires, plus public privacy policy and terms pages for the Google consent screen.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Usability fixes from UI/UX testing</strong></td><td>After a full UI/UX test round: sign-in returns to the page you asked for, a stale edit shows a "changed by someone else" notice, request forms keep typed details across a reload, the check-in roster is paginated, the Back button keeps Explore filters, and pages reflow up to 400% zoom.</td><td><span class="pill extra">Extra</span></td></tr>
@@ -214,7 +217,8 @@
         <li>Venue request → sign-off → approval → publish workflow, with row locking against double booking</li>
         <li>Registration, waitlist promotion and concurrency tests on real MySQL</li>
         <li>Durable job queue, reminder/digest worker and Server-Sent Events live updates</li>
-        <li>Migrations, reports, effectiveness, tags, check-in and cover uploads</li>
+        <li>Migrations, reports, effectiveness, tags, check-in, and cover, club icon and club photo uploads</li>
+        <li>Venue schedule, member-removal sign-off, join and quit activity, and the event page visits report</li>
         <li>Docker Compose deployment on PG19 over HTTPS, Google sign-in backend, demo seed, README</li>
       </ul></td>
     </tr>
@@ -286,7 +290,7 @@
   <text x="495" y="175" text-anchor="middle" class="s">sessions in MySQL · CSRF</text>
   <text x="495" y="190" text-anchor="middle" class="s">origin check · rate limits</text>
   <text x="495" y="205" text-anchor="middle" class="s">SSE hub (live updates)</text>
-  <text x="495" y="220" text-anchor="middle" class="s">cover and icon uploads (sharp)</text>
+  <text x="495" y="220" text-anchor="middle" class="s">image uploads (sharp)</text>
   <text x="495" y="235" text-anchor="middle" class="s">writes jobs to the outbox</text>
 
   <!-- worker -->
@@ -301,7 +305,7 @@
     <ellipse cx="678" cy="160" rx="52" ry="14" fill="#fdeceb" stroke="#c5483b" stroke-width="1.6"/>
     <text x="678" y="200" text-anchor="middle" class="t">db</text>
     <text x="678" y="216" text-anchor="middle" class="s">MySQL 8.4</text>
-    <text x="678" y="231" text-anchor="middle" class="s">26 tables</text>
+    <text x="678" y="231" text-anchor="middle" class="s">27 tables</text>
     <text x="678" y="246" text-anchor="middle" class="s">volume db_data</text>
     <text x="678" y="261" text-anchor="middle" class="s">3306 not published</text>
   </g>
@@ -318,7 +322,7 @@
   <rect x="200" y="300" width="160" height="34" rx="17" fill="#fff" stroke="#9aa3b2"/>
   <text x="280" y="321" text-anchor="middle" class="s">volume web_certs (TLS cert)</text>
   <rect x="410" y="396" width="170" height="34" rx="17" fill="#fff" stroke="#9aa3b2"/>
-  <text x="495" y="417" text-anchor="middle" class="s">volume cover_data (covers, icons)</text>
+  <text x="495" y="417" text-anchor="middle" class="s">volume cover_data (images)</text>
 
   <!-- arrows -->
   <path d="M150,206 H198" class="ln" marker-end="url(#ar)" marker-start="url(#ar)"/>
@@ -340,14 +344,14 @@
   <path d="M410,236 H394 V413 H408" class="ln"/>
   <text x="526" y="274" class="lbl">outbox jobs</text>
 </svg>
-    <figcaption>Figure 1. Deployment architecture. Arrows show request flow. The backend and worker share the database (including the outbox and notifications tables) and the image volume (event covers and club icons). <code>migrate</code> applies schema migrations before the API and worker start, and <code>seed</code> loads demo data into an empty database.</figcaption>
+    <figcaption>Figure 1. Deployment architecture. Arrows show request flow. The backend and worker share the database (including the outbox and notifications tables) and the image volume (event covers, club icons and club photos). <code>migrate</code> applies schema migrations before the API and worker start, and <code>seed</code> loads demo data into an empty database.</figcaption>
   </figure>
 
   <h3>Backend layering</h3>
   <table>
     <tr><th style="width:22%">Layer</th><th>Responsibility</th></tr>
     <tr><td>Middleware</td><td>Request ID, JSON body limit, session loading, CSRF token and <code>Origin</code> check on every change, and one error handler that turns errors into <code>{ error: { code, message, fields, request_id } }</code>.</td></tr>
-    <tr><td>Routers (<code>api_v1/</code>)</td><td>One router per area (auth, clubs, events, registration, engagement, reports, covers, club icons, notifications, Google). They validate input, check role and club permission, and pick the status code.</td></tr>
+    <tr><td>Routers (<code>api_v1/</code>)</td><td>One router per area (auth, clubs, club icons and photos, removal requests, events, registration, engagement, reports, covers, venue admin, notifications, Google). They validate input, check role and club permission, and pick the status code.</td></tr>
     <tr><td>Transactions and queries</td><td>Business rules run inside MySQL transactions with an explicit lock order (venue → club → bookings → event → participations), so concurrent requests cannot oversell seats or double-book a room. SQL lives in query/repository modules, kept apart from HTTP code.</td></tr>
     <tr><td>Jobs and live delivery</td><td>Side effects (notifications, reminders) are written to <code>notification_jobs</code> in the <em>same</em> transaction as the change (transactional outbox). The worker claims due jobs with lease tokens. The SSE hub follows the <code>notifications</code> and <code>live_signals</code> tables and pushes them to open connections.</td></tr>
   </table>
@@ -366,7 +370,7 @@
   <h2><span class="num">5</span>Database ER diagram</h2>
   <figure class="diagram" style="margin:0">
     <img src="er.svg" alt="Entity-relationship diagram of the core ClubSpace tables" style="max-height:150mm; width:auto; margin:0 auto;">
-    <figcaption>Figure 2. The 17 domain tables of the final MySQL 8.4 schema (baseline <code>schema.sql</code> plus migrations up to <code>019_club_icons</code>). Crow's-foot notation: a bar is "one" and a fork is "many". The two vertical buses carry the <code>event_id</code> and <code>user_id</code> foreign keys of the per-student tables. <strong>PK</strong> primary key, <strong>FK</strong> foreign key, <strong>UQ</strong> unique. Infrastructure tables are listed on the next page.</figcaption>
+    <figcaption>Figure 2. The 18 domain tables of the final MySQL 8.4 schema (baseline <code>schema.sql</code> plus migrations up to <code>023_view_membership</code>). Crow's-foot notation: a bar is "one" and a fork is "many". The two vertical buses carry the <code>event_id</code> and <code>user_id</code> foreign keys of the per-student tables. <strong>PK</strong> primary key, <strong>FK</strong> foreign key, <strong>UQ</strong> unique. Only the main foreign keys are drawn; <code>member_removal_requests</code> also references <code>users</code> three times. Infrastructure tables are listed on the next page.</figcaption>
   </figure>
 </section>
 
@@ -376,12 +380,13 @@
   <table>
     <tr><th style="width:27%">Table</th><th>Purpose</th></tr>
     <tr><td><code>users</code></td><td>Accounts with a platform role (<code>student</code> or <code>venue_admin</code>), a unique email and student ID, and an optional Google subject for linked sign-in.</td></tr>
-    <tr><td><code>clubs</code>, <code>memberships</code>, <code>club_join_requests</code></td><td>Clubs, each with an optional icon (<code>icon_key</code> names the WebP file on the image volume); the many-to-many link between users and clubs with a club role (<code>member</code>, <code>committee</code>, <code>president</code>); and requests to join, decided by the committee.</td></tr>
+    <tr><td><code>clubs</code>, <code>memberships</code>, <code>club_join_requests</code></td><td>Clubs, each with an optional icon and photo (<code>icon_key</code> and <code>photo_key</code> name the WebP files on the image volume); the many-to-many link between users and clubs with a club role (<code>member</code>, <code>committee</code>, <code>president</code>); and requests to join, decided by the committee.</td></tr>
+    <tr><td><code>member_removal_requests</code></td><td>A committee member's request to remove a plain member: status (<code>pending</code>, <code>approved</code>, <code>rejected</code>, <code>withdrawn</code> or <code>void</code>), a version that rejects stale decisions, and the president's decision and reason.</td></tr>
     <tr><td><code>venues</code>, <code>bookings</code></td><td>Rooms and time-slot requests. Status: <code>awaiting_president → pending → confirmed / rejected</code>, or <code>returned</code> / <code>cancelled</code>.</td></tr>
     <tr><td><code>events</code></td><td>Exactly one event per booking (unique <code>booking_id</code>; a composite foreign key keeps the club consistent). Holds capacity, visibility, registration deadline, check-in code and cover.</td></tr>
     <tr><td><code>participations</code>, <code>participation_history</code></td><td>Current registration state per student and event (<code>joined</code>, <code>waitlisted</code>, <code>left</code>, <code>cancelled</code> and others), plus an append-only history used by the reports.</td></tr>
     <tr><td><code>event_join_requests</code></td><td>Requests from non-members for members-only events.</td></tr>
-    <tr><td><code>event_attendance</code>, <code>event_views</code></td><td>Check-ins (by code or marked by the committee), and de-duplicated page views by source for the effectiveness report.</td></tr>
+    <tr><td><code>event_attendance</code>, <code>event_views</code></td><td>Check-ins (by code or marked by the committee), and de-duplicated page views by source and by the viewer's club role, for the effectiveness and activity reports.</td></tr>
     <tr><td><code>campus_tags</code>, <code>club_tags</code> and their link tables</td><td>Admin-curated campus tags and per-club tags, linked to events many-to-many.</td></tr>
     <tr><td><code>notifications</code></td><td>Each user's inbox. The unique <code>(user_id, dedup_key)</code> prevents duplicate deliveries.</td></tr>
     <tr><td><code>notification_jobs</code></td><td>Durable outbox and job queue: due time, attempts (at most 5), lease token and last error.</td></tr>
@@ -416,7 +421,7 @@
     <div class="card"><h4>HTTP status codes</h4>
       <table style="margin:0">
         <tr><td><code>200</code> <code>201</code> <code>204</code></td><td>OK · created · no body</td></tr>
-        <tr><td><code>202</code></td><td>Request queued for approval (join requests)</td></tr>
+        <tr><td><code>202</code></td><td>Request queued for approval (join requests, member removals)</td></tr>
         <tr><td><code>400</code> / <code>422</code></td><td>Malformed JSON / validation failed (per-field)</td></tr>
         <tr><td><code>401</code> / <code>403</code></td><td>Not signed in / not allowed, bad CSRF or origin</td></tr>
         <tr><td><code>404</code> / <code>409</code></td><td>Missing or hidden / conflict (slot taken, full, stale)</td></tr>
@@ -431,7 +436,7 @@
   <div class="keep"><h3>Authentication and profile</h3>
   <table>
     <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
-    <tr><td><span class="m GET">GET</span></td><td><code>/config</code></td><td>Public</td><td>Feature flags, e.g. whether Google sign-in is enabled</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/config</code></td><td>Public</td><td>Feature flags (e.g. whether Google sign-in is enabled) and the campus time slots</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/auth/csrf</code></td><td>Public</td><td>Issue the CSRF token for this session</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/auth/register</code></td><td>Public</td><td>Create an account and sign in (<code>201</code>)</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/auth/login</code></td><td>Public</td><td>Sign in with email and password (rate-limited)</td></tr>
@@ -444,18 +449,23 @@
   <div class="keep"><h3>Clubs, roles and tags</h3>
   <table>
     <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
-    <tr><td><span class="m GET">GET</span></td><td><code>/clubs</code></td><td>User</td><td>Clubs with the caller's membership status and role</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs</code></td><td>User</td><td>Clubs with the caller's membership status and role, and each club's icon and photo</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/me/memberships</code></td><td>User</td><td>The caller's clubs and roles</td></tr>
     <tr><td><span class="m PUT">PUT</span> <span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/membership</code></td><td>User</td><td>Request to join (<code>202</code>) or leave (<code>204</code>)</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/join-requests</code></td><td>Committee</td><td>Pending join requests</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/clubs/:id/join-requests/:rid/review</code></td><td>Committee</td><td>Accept or reject a join request</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/members</code></td><td>Committee</td><td>Members and roles</td></tr>
-    <tr><td><span class="m PATCH">PATCH</span> <span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/members/:user_id</code></td><td>President / Committee</td><td>Change a role (president only), or remove a member</td></tr>
+    <tr><td><span class="m PATCH">PATCH</span> <span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/members/:user_id</code></td><td>President / Committee</td><td>Change a role (president only), or remove a member: the president removes at once (<code>204</code>), a committee member's request waits for the president (<code>202</code>)</td></tr>
     <tr><td><span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/committee</code></td><td>Committee</td><td>Step down from the committee</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/clubs/:id/presidency</code></td><td>President</td><td>Hand the presidency to a committee member</td></tr>
     <tr><td><span class="m PUT">PUT</span> <span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/icon</code></td><td>Committee</td><td>Upload or replace the club icon (multipart, JPEG/PNG/WebP ≤ 2 MB), or remove it</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/icon</code></td><td>User</td><td>The club icon as a 256 px WebP (cached, with an ETag)</td></tr>
-    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/actions</code></td><td>President</td><td>Club action log</td></tr>
+    <tr><td><span class="m PUT">PUT</span> <span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/photo</code></td><td>Committee</td><td>Upload or replace the club photo (multipart: file and alt text; at least 600 × 400, up to 5 MB), or remove it</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/photo/:size</code></td><td>User</td><td>The club photo as a <code>card</code> (600 × 400) or <code>full</code> (1200 × 800) WebP</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/removal-requests</code></td><td>Committee</td><td>Member removal requests, oldest first</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/clubs/:id/removal-requests/:rid/decision</code></td><td>President</td><td>Approve or reject (a reason is required to reject). A request for a member who has left closes as void (<code>409</code>)</td></tr>
+    <tr><td><span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/removal-requests/:rid</code></td><td>Requester / President</td><td>Withdraw a pending request</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/actions</code></td><td>Committee</td><td>Club action log (read-only for the committee)</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/clubs/:id/actions/:aid/undo</code></td><td>President</td><td>Undo a club action, unless a later action affects the same people (<code>409</code>)</td></tr>
     <tr><td><span class="m GET">GET</span> <span class="m POST">POST</span></td><td><code>/tags</code></td><td>User / Admin</td><td>List campus tags, or create one (admin)</td></tr>
     <tr><td><span class="m PATCH">PATCH</span></td><td><code>/tags/:id</code></td><td>Admin</td><td>Rename or retire a campus tag</td></tr>
@@ -468,6 +478,7 @@
     <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/venues</code></td><td>User</td><td>Active venues with capacity and location</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/venues/:id/calendar</code></td><td>User</td><td>Week of slots: available, reserved or past (private details hidden)</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/admin/schedule</code></td><td>Admin</td><td>Approved bookings across all venues for up to 31 days, with each event's state and registration counts, and the number of pending requests</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/bookings</code></td><td>Admin</td><td>Venue requests waiting for a decision</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/bookings/:id/decision</code></td><td>Admin</td><td>Approve or reject with a reason. Re-checks overlap (<code>409</code>); <code>403</code> for own club</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/bookings/:id/signoff</code></td><td>President</td><td>Send a committee venue request to the venue team, or return it</td></tr>
@@ -478,7 +489,7 @@
   <table>
     <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/events</code></td><td>User</td><td>Published events, paginated, with filters: <code>q</code>, <code>club_id</code>, <code>venue_id</code>, <code>visibility</code>, <code>phase</code> (upcoming/past), <code>from</code>/<code>to</code>, <code>tag</code></td></tr>
-    <tr><td><span class="m POST">POST</span></td><td><code>/events</code></td><td>Committee</td><td>Create an event draft and its venue request together (<code>201</code>); at least one campus tag is required</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events</code></td><td>Committee</td><td>Create an event draft and its venue request together (<code>201</code>); at least one campus tag is required. <code>slot_id</code> is one of <code>early_morning</code>, <code>morning</code>, <code>afternoon</code>, <code>evening</code>, <code>night</code>, <code>full_day</code></td></tr>
     <tr><td><span class="m GET">GET</span> <span class="m PATCH">PATCH</span></td><td><code>/events/:id</code></td><td>User / Committee</td><td>Event detail, or edit with a version check (<code>409</code> if stale)</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/publish</code></td><td>Committee</td><td>Publish an approved draft. A committee member's request waits for the president</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/signoff</code></td><td>President</td><td>Approve the publication, or return it to draft with a reason</td></tr>
@@ -493,15 +504,16 @@
     <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
     <tr><td><span class="m POST">POST</span> <span class="m DELETE">DELETE</span></td><td><code>/events/:id/registration</code></td><td>User</td><td>Register, join the waitlist, or ask to join (members-only); withdraw</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/me/registrations</code></td><td>User</td><td>The caller's registrations and waitlist positions</td></tr>
-    <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/participants</code></td><td>Committee</td><td>Participant list, with each person's check-in state</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/participants</code></td><td>Committee</td><td>Participant list with club role (member, committee, president or non-member) and check-in state</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/participation-history</code></td><td>Committee</td><td>Who joined, quit, rejoined or was promoted, newest first, filterable and paged, with a summary for the whole event</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/join-requests</code></td><td>Committee</td><td>Requests for a members-only event</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/join-requests/:user_id/decision</code></td><td>Committee</td><td>Accept or reject a request</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/checkin</code></td><td>Committee</td><td>Open check-in (from 30 min before the start to 2 h after the end) and get the four-digit code</td></tr>
     <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/attendance</code></td><td>User</td><td>Check in with the four-digit code</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/attendance</code></td><td>Committee</td><td>Attendance list</td></tr>
     <tr><td><span class="m PUT">PUT</span> <span class="m DELETE">DELETE</span></td><td><code>/events/:id/attendance/:user_id</code></td><td>Committee</td><td>Mark or unmark a participant as present</td></tr>
-    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/views</code></td><td>User</td><td>Record a view and its source (<code>204</code>)</td></tr>
-    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/reports</code></td><td>Committee</td><td>Participant counts, daily registration actions, venue hours</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/views</code></td><td>User</td><td>Record a view, its source and the viewer's club role (<code>204</code>)</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/reports</code></td><td>Committee</td><td>Participant counts, event page visits (members and non-members), daily registration actions, venue hours</td></tr>
     <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/reports/effectiveness</code></td><td>Committee</td><td>Fill rate, turnout, drop-out, waitlist and view-to-join</td></tr>
   </table></div>
 
@@ -579,6 +591,8 @@ Cookie: clubspace.sid=…   X-CSRF-Token: 6c1f…   Origin: https://c3322-pg19.c
     <div class="card"><h4>Concurrency</h4><p>All writers lock rows in one fixed order (venue → club → bookings → event → participations) to avoid deadlocks. Optimistic <code>version</code> columns reject stale edits. Database tests open independent MySQL connections to race two approvals for the same slot and two students for the last seat, and check that exactly one wins.</p></div>
     <div class="card"><h4>Background worker</h4><p>Every 5 s the worker claims due jobs using a lease token. It commits the claim before taking any domain lock. Every 60 s it scans for reminders and digests. Failed jobs back off and stop after 5 attempts. A heartbeat row shows that the worker is alive.</p></div>
     <div class="card"><h4>Real-time updates</h4><p>The SSE hub in the API process follows the shared <code>notifications</code> and <code>live_signals</code> tables, so rows written by the worker arrive the same way. Public hints ("event 10 changed") go to everyone, and committee-only hints go to that club. Pages then refetch through the normal authorised routes, so no private data travels in a hint.</p></div>
+    <div class="card"><h4>Member removal sign-off</h4><p>A committee member who removes a plain member creates a pending request (<code>202</code>). The president is notified and sees Approve and Reject in the inbox and on the Organizer page. Approving runs the removal as the president and logs it (undoable). Rejecting needs a reason. If the member left or was promoted in the meantime, the request closes as void. The president's own removal is immediate.</p></div>
+    <div class="card"><h4>Event page visits</h4><p>The views endpoint records the viewer's club role at the time of each view. The activity report counts each person once per event, classified by their first view as a club member or non-member, and counts a click on Join when a join, waitlist or members-only request follows that view. The club's own committee, president and venue administrators are left out, and the response holds counts only, never names.</p></div>
   </div>
 </section>
 
@@ -588,10 +602,14 @@ Cookie: clubspace.sid=…   X-CSRF-Token: 6c1f…   Origin: https://c3322-pg19.c
   <p class="lead">Screenshots of the final build with the demo data. The same code runs on <code>c3322-pg19.cs.hku.hk</code>.</p>
   <div class="shots">
     <figure><img src="img/01-events.jpg" alt=""><figcaption>Explore: search, quick filters and tags, with live seat counts on each card (student).</figcaption></figure>
-    <figure><img src="img/04-full-waitlist.jpg" alt=""><figcaption>Event detail: registration state, add to calendar, and leave event (member).</figcaption></figure>
-    <figure><img src="img/06-calendar.jpg" alt=""><figcaption>Venue calendar with the three campus slots. Pending requests do not reserve a slot (committee).</figcaption></figure>
+    <figure><img src="img/13-clubs.jpg" alt=""><figcaption>Clubs: each card shows the club photo with its icon, and the join state, such as a pending request that can be cancelled (student).</figcaption></figure>
+    <figure><img src="img/04-full-waitlist.jpg" alt=""><figcaption>Event detail: the whole cover photo, tag pills and the registration panel. A full event offers the waitlist (member).</figcaption></figure>
+    <figure><img src="img/06-calendar.jpg" alt=""><figcaption>Venue calendar with the six back-to-back campus slots from 06:00 to 21:00. Pending requests do not reserve a slot (committee).</figcaption></figure>
     <figure><img src="img/07-admin.jpg" alt=""><figcaption>Booking review: pending venue requests for the venue administrator.</figcaption></figure>
+    <figure><img src="img/12-admin-schedule.jpg" alt=""><figcaption>Venue schedule: approved bookings across every venue for a week, with each event's registrations (venue administrator).</figcaption></figure>
     <figure><img src="img/08-organizer.jpg" alt=""><figcaption>Organizer: the president's sign-off queue, with send or return actions.</figcaption></figure>
+    <figure><img src="img/15-people-activity.jpg" alt=""><figcaption>People tab of an event: who joined, quit, rejoined or was promoted, and each person's club role (committee).</figcaption></figure>
+    <figure><img src="img/10-activity-visits.jpg" alt=""><figcaption>Activity report: event page visits by club members and non-members, and how many then clicked Join.</figcaption></figure>
     <figure><img src="img/09-effectiveness.jpg" alt=""><figcaption>Effectiveness report: fill rate and turnout per event, with an exact-number table.</figcaption></figure>
     <figure><img src="img/05-inbox.jpg" alt=""><figcaption>Inbox: notifications arrive live over Server-Sent Events.</figcaption></figure>
     <figure style="display:grid;grid-template-columns:38% 1fr;gap:4mm;align-items:start"><img src="img/03-mobile-events.jpg" alt="" style="width:100%"><figcaption style="margin-top:0">Responsive layout on a phone (390 px wide): content stacks into one column and navigation moves to a bottom tab bar (Explore, My events, Clubs, Inbox).</figcaption></figure>
@@ -617,7 +635,7 @@ curl -fsS http://127.0.0.1/api/health # {"status":"ok"}</pre>
   </ul>
 
   <h3>Demo accounts</h3>
-  <p>On an empty database, the seed creates 5 clubs, 5 venues, 37 accounts and 25 events through the real API. These include 6 past events with check-ins (for the reports), 15 upcoming events (one full with a waitlist, members-only events with pending requests), one cancelled event and three still in the approval workflow. The seed also gives the five demo clubs their generated icons, and on an existing database it adds any missing icons without replacing uploaded ones. Every account uses the password <code>clubspacetest123</code>. The names are fictional and the addresses use the reserved <code>.example</code> domain.</p>
+  <p>On an empty database, the seed creates 5 clubs, 5 venues, 37 accounts and 25 events through the real API. These include 6 past events with check-ins (for the reports), 15 upcoming events (one full with a waitlist, members-only events with pending requests), one cancelled event and three still in the approval workflow. Members join, quit, rejoin and are promoted from the waitlist over several days, and about 400 event page views are recorded, so every club's reports have something to show. The seed also gives the demo events their covers and the five demo clubs their icons and photos. On an existing database it adds any missing icons and photos without replacing uploaded ones. Every account uses the password <code>clubspacetest123</code>. The names are fictional and the addresses use the reserved <code>.example</code> domain.</p>
   <p>The venue administrator is <code>admin@clubspace.example</code>. Each club has one president, two committee members and three members, named by the pattern below (replace <em>club</em> with <code>photo</code>, <code>film</code>, <code>debate</code>, <code>hiking</code> or <code>robotics</code>):</p>
   <table>
     <tr><th style="width:26%">Club</th><th>President</th><th>Committee</th><th>Members</th></tr>
@@ -627,17 +645,18 @@ curl -fsS http://127.0.0.1/api/health # {"status":"ok"}</pre>
   <p><strong>What to try with each role:</strong></p>
   <table>
     <tr><th style="width:38%">Sign in as</th><th>Try</th></tr>
-    <tr><td><code>admin@clubspace.example</code></td><td>Approve or reject Film Society's Animation Night venue request</td></tr>
-    <tr><td><code>president.photo@clubspace.example</code></td><td>Sign off the Exhibition Planning Meeting request, accept a join request, promote a member</td></tr>
+    <tr><td><code>admin@clubspace.example</code></td><td>Approve or reject Film Society's Animation Night venue request, then open Venue schedule for the week's approved bookings</td></tr>
+    <tr><td><code>president.photo@clubspace.example</code></td><td>Sign off the Exhibition Planning Meeting request, accept a join request, promote a member; open Golden Hour Photo Walk → People for join and quit activity, and Reports for event page visits</td></tr>
     <tr><td><code>president.debate@clubspace.example</code></td><td>Approve the publication of Debate Workshop: Rebuttals</td></tr>
     <tr><td><code>committee1.debate@clubspace.example</code></td><td>Create an event and request a venue; review members-only join requests; upload a new club icon under Organizer → Your clubs</td></tr>
+    <tr><td><code>committee1.photo@clubspace.example</code></td><td>Request the removal of a member under Club members and reports, then approve it as <code>president.photo</code></td></tr>
     <tr><td><code>member1.hiking@clubspace.example</code></td><td>Lion Rock Sunrise Hike: full, with a waitlist</td></tr>
     <tr><td><code>student1@clubspace.example</code></td><td>Register for a public event and watch the seat count update in a second browser</td></tr>
   </table>
 
   <h3>Testing and quality</h3>
   <ul>
-    <li><strong>59 automated test files.</strong> The backend has unit tests and 19 database test suites that run against a disposable MySQL 8.4 container (they refuse any database whose name lacks "test"). They cover migrations, authentication, governance, registration races, the job queue, live signals, covers, club icons and the demo seed. The frontend uses the Node test runner, plus Vitest and Testing Library for components.</li>
+    <li><strong>67 automated test files.</strong> The backend has unit tests and 23 database test suites that run against a disposable MySQL 8.4 container (they refuse any database whose name lacks "test"). They cover migrations, authentication, governance, registration races, the job queue, live signals, covers, club icons, member removal requests, the venue schedule, event page visits and the demo seed. The frontend uses the Node test runner, plus Vitest and Testing Library for components.</li>
     <li><strong>Static checks:</strong> Oxlint for the frontend, and a production build in the Docker image.</li>
     <li><strong>Query plans:</strong> <code>explain.db.test.js</code> checks that hot queries use their indexes. These include the booking overlap check, the admin review queue, waitlist order, job claims, reminder scans and the inbox.</li>
   </ul>
@@ -654,7 +673,7 @@ curl -fsS http://127.0.0.1/api/health # {"status":"ok"}</pre>
     <tr><td>Backend</td><td>Node.js and Express, express-session, mysql2, Multer, sharp, dotenv, openid-client</td></tr>
     <tr><td>Database and infrastructure</td><td>MySQL 8.4, Docker and nginx</td></tr>
     <tr><td>Tooling</td><td>Vite, Vitest and Testing Library, Oxlint</td></tr>
-    <tr><td>Demo images</td><td>Cover images for the fictional demo clubs and events, generated with OpenAI's GPT image generation (<code>backend-beta/db/demo-images/</code>), and the icons of the five demo clubs (<code>backend-beta/db/demo-icons/</code>), generated the same way. All demo people are fictional and use the reserved <code>.example</code> domain.</td></tr>
+    <tr><td>Demo images</td><td>Cover images for the fictional demo events and the demo club photos (<code>backend-beta/db/demo-images/</code>), and the icons of the five demo clubs (<code>backend-beta/db/demo-icons/</code>), all generated with OpenAI's GPT image generation. All demo people are fictional and use the reserved <code>.example</code> domain.</td></tr>
   </table>
 
   <h3>Repository map</h3>

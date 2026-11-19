@@ -1,5 +1,5 @@
 // Generates er.svg (core ClubSpace entities) for the final documentation.
-// Columns and keys come from the schema after all migrations (019_club_icons).
+// Columns and keys come from the schema after all migrations (023_view_membership).
 //   node docs/final-report/er-diagram.mjs
 import { writeFileSync } from "node:fs";
 
@@ -11,8 +11,9 @@ function ent(name, col, y, cols, group) {
   E[name] = { name, x: X[col], y, w: W, h, cols, group };
 }
 // [column, key badge]
+ent("member_removal_requests", 0, 170, [["id", "PK"], ["club_id", "FK"], ["user_id", "FK"], ["requested_by", "FK"], ["status", ""], ["decided_by", "FK"], ["version", ""]], "club");
 ent("club_tags", 0, 40, [["id", "PK"], ["club_id", "FK"], ["name", ""], ["name_key (generated)", "UQ*"]], "club");
-ent("clubs", 1, 40, [["id", "PK"], ["name", "UQ"], ["description", ""], ["icon_key", ""], ["icon_updated_at", ""]], "club");
+ent("clubs", 1, 40, [["id", "PK"], ["name", "UQ"], ["description", ""], ["icon_key", ""], ["photo_key", ""]], "club");
 ent("memberships", 2, 40, [["user_id", "PK FK"], ["club_id", "PK FK"], ["role", ""], ["president_club_id (gen.)", "UQ"], ["version", ""]], "club");
 ent("club_join_requests", 3, 40, [["id", "PK"], ["user_id", "FK"], ["club_id", "FK"], ["status", ""], ["reviewed_by", "FK"]], "club");
 ent("users", 4, 40, [["id", "PK"], ["email", "UQ"], ["password_hash", ""], ["name", ""], ["student_id", "UQ"], ["google_sub", "UQ"], ["platform_role", ""]], "user");
@@ -25,7 +26,7 @@ ent("campus_tags", 1, 546, [["id", "PK"], ["slug", "UQ"], ["name", ""]], "venue"
 ent("participations", 3, 210, [["user_id", "PK FK"], ["event_id", "PK FK"], ["status", ""], ["queued_at", ""], ["confirmed_at", ""]], "link");
 ent("event_join_requests", 3, 333, [["event_id", "PK FK"], ["user_id", "PK FK"], ["status", ""], ["allow_waitlist", ""]], "link");
 ent("event_attendance", 3, 441, [["event_id", "PK FK"], ["user_id", "PK FK"], ["method", ""], ["checked_in_at", ""]], "link");
-ent("event_views", 3, 549, [["id", "PK"], ["event_id", "FK"], ["user_id", "FK"], ["source", ""], ["bucket", ""]], "link");
+ent("event_views", 3, 549, [["id", "PK"], ["event_id", "FK"], ["user_id", "FK"], ["source", ""], ["viewer_role", ""]], "link");
 ent("participation_history", 3, 672, [["id", "PK"], ["event_id", "FK"], ["user_id", "FK"], ["action", ""], ["from_status / to_status", ""]], "link");
 ent("notifications", 4, 210, [["id", "PK"], ["user_id", "FK"], ["event_id", "FK"], ["club_id", "FK"], ["type", ""], ["dedup_key", ""], ["read_at", ""]], "user");
 
@@ -56,6 +57,8 @@ const r = (n) => E[n].x + E[n].w, b = (n) => E[n].y + E[n].h, mid = (n) => E[n].
 
 // clubs 1—N club_tags
 L([[r("club_tags"), 70], [E.clubs.x, 70]]); many([r("club_tags"), 70], [-1, 0]); one([E.clubs.x, 70], [1, 0]);
+// clubs 1—N member_removal_requests (bottom edge of clubs, across the club_tags trunk)
+L([[250, b("clubs")], [250, 190], [r("member_removal_requests"), 190]]); one([250, b("clubs")], [0, -1]); many([r("member_removal_requests"), 190], [-1, 0]);
 // clubs 1—N memberships
 L([[r("clubs"), 70], [E.memberships.x, 70]]); one([r("clubs"), 70], [-1, 0]); many([E.memberships.x, 70], [1, 0]);
 // users 1—N memberships (over the top)
