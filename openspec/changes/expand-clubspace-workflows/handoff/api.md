@@ -73,6 +73,7 @@ Auth: public=anonymous allowed; user=authenticated; committee=committee of targe
 | POST /bookings/:id/decision | admin,not self |Decision|200 Booking; no publication |
 | GET /venues | user |page,page_size|200 Venue[] sorted id ASC |
 | GET /venues/:id/calendar | user |from,to|200 Calendar (max31days) |
+| GET /admin/schedule | admin |from,to,venue_id?|200 AdminSchedule (max31days): confirmed bookings across venues, start_time ASC |
 | GET /notifications | user |unread_only?,page,page_size|200 Notification[]+meta.unread_count; created_at,id DESC |
 | PATCH /notifications/:id/read | user/owner |{}|200 Notification; repeated read unchanged |
 | GET /clubs/:id/reports | committee |from,to|200 ClubReport (max93days) |
@@ -85,7 +86,7 @@ Retain root `/api/health` outside v1:200 `{status:"ok"}` or503 `{status:"unavail
 | --- | --- |
 | Register | name1..100 Unicode chars, email<=254 valid shape normalized trim/lowercase, student_id1..50 `[A-Za-z0-9-]+`, password12..128 chars untrimmed; no role |
 | Login | email,password; strings nonempty; do not trim password |
-| CreateEvent | club_id,venue_id positive ints; title trimmed1..255; description trimmed1..10000; date real campus YYYY-MM-DD; slot_id morning/afternoon/evening; visibility public/members_only; capacity int1..500 and<=venue; registration_closes_at optional UTC instant default start |
+| CreateEvent | club_id,venue_id positive ints; title trimmed1..255; description trimmed1..10000; date real campus YYYY-MM-DD; slot_id early_morning/morning/afternoon/evening/night/full_day; visibility public/members_only; capacity int1..500 and<=venue; registration_closes_at optional UTC instant default start |
 | EditEvent | expected_version positive int, at least one of title/description/capacity/visibility/registration_closes_at; same validation as create; published only title/description |
 | Decision | expected_version positive int; decision approve/reject; reason optional string<=500 for approve, required trimmed1..500 for reject |
 | Cancel | expected_version positive int; reason trimmed1..500 required; retained in audit/notifications |
@@ -100,7 +101,7 @@ User: `{id,name,email,student_id,platform_role}`. Membership: `{club_id,club_nam
 
 Config:
 ```json
-{"data":{"campus_timezone":"Asia/Hong_Kong","slots":[{"id":"morning","start":"10:00","end":"12:00"},{"id":"afternoon","start":"13:00","end":"15:00"},{"id":"evening","start":"16:00","end":"18:00"}]}}
+{"data":{"campus_timezone":"Asia/Hong_Kong","slots":[{"id":"early_morning","name":"Early morning","start":"06:00","end":"09:00"},{"id":"morning","name":"Morning","start":"09:00","end":"12:00"},{"id":"afternoon","name":"Afternoon","start":"12:00","end":"15:00"},{"id":"evening","name":"Evening","start":"15:00","end":"18:00"},{"id":"night","name":"Night","start":"18:00","end":"21:00"},{"id":"full_day","name":"Full day","start":"06:00","end":"21:00"}]}}
 ```
 Create:
 ```json
@@ -125,6 +126,8 @@ Calendar:
 {"data":{"venue_id":1,"from":"2026-11-08T16:00:00Z","to":"2026-11-15T16:00:00Z","campus_timezone":"Asia/Hong_Kong","bookings":[{"start_at":"2026-11-12T02:00:00Z","end_at":"2026-11-12T04:00:00Z","busy":true,"event_id":12,"title":"Photography workshop","club_id":1}]}}
 ```
 Private draft blocks have event_id/title/club_id null; no pending blocks. Client overlays supplied fixed daily slots and uses full intervals for availability, including legacy cross-midnight intervals. Backend accepts only configured date/slot on creation.
+
+AdminSchedule: `{from,to,campus_timezone,venue_id:null|int,pending_requests,bookings:[{booking_id,start_at,end_at,venue:{id,name,capacity},club:{id,name},event:null|{id,title,state,visibility,capacity,joined_count,waitlisted_count}}]}`. Confirmed bookings that overlap the range, ordered by start_time, venue name, id. `pending_requests` counts future pending requests that overlap the range; they are not listed.
 
 Notification: `{id,type,event_id:null|int,booking_id:null|int,club_id:null|int,join_request_id:null|int,title,body,created_at,read_at:null|instant}`; `join_request_id` is set on `club_join_request` items so the inbox can review them. Text is server-generated plain text, never executable HTML. List meta includes global own unread_count independent of unread_only/page. Historic notification can link to cancelled event; target GET handles current visibility.
 

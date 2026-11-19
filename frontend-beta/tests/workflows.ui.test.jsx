@@ -153,7 +153,7 @@ describe('frontend preview workflows', () => {
     expect(screen.getByRole('link', { name: 'Profile' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Organizer' })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Admin' })).toBeNull()
+    for (const name of ['Booking review', 'Venue schedule']) expect(screen.queryByRole('link', { name })).toBeNull()
   })
 
   it('shows the president the activity log and undoes an action', async () => {
@@ -290,6 +290,28 @@ describe('frontend preview workflows', () => {
   })
 
 
+  it('shows venue admins every venue\'s approved bookings by day, with filters and flags', async () => {
+    window.history.replaceState({}, '', '/admin/schedule')
+    vi.stubGlobal('fetch', previewFetch())
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Venue schedule' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Venue schedule' }).getAttribute('aria-current')).toBe('page')
+    expect(await screen.findByRole('link', { name: 'Campus photo walk' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Film night: stories in motion' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: '2 pending requests to review' }).getAttribute('href')).toBe('/admin/bookings')
+    expect(screen.getByText(/Today/, { selector: '.calendar-today' })).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Venue'), { target: { value: '2' } })
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Campus photo walk' })).toBeNull())
+    expect(screen.getByRole('link', { name: 'Film night: stories in motion' })).toBeTruthy()
+    expect(window.location.search).toContain('venue_id=2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
+    expect(await screen.findByRole('heading', { name: 'Nothing booked this week' })).toBeTruthy()
+    expect(window.location.search).toMatch(/week=\d{4}-\d\d-\d\d/)
+  })
+
   // The figures are a lazy chunk that pulls in MUI X charts. Transforming it
   // can take several seconds while the whole suite runs in parallel, so load
   // it first (with its own time allowance); the page's lazy import then
@@ -350,7 +372,7 @@ describe('frontend preview workflows', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(trigger)
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    for (const name of ['Profile', 'Organizer', 'Admin']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    for (const name of ['Profile', 'Organizer', 'Booking review', 'Venue schedule']) expect(screen.getByRole('link', { name })).toBeTruthy()
     fireEvent.keyDown(screen.getByRole('link', { name: 'Profile' }), { key: 'Escape' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger)

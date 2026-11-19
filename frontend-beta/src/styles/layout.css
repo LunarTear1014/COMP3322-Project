@@ -180,3 +180,24 @@ body { padding: 0; }
   .cs-tab .cs-icon { width: 18px; height: 18px; padding: 2px 10px; }
   .cs-tab .cs-badge { top: -2px; }
 }
+
+/* Venue administrator pages: sub-navigation and the all-venue schedule. */
+.admin-tabs { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-2); margin: 0 0 var(--space-4); }
+.admin-tabs a { padding: 6px 14px; border-radius: var(--radius-pill); border: 2px solid var(--outline); background: var(--surface); color: var(--ink); font-weight: 700; text-decoration: none; }
+.admin-tabs a[aria-current="page"] { background: var(--lagoon); color: var(--on-lagoon); box-shadow: var(--shadow-sticker); }
+.schedule-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3) var(--space-4); margin-bottom: var(--space-3); }
+.schedule-toolbar .section-title { margin: 0; flex: 1 1 100%; }
+.schedule-filter { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 700; min-width: 200px; }
+.schedule-summary { margin: 0 0 var(--space-4); }
+.schedule-day { margin-bottom: var(--space-6); }
+.schedule-day-title { display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-display); font-size: 18px; line-height: 24px; font-weight: 800; margin: 0 0 var(--space-2); }
+.schedule-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.schedule-item { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: var(--space-3); align-items: start; padding: var(--space-3) var(--space-4); background: var(--surface); border: 2px solid var(--outline); border-left: 8px solid var(--club, var(--outline)); border-radius: var(--radius-md, 12px); }
+.schedule-time { font-weight: 800; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.schedule-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.schedule-body p { margin: 0; overflow-wrap: anywhere; }
+.schedule-title { font-weight: 800; font-size: 16px; line-height: 22px; }
+.schedule-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: 2px; }
+@media (max-width: 479.98px) {
+  .schedule-item { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}

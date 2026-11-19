@@ -1,4 +1,4 @@
-import { ChevronDown, Info, LogOut, ShieldCheck, UserRound, Users } from 'lucide-react'
+import { CalendarDays, ChevronDown, Info, LogOut, ShieldCheck, UserRound, Users } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { isOrganizer } from '../../lib/roles'
@@ -54,7 +54,8 @@ export function AccountMenu({ session, onSignOut }) {
           <p className="account-name">{session.user.name}</p>
           <Link to="/profile" onClick={() => close(false)}><UserRound className="cs-icon" aria-hidden="true" />Profile</Link>
           {organizer && <Link to="/organizer" onClick={() => close(false)}><Users className="cs-icon" aria-hidden="true" />Organizer</Link>}
-          {admin && <Link to="/admin/bookings" onClick={() => close(false)}><ShieldCheck className="cs-icon" aria-hidden="true" />Admin</Link>}
+          {admin && <Link to="/admin/bookings" onClick={() => close(false)}><ShieldCheck className="cs-icon" aria-hidden="true" />Booking review</Link>}
+          {admin && <Link to="/admin/schedule" onClick={() => close(false)}><CalendarDays className="cs-icon" aria-hidden="true" />Venue schedule</Link>}
           <Link to="/credits" onClick={() => close(false)}><Info className="cs-icon" aria-hidden="true" />Credits</Link>
           <button type="button" className="sign-out" onClick={() => { close(false); onSignOut() }}>
             <LogOut className="cs-icon" aria-hidden="true" />Sign out

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { addDays, campusDate, campusInstant, query } from '../api'
 import { ErrorNotice, PageHeading, Pagination, Resource } from '../components/common'
+import { AdminTabs } from '../components/nav/AdminTabs'
 import { BottomSheet, Button, EmptyState, StatusChip, TextField, useToast } from '../components/ui'
 import { useAction, useAllOptions, useResource } from '../hooks/resources'
 import { timeLine } from '../lib/format'
@@ -61,6 +62,7 @@ export function Admin({ session }) {
 
   return (
     <main className="page">
+      <AdminTabs />
       <PageHeading title="Booking review" description="Approval does not publish the event. Availability is checked again when you decide." />
       <h2 className="section-title">Pending requests {requests.meta && `(${requests.meta.total})`}</h2>
       {!openId && <ErrorNotice error={action.error} />}

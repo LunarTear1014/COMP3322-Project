@@ -22,6 +22,11 @@ export function timeLine(startAt, endAt) {
   return `${dayLabel(start)} · ${clock(start)}${endAt ? `–${clock(new Date(endAt))}` : ''}`
 }
 
+// "13:00–15:00"
+export function timeRange(startAt, endAt) {
+  return `${clock(new Date(startAt))}–${clock(new Date(endAt))}`
+}
+
 // { month: 'NOV', day: '20', iso: '2026-11-20T13:00+08:00' } for the date tile.
 export function dateTile(instant) {
   const date = new Date(instant)

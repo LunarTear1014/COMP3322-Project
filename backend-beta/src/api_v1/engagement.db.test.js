@@ -108,6 +108,42 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     assert.equal(cross.body.data.bookings.length, 1, "the part after midnight is still visible");
   });
 
+  test("venue schedule lists confirmed bookings across venues for admins only", async () => {
+    const date = future_date(app, 45);
+    const event = await published_event(app, ids, { date, slot_id: "night", capacity: 3 });
+    const s1 = await app.client_for("s1@x.test");
+    await join(s1, event);
+    const pres = await app.client_for("pres@x.test");
+    const draft = (await pres.post("/events", { club_id: 1, venue_id: 2, title: "Approved draft", description: "d", date, slot_id: "morning", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] })).body.data;
+    const admin = await app.client_for("admin@x.test");
+    assert.equal((await admin.post(`/bookings/${draft.booking.id}/decision`, { expected_version: 1, decision: "approve" })).status, 200);
+    await pres.post("/events", { club_id: 1, venue_id: 2, title: "Still pending", description: "d", date, slot_id: "afternoon", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] });
+    const from = new Date(`${date}T00:00:00+08:00`).toISOString();
+    const to = new Date(`${date}T23:59:59+08:00`).toISOString();
+    const range = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+
+    const all = await admin.get(`/admin/schedule?${range}`);
+    assert.equal(all.status, 200);
+    const titles = all.body.data.bookings.map((b) => b.event?.title);
+    assert.deepEqual(titles, ["Approved draft", event.title], "confirmed only, in time order across venues");
+    const [first, second] = all.body.data.bookings;
+    assert.equal(first.event.state, "draft");
+    assert.equal(first.venue.id, 2);
+    assert.ok(first.venue.name && first.club.name);
+    assert.equal(second.event.state, "published");
+    assert.equal(second.event.joined_count, 1);
+    assert.equal(all.body.data.pending_requests, 1, "pending requests are counted, not listed");
+
+    const one = await admin.get(`/admin/schedule?${range}&venue_id=1`);
+    assert.deepEqual(one.body.data.bookings.map((b) => b.event?.title), [event.title]);
+    assert.equal(one.body.data.pending_requests, 0);
+
+    assert.equal((await admin.get(`/admin/schedule?from=${encodeURIComponent(from)}&to=2030-01-01T00:00:00Z`)).status, 422, "bounded to 31 days");
+    assert.equal((await admin.get("/admin/schedule")).status, 422);
+    assert.equal((await pres.get(`/admin/schedule?${range}`)).status, 403);
+    assert.equal((await app.client().request("GET", `/admin/schedule?${range}`)).status, 401);
+  });
+
   test("check-in: window, joined-only, code, rate limit, idempotent marks (R: attendance)", async () => {
     const date = future_date(app, 50);
     const event = await published_event(app, ids, { date, capacity: 3 });

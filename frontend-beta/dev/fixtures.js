@@ -16,6 +16,22 @@ const events = [
   { id: 1, title: 'Campus photo walk', description: 'Explore campus and share photography tips with fellow students.\n\nWhat happens:\n- First 15 minutes: meet at Harbour Room and swap quick tips on light and framing.\n- Main block: a slow walk around campus with stops for portraits, architecture and small details.\n- Last 20 minutes: share favourite shots and pick one to post.\n\nOpen to everyone, beginners included. Any camera works and phones are welcome. Wear comfortable shoes and bring water and a light jacket. Free to join, 30 places. Check in with the committee at the meeting point, and cancel early if you cannot come so the waitlist can move.', club: { id: 1, name: 'Photography Society' }, venue: venues[0], start_at: future(7), end_at: future(7.08), registration_closes_at: future(6), visibility: 'public', state: 'published', phase: 'upcoming', version: 1, capacity: 30, joined_count: 18, waitlisted_count: 0, my_registration: { status: 'none', queue_position: null }, eligibility: { can_register: true, can_waitlist: false, reason: null }, booking: { id: 1, status: 'confirmed', version: 1, expired: false, decision_reason: null } },
   { id: 2, title: 'Film night: stories in motion', description: 'A relaxed evening of short films and conversation.\n\nPlan:\n- Doors open 15 minutes early with seating first come, first served.\n- A programme of short films from around the world, with a short interval.\n- About 30 minutes of friendly discussion afterwards, led by the committee.\n\nOpen to everyone, no film background needed. Bring a light layer because the room can be cool, and silence your phone. Free entry, 40 places. If the event fills up, join the waitlist and arrive on time, as unclaimed seats are released at the start.', club: { id: 2, name: 'Film Society' }, venue: venues[1], start_at: future(14), end_at: future(14.08), registration_closes_at: future(13), visibility: 'public', state: 'published', phase: 'upcoming', version: 1, capacity: 40, joined_count: 32, waitlisted_count: 0, my_registration: { status: 'none', queue_position: null }, eligibility: { can_register: true, can_waitlist: false, reason: null }, booking: { id: 2, status: 'confirmed', version: 1, expired: false, decision_reason: null } },
 ]
+// Venue schedule: approved bookings on Hong Kong slot times, relative to today.
+const hkDay = days => new Date(Date.now() + 8 * 3600000 + days * 86400000).toISOString().slice(0, 10)
+const hkAt = (days, time) => new Date(`${hkDay(days)}T${time}:00+08:00`).toISOString()
+const adminSchedule = () => [
+  [0, '15:00', '18:00', 1, 1, 'Campus photo walk', 'published', 30, 18, 0],
+  [0, '18:00', '21:00', 2, 2, 'Film night: stories in motion', 'published', 40, 32, 3],
+  [1, '09:00', '12:00', 2, 1, 'Portrait workshop', 'draft', 25, 0, 0],
+  [2, '12:00', '15:00', 1, 2, 'Screenwriting workshop', 'published', 90, 41, 0],
+  [3, '06:00', '21:00', 1, 1, 'Exhibition install day', 'awaiting_president', 20, 0, 0],
+  [9, '18:00', '21:00', 2, 2, 'Animated shorts showcase', 'published', 40, 12, 0],
+].map(([day, startTime, endTime, venueId, clubId, title, state, capacity, joined, waiting], index) => ({
+  booking_id: 900 + index, start_at: hkAt(day, startTime), end_at: hkAt(day, endTime),
+  venue: { id: venueId, name: venues[venueId - 1].name, capacity: venues[venueId - 1].capacity },
+  club: { id: clubId, name: clubs[clubId - 1].name },
+  event: { id: index === 0 ? 1 : index === 1 ? 2 : 900 + index, title, state, visibility: 'public', capacity, joined_count: joined, waitlisted_count: waiting },
+}))
 // Additional states are available by direct event URL in the local preview.
 events.push(
   { ...events[0], id: 3, title: 'Workshop waitlist', joined_count: 30, waitlisted_count: 4, eligibility: { can_register: false, can_waitlist: true, reason: 'EVENT_FULL' } },
@@ -131,6 +147,15 @@ export function fixturePlugin() {
         { user_id: 4, name: 'Zara Wong', role: 'committee', club_id: 1, version: 1, user: { id: 4, name: 'Zara Wong' } },
       ]))
       if (url.pathname === '/clubs/2/members') return send(200, list([{ user_id: 3, name: 'Morgan Lee', role: 'committee' }]))
+      if (url.pathname === '/admin/schedule') {
+        const from = url.searchParams.get('from'), to = url.searchParams.get('to')
+        const start = new Date(from), end = new Date(to)
+        if (!from || !to || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start >= end || end - start > 31 * 86400000) return fail(422, 'VALIDATION_FAILED', 'Choose a valid range of at most 31 days.')
+        const venueFilter = Number(url.searchParams.get('venue_id')) || null
+        const bookings = adminSchedule()
+          .filter(item => new Date(item.start_at) < end && new Date(item.end_at) > start && (!venueFilter || item.venue.id === venueFilter))
+        return send(200, { data: { from, to, campus_timezone: 'Asia/Hong_Kong', venue_id: venueFilter, pending_requests: venueFilter === 2 ? 0 : 2, bookings } })
+      }
       if (/^\/venues\/\d+\/calendar$/.test(url.pathname)) {
         const venueId = Number(url.pathname.split('/')[2])
         const from = url.searchParams.get('from'), to = url.searchParams.get('to')

@@ -23,6 +23,7 @@ import { CreateEvent } from './pages/CreateEvent'
 import { Organizer } from './pages/Organizer'
 import { ManageEvent } from './pages/ManageEvent'
 import { Admin } from './pages/Admin'
+import { AdminSchedule } from './pages/AdminSchedule'
 import { Notifications } from './pages/Notifications'
 import { ToastProvider, useToast } from './components/ui'
 import { useLiveInbox } from './hooks/useLiveInbox'
@@ -37,7 +38,7 @@ import { safeReturn } from './lib/navigation'
 const APP_PATHS = [
   '/', '/events', '/events/:id', '/profile', '/me/registrations', '/venues', '/venues/:id/calendar', '/clubs',
   '/organizer', '/organizer/clubs', '/organizer/club-tools', '/organizer/clubs/:id/members', '/organizer/clubs/:id/reports',
-  '/organizer/clubs/:id/reports/effectiveness', '/organizer/events/:id', '/bookings/new', '/admin/bookings', '/notifications',
+  '/organizer/clubs/:id/reports/effectiveness', '/organizer/events/:id', '/bookings/new', '/admin/bookings', '/admin/schedule', '/notifications',
 ]
 const knownPath = pathname => APP_PATHS.some(pattern => matchPath(pattern, pathname))
 
@@ -213,6 +214,7 @@ function Shell({ streamOverride }) {
           <Route path="/organizer" element={<Organizer session={session} />} />
           <Route path="/organizer/events/:id" element={<ManageEvent session={session} />} />
           <Route path="/admin/bookings" element={<Admin session={session} />} />
+          <Route path="/admin/schedule" element={<AdminSchedule session={session} />} />
           <Route path="/notifications" element={<Notifications refreshInbox={refreshInbox} />} />
           <Route path="/credits" element={<Credits signedIn />} />
           <Route path="/privacy" element={<PrivacyPolicy signedIn />} />
