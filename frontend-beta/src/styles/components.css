@@ -35,6 +35,12 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .cs-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: cs-spin .7s linear infinite; }
 @keyframes cs-spin { to { transform: rotate(360deg); } }
 
+/* Tag picker: each chip is a <label> inside a <fieldset>, so the old stacked-
+   form rule in App.css (fieldset label + label { margin-top: 1rem }) pushed
+   every chip after the first down a line. Chips sit in a row and space with
+   the row's gap instead. */
+.tag-picker label + label { margin-top: 0; }
+
 /* Status chips and stickers */
 .cs-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: 13px; line-height: 18px; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-pill); white-space: nowrap; }
 .cs-chip .cs-icon { width: 14px; height: 14px; stroke-width: 2.5; }
