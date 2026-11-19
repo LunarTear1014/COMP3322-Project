@@ -3,6 +3,7 @@ import http from "node:http";
 import { after, before, describe, test } from "node:test";
 import { test_db_config } from "../../test/db_helper.js";
 import { start_v1 } from "../../test/v1_harness.js";
+import { to_db } from "./common.js";
 import { build_world, future_date, published_event } from "../../test/world.js";
 
 const { skip } = test_db_config();
@@ -226,6 +227,84 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     assert.equal((await comm.get("/clubs/1/reports?from=2026-01-01T00:00:00Z&to=2027-06-01T00:00:00Z")).status, 422);
     const clipped = await comm.get(`/clubs/1/reports?from=${encodeURIComponent(new Date(`${date}T10:30:00+08:00`).toISOString())}&to=${encodeURIComponent(new Date(`${date}T11:30:00+08:00`).toISOString())}`);
     assert.equal(clipped.body.data.venue_hours.find((v) => v.venue_id === 1).hours, 1, "a 3h booking clipped to a 1h window");
+  });
+
+  test("club report event visits: members vs non-members, who clicked Join, exclusions, legacy rows", async () => {
+    const date = future_date(app, 100);
+    const [event, quiet] = [await published_event(app, ids, { date, capacity: 10 }), await published_event(app, ids, { date, slot_id: "afternoon", capacity: 10 })];
+    const [mem, s1, comm, admin] = await Promise.all(["mem", "s1", "comm", "admin"].map((n) => app.client_for(`${n}@x.test`)));
+    const t0 = new Date("2026-11-16T03:00:00Z");
+    const at = (ms) => to_db(new Date(t0.getTime() + ms));
+    const HOUR = 3_600_000;
+    app.set_now(t0);
+    for (const client of [mem, s1, comm, admin]) assert.equal((await client.post(`/events/${event.id}/views`, { source: "explore" })).status, 204);
+    const [stored] = await app.admin.query("SELECT user_id, viewer_role FROM event_views WHERE event_id = ?", [event.id]);
+    const role_of = Object.fromEntries(stored.map((r) => [r.user_id, r.viewer_role]));
+    assert.deepEqual([role_of[ids.mem], role_of[ids.s1], role_of[ids.comm]], ["member", "none", "committee"], "role at view time is stored");
+    // Legacy rows (viewer_role NULL): s2 non-member who joined BEFORE viewing, s3 member since before, s4 became a member after, pres is committee.
+    await app.admin.query("INSERT INTO memberships (user_id, club_id, role, joined_at) VALUES (?, 1, 'member', ?), (?, 1, 'member', ?)", [ids.s3, at(-24 * HOUR), ids.s4, at(24 * HOUR)]);
+    for (const user of [ids.s2, ids.s3, ids.s4, ids.pres]) {
+      await app.admin.query("INSERT INTO event_views (event_id, user_id, source, viewed_at, bucket) VALUES (?, ?, 'explore', ?, ?)", [event.id, user, at(0), at(0)]);
+    }
+    // A later duplicate view by s1 must not make them count twice.
+    await app.admin.query("INSERT INTO event_views (event_id, user_id, source, viewed_at, bucket, viewer_role) VALUES (?, ?, 'club', ?, ?, 'none')", [event.id, ids.s1, at(HOUR / 2), at(HOUR / 2)]);
+    const history = (user, action, when) => app.admin.query(
+      "INSERT INTO participation_history (event_id, user_id, action_id, action, to_status, occurred_at) VALUES (?, ?, UUID(), ?, ?, ?)", [event.id, user, action, action, when]);
+    await history(ids.s2, "joined", at(-HOUR));
+    await history(ids.s4, "waitlisted", at(3 * HOUR));
+    await app.admin.query("INSERT INTO event_join_requests (event_id, user_id, status, requested_at) VALUES (?, ?, 'pending', ?)", [event.id, ids.s3, at(2 * HOUR)]);
+    app.set_now(new Date(t0.getTime() + HOUR));
+    assert.equal((await mem.post(`/events/${event.id}/registration`, { allow_waitlist: true })).status, 201);
+    for (const step of ["post", "delete", "post"]) {
+      const response = step === "post" ? await s1.post(`/events/${event.id}/registration`, { allow_waitlist: true }) : await s1.delete(`/events/${event.id}/registration`);
+      assert.ok(response.status < 300, `s1 ${step}`);
+    }
+    const range = `from=${encodeURIComponent(new Date(`${date}T00:00:00+08:00`).toISOString())}&to=${encodeURIComponent(new Date(new Date(`${date}T00:00:00+08:00`).getTime() + 86_400_000).toISOString())}`;
+    const report = await (await app.client_for("comm@x.test")).get(`/clubs/1/reports?${range}`);
+    assert.equal(report.status, 200);
+    const visits = report.body.data.event_visits;
+    const row = visits.events.find((r) => r.event_id === event.id);
+    assert.deepEqual(row, {
+      event_id: event.id, visitors: 5, member_visitors: 2, non_member_visitors: 3,
+      clicked_join: 4, member_clicked_join: 2, non_member_clicked_join: 2,
+      join_rate: 0.8, member_join_rate: 1, non_member_join_rate: 0.667,
+    });
+    assert.deepEqual(visits.events.find((r) => r.event_id === quiet.id), {
+      event_id: quiet.id, visitors: 0, member_visitors: 0, non_member_visitors: 0, clicked_join: 0, member_clicked_join: 0, non_member_clicked_join: 0,
+      join_rate: null, member_join_rate: null, non_member_join_rate: null,
+    });
+    assert.equal(visits.events.length, report.body.data.events.length, "same event set as events");
+    assert.equal(visits.totals.visitors, 5);
+    assert.equal(visits.totals.clicked_join, 4);
+    assert.equal("event_id" in visits.totals, false);
+    assert.equal(JSON.stringify(visits).includes("user"), false, "aggregated counts only");
+    await app.admin.query("DELETE FROM memberships WHERE user_id IN (?, ?) AND club_id = 1", [ids.s3, ids.s4]);
+    reset_clock();
+  });
+
+  test("event visits: a rejoin after the first view counts as clicking Join", async () => {
+    const date = future_date(app, 104);
+    const event = await published_event(app, ids, { date, capacity: 10 });
+    const t0 = new Date("2026-11-16T03:00:00Z");
+    const at = (ms) => to_db(new Date(t0.getTime() + ms));
+    const HOUR = 3_600_000;
+    for (const user of [ids.s2, ids.s3]) {
+      await app.admin.query("INSERT INTO event_views (event_id, user_id, source, viewed_at, bucket, viewer_role) VALUES (?, ?, 'explore', ?, ?, 'none')", [event.id, user, at(0), at(0)]);
+    }
+    const history = (user, action, when) => app.admin.query(
+      "INSERT INTO participation_history (event_id, user_id, action_id, action, to_status, occurred_at) VALUES (?, ?, UUID(), ?, ?, ?)", [event.id, user, action, action, when]);
+    // s2 joined before ever opening the page, left, then joined again after opening it.
+    await history(ids.s2, "joined", at(-2 * HOUR));
+    await history(ids.s2, "left", at(-HOUR));
+    await history(ids.s2, "joined", at(HOUR));
+    // s3 joined only before opening the page.
+    await history(ids.s3, "joined", at(-HOUR));
+    const start = new Date(`${date}T00:00:00+08:00`);
+    const range = `from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(new Date(start.getTime() + 86_400_000).toISOString())}`;
+    const report = await (await app.client_for("comm@x.test")).get(`/clubs/1/reports?${range}`);
+    const row = report.body.data.event_visits.events.find((r) => r.event_id === event.id);
+    assert.equal(row.visitors, 2);
+    assert.equal(row.clicked_join, 1, "s2's rejoin after viewing counts; s3's earlier join does not");
   });
 
   test("effectiveness report matches hand-built fixtures", async () => {

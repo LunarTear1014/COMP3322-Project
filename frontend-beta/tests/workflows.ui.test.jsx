@@ -336,6 +336,32 @@ describe('frontend preview workflows', () => {
     expect(within(hoursSection).getByRole('cell', { name: '1.5' })).toBeTruthy()
   }, 30_000)
 
+  it('shows event page visits for members and non-members with totals', async () => {
+    await import('../src/ReportFigures.jsx')
+    window.history.replaceState({}, '', '/organizer/clubs/1/reports')
+    vi.stubGlobal('fetch', previewFetch())
+    render(<App />)
+
+    const heading = await screen.findByRole('heading', { name: 'Event page visits' })
+    const section = heading.closest('section')
+    expect(within(section).getByText(/committee, president and venue admins are not counted/)).toBeTruthy()
+    const rows = within(section).getAllByRole('row')
+    expect(within(rows[1]).getAllByRole('cell').map(cell => cell.textContent).slice(1)).toEqual(['42 (15 / 27)', '20 (12 / 8)', '48%'])
+    expect(within(rows[2]).getByRole('rowheader').textContent).toBe('Total')
+    expect(within(rows[2]).getAllByRole('cell')[2].textContent).toBe('48% (members 80%, non-members 30%)')
+  }, 30_000)
+
+  it('shows an empty state when nobody opened the event pages', async () => {
+    await import('../src/ReportFigures.jsx')
+    window.history.replaceState({}, '', '/organizer/clubs/1/reports')
+    const preview = previewFetch()
+    vi.stubGlobal('fetch', (input, options) => preview(`${input}${String(input).includes('?') ? '&' : '?'}preview=empty`, options))
+    render(<App />)
+
+    const heading = await screen.findByRole('heading', { name: 'Event page visits' })
+    expect(within(heading.closest('section')).getByText('No one has opened these event pages yet.')).toBeTruthy()
+  }, 30_000)
+
 
   it('refreshes the report for a new period and identifies incomplete history', async () => {
     window.history.replaceState({}, '', '/organizer/clubs/1/reports')

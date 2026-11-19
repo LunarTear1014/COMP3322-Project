@@ -4,6 +4,7 @@ import { CAMPUS_TIMEZONE, utc_to_campus_date } from "../shared/slots.js";
 import { assert_range, parse_utc_instant, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
 import { id_param, iso, require_admin, require_user, to_db, wrap } from "./common.js";
+import { build_event_visits } from "./event_visits.js";
 import { committee_of, is_committee } from "./clubs.js";
 
 const RANGE = { from: { kind: "instant", required: true }, to: { kind: "instant", required: true } };
@@ -127,9 +128,11 @@ function create_calendar_router({ pool, clock }) {
          WHERE b.club_id = ? AND b.status = 'confirmed' AND b.start_time < ? AND b.end_time > ? GROUP BY v.id, v.name ORDER BY v.id`,
         [to_db(from), to_db(to), club_id, to_db(to), to_db(from)]);
       const [[meta]] = await pool.query("SELECT metadata_value AS value FROM schema_metadata WHERE metadata_key = 'history_complete_from'");
+      const visits = await build_event_visits(pool, club_id, events.map((row) => row.event_id));
       res.json({ data: {
         club_id, from: from.toISOString(), to: to.toISOString(), campus_timezone: CAMPUS_TIMEZONE,
         events: events.map((row) => ({ ...row, joined_count: Number(row.joined_count), waitlisted_count: Number(row.waitlisted_count) })),
+        event_visits: { events: visits.rows, totals: visits.totals },
         daily_actions: daily,
         venue_hours: hours.map((row) => ({ venue_id: row.venue_id, venue_name: row.venue_name, hours: Math.round(Number(row.hours) * 100) / 100 })),
         history_complete_from: meta?.value ?? null,

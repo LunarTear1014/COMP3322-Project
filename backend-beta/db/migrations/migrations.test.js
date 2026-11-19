@@ -26,7 +26,7 @@ test("shipped migrations load in order with unique numbers", async () => {
   assert.deepEqual(migrations.map((migration) => migration.version), [
     "001_preflight", "002_workflow_columns", "003_support_tables", "004_backfill_utc", "005_constraints_indexes", "006_cutover_marker", "010_club_president", "011_signoff_states",
     "012_tags", "013_attendance_views", "014_notifications_live", "015_events_cover", "016_join_requests", "017_live_signals",
-    "018_google_identity", "019_club_icons", "020_admin_no_club_roles", "021_club_photos", "022_member_removal_requests",
+    "018_google_identity", "019_club_icons", "020_admin_no_club_roles", "021_club_photos", "022_member_removal_requests", "023_view_membership",
   ]);
   for (const migration of migrations) assert.match(migration.checksum, /^[0-9a-f]{64}$/);
 });

@@ -11,7 +11,7 @@ const pool = create_utc_pool({
   user: process.env.DB_USER, password: process.env.DB_PASSWORD,
 });
 try {
-  await assert_schema_version(pool, "022_member_removal_requests");
+  await assert_schema_version(pool, "023_view_membership");
   await attach_demo_club_photos({ pool, cover_dir: process.env.COVER_DIR || "./data/covers" });
 } catch (error) {
   console.error(`Demo club photos failed: ${error.message}`);

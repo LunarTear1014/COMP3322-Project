@@ -8,6 +8,7 @@ import { define_route } from "./router.js";
 import { signal, id_param, iso, notify, page_meta, require_user, to_db, wrap } from "./common.js";
 import { committee_of, is_committee } from "./clubs.js";
 import { build_report, parse_range } from "./effectiveness.js";
+import { viewer_role_in } from "./event_visits.js";
 import { load_event } from "./event_model.js";
 
 const asDate = (text) => new Date(`${String(text).replace(" ", "T")}Z`);
@@ -124,10 +125,12 @@ function create_engagement_router({ pool, clock }) {
       const id = id_param(req, "event_id");
       const body = validate_body(req.body, { source: { kind: "enum", values: SOURCES, required: true } });
       const now = clock();
-      if (!(await load_event(pool, req.user, id, now))) throw new ApiError("NOT_FOUND", "That event does not exist.");
+      const event = await load_event(pool, req.user, id, now);
+      if (!event) throw new ApiError("NOT_FOUND", "That event does not exist.");
+      const viewer_role = await viewer_role_in(pool, req.user.id, event.row.club_id);
       const bucket = new Date(Math.floor(now.getTime() / BUCKET_MS) * BUCKET_MS);
       // The unique key (event, user, 30-minute bucket) deduplicates silently.
-      await pool.query("INSERT IGNORE INTO event_views (event_id, user_id, source, viewed_at, bucket) VALUES (?, ?, ?, ?, ?)", [id, req.user.id, body.source, to_db(now), to_db(bucket)]);
+      await pool.query("INSERT IGNORE INTO event_views (event_id, user_id, source, viewed_at, bucket, viewer_role) VALUES (?, ?, ?, ?, ?, ?)", [id, req.user.id, body.source, to_db(now), to_db(bucket), viewer_role]);
       res.status(204).end();
     })],
   });

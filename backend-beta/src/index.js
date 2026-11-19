@@ -73,7 +73,7 @@ const port = Number(process.env.PORT || 3000);
 async function start() {
   try {
     await pool.query("SELECT 1");
-    await assert_schema_version(v1_pool, "022_member_removal_requests");
+    await assert_schema_version(v1_pool, "023_view_membership");
     await stack.start();
     app.listen(port, () => console.log(`API on http://localhost:${port}`));
   } catch (error) {

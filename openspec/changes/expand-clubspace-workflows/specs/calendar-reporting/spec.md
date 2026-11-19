@@ -33,6 +33,25 @@ The system SHALL restrict club reports to committee, separate current counts fro
 - **WHEN** a committee member reads the activity report
 - **THEN** it contains no attendance or no-show metric, and turnout appears only in the effectiveness report for events with recorded check-in
 
+### Requirement: Event page visits in the activity report
+The activity report SHALL show, per event and in total, how many distinct people opened the event page (members and non-members separately) and how many of them then clicked Join, excluding the club's own committee and president and venue administrators, as aggregated counts only.
+
+#### Scenario: Member and non-member visitors
+- **WHEN** a member and a non-member each open an event page several times
+- **THEN** each is counted once, in the member or non-member column according to the role recorded at their first view
+
+#### Scenario: Clicked Join after opening
+- **WHEN** a visitor joins, joins the waitlist or requests members-only registration after their first view
+- **THEN** they count once as having clicked Join, and joining before the first view does not count
+
+#### Scenario: Committee and venue admin views
+- **WHEN** the club's committee, president or a venue administrator opens the event page
+- **THEN** the view is excluded from every visit figure
+
+#### Scenario: No visits
+- **WHEN** an event has no countable visitors
+- **THEN** its counts are zero and its rates are null
+
 ### Requirement: Bounded queries
 Calendar/report APIs SHALL validate half-open ranges and bound them to31/93 days with deterministic output.
 
