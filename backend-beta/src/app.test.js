@@ -56,7 +56,7 @@ describe("v1 pipeline", () => {
     assert.match(response.headers.get("x-request-id"), /^req-/);
     const { data } = await response.json();
     assert.equal(data.campus_timezone, "Asia/Hong_Kong");
-    assert.deepEqual(data.slots.map((slot) => slot.id), ["morning", "afternoon", "evening"]);
+    assert.deepEqual(data.slots.map((slot) => slot.id), ["early_morning", "morning", "afternoon", "evening", "night", "full_day"]);
   });
 
   test("config reports google_oauth_enabled false when no v1 router supplies the flag", async () => {

@@ -258,7 +258,7 @@ describe('frontend preview workflows', () => {
     const table = await screen.findByRole('table', { name: 'Harbour Room time slots' })
     expect(within(table).getAllByRole('columnheader')).toHaveLength(8)
     expect(within(table).getAllByRole('rowheader').map(header => header.textContent))
-      .toEqual(['10:00–12:00', '13:00–15:00', '16:00–18:00'])
+      .toEqual(['06:00–08:00', '10:00–12:00', '13:00–15:00', '16:00–18:00', '19:00–21:00', '09:00–18:00'])
     const today = campusDate(new Date())
     expect(table.querySelector('time[aria-current="date"]').dateTime).toBe(today)
     const dayPicker = screen.getByLabelText('Choose a day')
@@ -270,7 +270,7 @@ describe('frontend preview workflows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
     const previousWeek = await screen.findByRole('table', { name: 'Harbour Room time slots' })
     expect(previousWeek.querySelector('time[aria-current="date"]')).toBeNull()
-    expect(within(previousWeek).getAllByText('Past')).toHaveLength(21)
+    expect(within(previousWeek).getAllByText('Past')).toHaveLength(42)
     fireEvent.click(screen.getByRole('button', { name: 'Today' }))
     expect(dayPicker.value).toBe(today)
 

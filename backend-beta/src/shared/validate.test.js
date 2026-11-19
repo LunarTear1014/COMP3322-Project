@@ -8,6 +8,7 @@ import {
   validate_query,
 } from "./validate.js";
 import {
+  SLOTS,
   campus_to_utc,
   from_mysql_utc,
   resolve_slot,
@@ -91,6 +92,19 @@ describe("Hong Kong slot mapping", () => {
     assert.equal(end.toISOString(), "2026-11-12T04:00:00.000Z");
   });
 
+  test("new slots map to Hong Kong times", () => {
+    const now = new Date("2026-11-01T00:00:00Z");
+    const span = (id) => { const { start, end } = resolve_slot("2026-11-12", id, now); return [start.toISOString(), end.toISOString()]; };
+    assert.deepEqual(span("early_morning"), ["2026-11-11T22:00:00.000Z", "2026-11-12T00:00:00.000Z"]);
+    assert.deepEqual(span("night"), ["2026-11-12T11:00:00.000Z", "2026-11-12T13:00:00.000Z"]);
+    assert.deepEqual(span("full_day"), ["2026-11-12T01:00:00.000Z", "2026-11-12T10:00:00.000Z"]);
+  });
+
+  test("slot start hours are unique, so reports can group by them", () => {
+    const hours = SLOTS.map((slot) => slot.start.slice(0, 2));
+    assert.equal(new Set(hours).size, hours.length);
+  });
+
   test("Hong Kong midnight is 16:00Z the previous day", () => {
     assert.equal(campus_to_utc("2026-11-09", "00:00").toISOString(), "2026-11-08T16:00:00.000Z");
     assert.equal(utc_to_campus_date(new Date("2026-11-08T16:00:00Z")), "2026-11-09");
@@ -100,7 +114,7 @@ describe("Hong Kong slot mapping", () => {
   test("impossible dates, unknown slots and the past are rejected", () => {
     const now = new Date("2026-11-12T01:00:00Z");
     assert.ok(fields_of(() => resolve_slot("2027-02-29", "morning", now)).date);
-    assert.ok(fields_of(() => resolve_slot("2026-11-12", "night", now)).slot_id);
+    assert.ok(fields_of(() => resolve_slot("2026-11-12", "midnight", now)).slot_id);
     // The morning slot starts exactly at 02:00Z; now is before it, so valid.
     assert.ok(resolve_slot("2026-11-12", "morning", now));
     // At or after the start instant the slot is no longer in the future.

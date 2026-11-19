@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { CAMPUS_TIMEZONE } from "../shared/slots.js";
+import { CAMPUS_TIMEZONE, SLOTS as CAMPUS_SLOTS } from "../shared/slots.js";
 import { assert_range, parse_utc_instant, validate_query } from "../shared/validate.js";
 import { ApiError } from "../shared/errors.js";
 import { id_param, iso, to_db } from "./common.js";
@@ -12,7 +12,8 @@ const round3 = (n) => Math.round(n * 1000) / 1000;
 const rate = (num, den) => (den > 0 ? round3(num / den) : null);
 const SOURCES = ["explore", "club", "inbox", "my_events", "share", "other"];
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const SLOTS = { 10: ["morning", "Morning"], 13: ["afternoon", "Afternoon"], 16: ["evening", "Evening"] };
+// Report groups by start hour, so each slot needs its own start hour.
+const SLOTS = Object.fromEntries(CAMPUS_SLOTS.map((slot) => [Number(slot.start.slice(0, 2)), [slot.id, slot.name]]));
 
 function median(values) {
   if (!values.length) return null;

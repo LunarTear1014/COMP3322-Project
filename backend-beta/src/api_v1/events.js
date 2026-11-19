@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import { with_transaction } from "../db/transaction.js";
 import { ApiError, validation_error } from "../shared/errors.js";
-import { resolve_slot } from "../shared/slots.js";
+import { SLOT_IDS, resolve_slot } from "../shared/slots.js";
 import { PAGE_QUERY, assert_range, pagination, parse_utc_instant, validate_body, validate_query } from "../shared/validate.js";
 import { define_route } from "./router.js";
 import { signal, audit, id_param, notify, page_meta, require_admin, require_user, to_db, wrap } from "./common.js";
@@ -10,7 +10,6 @@ import { committee_ids } from "./clubs.js";
 import { access, event_dto, event_rows, load_event, tags_for } from "./event_model.js";
 
 const COMMITTEE = ["committee", "president"];
-const SLOT_IDS = ["morning", "afternoon", "evening"];
 
 const CREATE = {
   club_id: { kind: "int", min: 1, required: true },

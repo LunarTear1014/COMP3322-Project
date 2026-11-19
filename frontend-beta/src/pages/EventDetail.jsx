@@ -126,6 +126,25 @@ export function EventDetail() {
   )
 }
 
+// Descriptions are plain text: blank lines separate paragraphs and lines that
+// start with "- " become list items. React escapes everything.
+function Description({ text }) {
+  const blocks = String(text ?? '').replace(/\r\n?/g, '\n').split(/\n{2,}/).map(block => block.trim()).filter(Boolean)
+  return blocks.map((block, index) => {
+    const lines = block.split('\n')
+    const isItem = line => /^\s*-\s+/.test(line)
+    const items = lines.filter(isItem)
+    if (items.length === 0) return <p key={index}>{block}</p>
+    const lead = lines.filter(line => !isItem(line)).join('\n')
+    return (
+      <div key={index} className="event-about-block">
+        {lead && <p>{lead}</p>}
+        <ul>{items.map((line, i) => <li key={i}>{line.replace(/^\s*-\s+/, '')}</li>)}</ul>
+      </div>
+    )
+  })
+}
+
 function checkinOpen(details, now = Date.now()) {
   return now >= new Date(details.start_at).getTime() - 30 * 60_000 && now <= new Date(details.end_at).getTime() + 2 * 3_600_000
 }
@@ -206,7 +225,10 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
       <div className="event-hero">
         {cover ? (
           <div className="cs-cover event-cover">
-            <img src={cover.full_url} width="1200" height="800" alt={cover.alt} />
+            <span className="event-cover-frame">
+              <img className="event-cover-photo" src={cover.full_url} width="1200" height="800" alt={cover.alt} />
+              <img className="event-cover-bg" src={cover.full_url} alt="" aria-hidden="true" decoding="async" />
+            </span>
             <time className="cs-datetile event-tile" dateTime={tile.iso}><small>{tile.month}</small><b>{tile.day}</b></time>
           </div>
         ) : (
@@ -229,10 +251,13 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
           </div>
 
           {(details.campus_tags?.length > 0 || details.club_tags?.length > 0) && (
-            <ul className="tag-list" aria-label="Tags">
-              {details.campus_tags?.map(tag => <li key={`c${tag.id}`}>{tag.name}</li>)}
-              {details.club_tags?.map(tag => <li key={`k${tag.id}`} className="is-club">{tag.name}</li>)}
-            </ul>
+            <section className="event-tags">
+              <h2 className="event-tags-title" id="event-tags-title">Tags</h2>
+              <ul className="tag-list" aria-labelledby="event-tags-title">
+                {details.campus_tags?.map(tag => <li key={`c${tag.id}`} className="is-campus">{tag.name}</li>)}
+                {details.club_tags?.map(tag => <li key={`k${tag.id}`} className="is-club">{tag.name}</li>)}
+              </ul>
+            </section>
           )}
 
           <dl className="event-facts">
@@ -249,7 +274,7 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
 
           <section className="event-about">
             <h2>About this event</h2>
-            <p>{details.description}</p>
+            <Description text={details.description} />
           </section>
         </div>
 

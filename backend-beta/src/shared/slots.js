@@ -6,11 +6,17 @@ import { parse_campus_date } from "./validate.js";
 const CAMPUS_TIMEZONE = "Asia/Hong_Kong";
 const CAMPUS_OFFSET_HOURS = 8;
 
+// Bookings conflict by time overlap, not by slot id, so the full-day slot
+// blocks the shorter slots inside it and the other way round.
 const SLOTS = [
-  { id: "morning", start: "10:00", end: "12:00" },
-  { id: "afternoon", start: "13:00", end: "15:00" },
-  { id: "evening", start: "16:00", end: "18:00" },
+  { id: "early_morning", name: "Early morning", start: "06:00", end: "08:00" },
+  { id: "morning", name: "Morning", start: "10:00", end: "12:00" },
+  { id: "afternoon", name: "Afternoon", start: "13:00", end: "15:00" },
+  { id: "evening", name: "Evening", start: "16:00", end: "18:00" },
+  { id: "night", name: "Night", start: "19:00", end: "21:00" },
+  { id: "full_day", name: "Full day", start: "09:00", end: "18:00" },
 ];
+const SLOT_IDS = SLOTS.map((slot) => slot.id);
 
 function slot_by_id(slot_id) {
   return SLOTS.find((slot) => slot.id === slot_id) ?? null;
@@ -31,7 +37,7 @@ function campus_to_utc(date, time) {
 // start is strictly in the future relative to `now`.
 function resolve_slot(date, slot_id, now = new Date()) {
   const slot = slot_by_id(slot_id);
-  if (!slot) throw validation_error({ slot_id: "Choose morning, afternoon or evening." });
+  if (!slot) throw validation_error({ slot_id: `Choose one of: ${SLOT_IDS.join(", ")}.` });
   const start = campus_to_utc(date, slot.start);
   const end = campus_to_utc(date, slot.end);
   if (!start || !end) throw validation_error({ date: "Use a real date as YYYY-MM-DD." });
@@ -64,6 +70,7 @@ export {
   ApiError,
   CAMPUS_TIMEZONE,
   SLOTS,
+  SLOT_IDS,
   campus_to_utc,
   config_payload,
   from_mysql_utc,

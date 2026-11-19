@@ -40,7 +40,14 @@ WHERE v.name = 'Main Building Room 230' AND c.name = 'Debate Club';
 
 INSERT INTO events (booking_id, club_id, title, description, start_time, end_time, visibility, capacity)
 SELECT b.id, b.club_id, 'Photography Society Gathering',
-  'A casual photography walk for students interested in taking better campus photos.',
+  'A casual photography walk for students interested in taking better campus photos.
+
+What happens:
+- First 15 minutes: meet at the venue and swap a few quick tips on light and framing.
+- Main block: a relaxed walk around campus with stops for portraits, architecture and details.
+- Last 20 minutes: share favourite shots and pick one to post.
+
+Open to everyone, beginners included. Any camera works, phones are welcome. Wear comfortable shoes, bring water and a light jacket. Free to join. Please check in with the committee at the meeting point, and cancel early if you cannot come so the waitlist can move.',
   b.start_time, b.end_time, 'public', v.capacity
 FROM bookings b
 JOIN clubs c ON c.id = b.club_id
@@ -49,7 +56,14 @@ WHERE c.name = 'Photography Society';
 
 INSERT INTO events (booking_id, club_id, title, description, start_time, end_time, visibility, capacity)
 SELECT b.id, b.club_id, 'Film Society Screening',
-  'Watch a selected film with other students, followed by a group discussion.',
+  'Watch a selected film with other students, followed by a group discussion.
+
+Plan:
+- Doors open 15 minutes early, with seating first come, first served.
+- The film plays in full, with subtitles.
+- About 30 minutes of relaxed discussion afterwards led by the committee.
+
+Members only. No film background needed, just curiosity. Bring a light layer because the room can be cool, and silence your phone. Free entry. The committee will check names at the door, and if the event is full you can join the waitlist; unclaimed seats are released at the start time.',
   b.start_time, b.end_time, 'members_only', v.capacity
 FROM bookings b
 JOIN clubs c ON c.id = b.club_id
@@ -58,7 +72,14 @@ WHERE c.name = 'Film Society';
 
 INSERT INTO events (booking_id, club_id, title, description, start_time, end_time, visibility, capacity)
 SELECT b.id, b.club_id, 'Debate Club Meeting',
-  'A practice debate for students who want to improve public-speaking skills.',
+  'A practice debate for students who want to improve public-speaking skills.
+
+Agenda:
+- First 20 minutes: a warm-up and a short reminder of the format and roles.
+- Main block: a full practice round on a fresh motion, with speaking in teams.
+- Last 30 minutes: feedback from experienced members on structure, delivery and rebuttal.
+
+Open to everyone, and beginners are very welcome; you can watch the first round before you speak. Bring a notebook and a pen, and wear anything comfortable. Free to attend. Please arrive on time and check in with the committee. If the room is full, join the waitlist and we will release places at the start.',
   b.start_time, b.end_time, 'public', v.capacity
 FROM bookings b
 JOIN clubs c ON c.id = b.club_id
