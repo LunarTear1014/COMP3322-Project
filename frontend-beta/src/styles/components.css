@@ -237,3 +237,9 @@ select.cs-input { appearance: none; background-color: var(--surface); color: var
   .cs-spinner { animation-duration: 2s; }
 }
 .cs-nowrap { white-space: nowrap; }
+
+/* Club photo banner: the photo is cropped to fit; without one the club-colour art shows. */
+.cs-clubhead.club-banner { height: 120px; background-image: none; }
+.cs-clubhead .club-photo { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+.cs-clubhead .cs-cover-art { z-index: 0; }
+.cs-clubhead .cs-clubbadge { z-index: 1; }

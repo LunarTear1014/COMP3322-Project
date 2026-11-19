@@ -22,8 +22,8 @@ const BACKEND = [
   { name: 'Node.js and Express', use: 'REST API server', licence: 'MIT', url: 'https://expressjs.com/' },
   { name: 'express-session', use: 'Signed-in sessions', licence: 'MIT', url: 'https://github.com/expressjs/session' },
   { name: 'mysql2', use: 'MySQL client', licence: 'MIT', url: 'https://github.com/sidorares/node-mysql2' },
-  { name: 'Multer', use: 'Event cover uploads', licence: 'MIT', url: 'https://github.com/expressjs/multer' },
-  { name: 'sharp', use: 'Resizing cover images and removing their metadata', licence: 'Apache-2.0', url: 'https://sharp.pixelplumbing.com/' },
+  { name: 'Multer', use: 'Event cover, club icon and club photo uploads', licence: 'MIT', url: 'https://github.com/expressjs/multer' },
+  { name: 'sharp', use: 'Resizing cover, icon and club photo images and removing their metadata', licence: 'Apache-2.0', url: 'https://sharp.pixelplumbing.com/' },
   { name: 'dotenv', use: 'Local configuration', licence: 'BSD-2-Clause', url: 'https://github.com/motdotla/dotenv' },
   { name: 'openid-client', use: 'Google sign-in (OpenID Connect)', licence: 'MIT', url: 'https://github.com/panva/openid-client' },
   { name: 'MySQL 8.4', use: 'Database', licence: 'GPL-2.0 (Community Edition)', url: 'https://www.mysql.com/' },
@@ -68,7 +68,7 @@ export function Credits({ signedIn }) {
       <section className="credits-section" aria-labelledby="credits-images">
         <h2 id="credits-images" className="section-title">Images</h2>
         <p>
-          The demo club icons and event cover images were generated with OpenAI&apos;s GPT image generation for
+          The demo club icons, club photos and event cover images were generated with OpenAI&apos;s GPT image generation for
           ClubSpace&apos;s fictional demo data. They are not taken from stock libraries or other websites, and the people shown are not
           real.
         </p>

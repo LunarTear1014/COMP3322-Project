@@ -1,7 +1,7 @@
 import { CalendarDays, ChevronDown, Info, LogOut, ShieldCheck, UserRound, Users } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { isOrganizer } from '../../lib/roles'
+import { hasOrganizerLink } from './navigation'
 
 function initials(name = '') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => [...part][0].toUpperCase()).join('') || '?'
@@ -10,12 +10,14 @@ function initials(name = '') {
 // The avatar control: Profile, then role tools the user may use, Credits, then Sign out.
 // A disclosure, not an ARIA menu: Tab moves through the links, Escape or a click
 // elsewhere closes it, and focus returns to the trigger.
-export function AccountMenu({ session, onSignOut }) {
+// `organizerInMenu` is true when the top bar shows no links (phones), so the
+// Organizer link is reachable here; otherwise it sits in the top bar.
+export function AccountMenu({ session, onSignOut, organizerInMenu = true }) {
   const [open, setOpen] = useState(false)
   const root = useRef(null)
   const trigger = useRef(null)
   const panelId = useId()
-  const organizer = session.memberships.some(isOrganizer)
+  const organizer = organizerInMenu && hasOrganizerLink(session)
   const admin = session.user.platform_role === 'venue_admin'
 
   useEffect(() => {

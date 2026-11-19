@@ -10,6 +10,7 @@ import { create_calendar_router } from "./calendar_reports.js";
 import { create_engagement_router } from "./engagement.js";
 import { IS_COVER_UPLOAD, create_covers_router } from "./covers_routes.js";
 import { IS_ICON_UPLOAD, create_club_icons_router } from "./club_icons_routes.js";
+import { IS_PHOTO_UPLOAD, create_club_photos_router } from "./club_photos_routes.js";
 import { NotificationStreamHub } from "../features/notifications/stream_hub.js";
 import { create_notifications_repository } from "../features/notifications/notifications.repository.js";
 import { create_stream_router } from "../features/notifications/stream.routes.js";
@@ -40,14 +41,14 @@ function create_v1_stack({
   // public config endpoint must surface whether they exist at all — the
   // frontend uses it to show or hide the "Continue with Google" button.
   const routers = [identify(pool), create_auth_router(deps), create_clubs_router(deps), create_events_router(deps), create_registration_router(deps),
-    create_notifications_router(deps), create_calendar_router(deps), create_engagement_router(deps), create_covers_router(deps), create_club_icons_router(deps),
+    create_notifications_router(deps), create_calendar_router(deps), create_engagement_router(deps), create_covers_router(deps), create_club_icons_router(deps), create_club_photos_router(deps),
     google_router,
     create_stream_router({ hub, authenticate: async (req) => req.user?.id ?? null })];
   // Google's redirect lands on the frontend-facing /api/auth/google/callback
   // (the same /api prefix the legacy beta routers use), not /api/v1; expose
   // the router so index.js can mount it at that exact path too.
   const extra_mounts = app_origin ? [["/api/auth", google_router]] : [];
-  return { deps, routers, extra_mounts, hub, google_oauth_enabled, is_multipart_route: (req) => IS_COVER_UPLOAD(req) || IS_ICON_UPLOAD(req), start: () => hub.start(), stop: () => hub.stop() };
+  return { deps, routers, extra_mounts, hub, google_oauth_enabled, is_multipart_route: (req) => IS_COVER_UPLOAD(req) || IS_ICON_UPLOAD(req) || IS_PHOTO_UPLOAD(req), start: () => hub.start(), stop: () => hub.stop() };
 }
 
 export { create_v1_stack };

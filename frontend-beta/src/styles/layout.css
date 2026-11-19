@@ -201,3 +201,12 @@ body { padding: 0; }
 @media (max-width: 479.98px) {
   .schedule-item { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
+
+/* Members, committee and president as a table (Members and roles). Only the
+   table region scrolls sideways on phones, never the page. */
+.members-table { max-width: 100%; margin-block: var(--space-4); }
+.members-table .cs-table { min-width: 560px; }
+.cs-table tbody th.member-name { text-align: left; padding: 12px; border-top: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 14px; line-height: 20px; font-weight: 700; white-space: normal; overflow-wrap: anywhere; min-width: 140px; }
+.members-table .member-actions { min-width: 220px; }
+.member-confirm { display: flex; flex-direction: column; gap: var(--space-2); max-width: 340px; white-space: normal; }
+.members-table td.cs-nums { white-space: nowrap; }

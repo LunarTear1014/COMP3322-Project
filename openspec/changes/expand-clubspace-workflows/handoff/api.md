@@ -31,6 +31,8 @@ Every error includes code/message/fields (object)/request_id; field errors map f
 
 All mutations require Content-Type: application/json, exact Origin=APP_ORIGIN and X-CSRF-Token. Empty action bodies are `{}`; unknown fields422. Missing expected_version422; obsolete version409. expected_version is resource metadata version (booking for decision; event for edit/publish/cancel), not registration count. Create POST has no automatic replay/idempotency guarantee. Registration, membership and withdrawal idempotency is explicitly defined below.
 
+Exception (club photos, 2026-11-19): `PUT /clubs/:club_id/photo` is also `multipart/form-data`, with `file` and `alt` (1..200 characters) fields. Same order of checks as covers. JPEG, PNG or WebP verified by decoding (415 otherwise), at most 5 MB (413) and at least 600x400 pixels (422). Two WebP renditions are stored, card 600x400 and full 1200x800, cropped to fit, with EXIF/GPS removed. The club icon (`PUT/DELETE/GET /clubs/:club_id/icon`, 2 MB, square 256 px WebP) uses the same permission rule and sits beside it.
+
 Exception (change refresh-clubspace-visual-design, approved 2026-11-13): `PUT /events/:id/cover` takes `multipart/form-data` with `file`, `alt` and `expected_version` fields instead of JSON. Origin, CSRF, authentication, permission and version checks still apply in the order above. The 5 MB body limit is enforced before parsing (413), and the format is verified by decoding (415 for anything but JPEG or WebP). Full rules: `../../refresh-clubspace-visual-design/specs/event-covers/spec.md`.
 
 ## 2. Endpoint inventory
@@ -62,6 +64,11 @@ Auth: public=anonymous allowed; user=authenticated; committee=committee of targe
 | PUT /events/:id/cover | committee | multipart: file, alt, expected_version (see exception above) |200 Event with cover; 413/415/422/409 |
 | DELETE /events/:id/cover | committee |{expected_version}|200 Event with cover null |
 | GET /events/:id/cover/:size | user/scoped draft | size card or full |200 image/webp, private cache, ETag; hidden or no cover 404 |
+| PUT /clubs/:club_id/photo | committee (committee or president of that club) | multipart: file, alt (see exception below) |200 `{club_id,photo}`; 413/415/422/403/404 |
+| DELETE /clubs/:club_id/photo | committee |{}|200 `{club_id,photo:null}` (also when there was none) |
+| GET /clubs/:club_id/photo/:size | user | size card or full |200 image/webp, private cache, ETag; no photo, unknown size or club 404 |
+| GET /clubs/:club_id/actions | committee (committee or president) |page,page_size|200 ClubAction[] newest first; `undoable` is true only for the president and only while no later action touched the same members; plain member 403, non-member 404 |
+| POST /clubs/:club_id/actions/:action_id/undo | president |{}|200 `{undone,latest}`; committee or member 403 |
 | GET /me/events | user |club_id?,state?,page,page_size|200 manageable Event[]; other roles yield empty unless committee |
 | POST /events/:id/registration | user |{allow_waitlist:boolean}|201 new lifecycle or200 existing RegistrationResult; plain member on a members-only event: 202 status `requested` |
 | DELETE /events/:id/registration | user |{}|200 RegistrationResult; withdraws a pending request; absent is left |
@@ -97,7 +104,7 @@ Retain root `/api/health` outside v1:200 `{status:"ok"}` or503 `{status:"unavail
 
 ## 4. Response resources
 
-User: `{id,name,email,student_id,platform_role}`. Membership: `{club_id,club_name,role:"member|committee",joined_at}`. Club: `{id,name,description,my_role:null|member|committee}`. Venue: `{id,name,location,description,capacity,is_active}`. No password_hash/session IDs.
+User: `{id,name,email,student_id,platform_role}`. Membership: `{club_id,club_name,role:"member|committee",joined_at}`. Club: `{id,name,description,icon,photo,my_role:null|member|committee|president,request_status}`; `icon` is null or `{url,width,height,updated_at}`, and `photo` is null or `{card_url,full_url,alt,width:1200,height:800,updated_at}` (the event `cover` shape; the URLs end in `?v=<key>` for cache busting). Membership rows (`/me/memberships`, session) also carry `club_icon` and `club_photo`. ClubAction: `{id,type,description,actor:{id,name},target:null|{id,name},undoable,created_at,undone_at}`. Venue: `{id,name,location,description,capacity,is_active}`. No password_hash/session IDs.
 
 Config:
 ```json

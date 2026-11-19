@@ -61,6 +61,7 @@ export function Organizer({ session }) {
       </div>
       <ul className="cs-row role-chips" aria-label="Your roles">{committeeClubs.map(item => <li key={item.club_id}><span className="cs-chip cs-chip-neutral">{item.club_name}: {item.role === 'president' ? 'President' : 'Committee'}</span></li>)}</ul>
       <p>Reports: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/reports`}>{item.club_name}</Link> </span>)}</p>
+      <p>Activity logs: {committeeClubs.map(item => <span key={item.club_id}><Link to={`/organizer/clubs/${item.club_id}/members#action-log-title`} aria-label={`${item.club_name} activity log`}>{item.club_name}</Link> </span>)}</p>
       {president && <SignoffQueue onChange={events.refresh} />}
       <Resource value={events} allowEmpty>
         {events.data?.length === 0 ? (

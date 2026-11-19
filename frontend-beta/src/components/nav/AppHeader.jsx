@@ -1,8 +1,8 @@
 import { Link, useLocation } from 'react-router'
 import { AccountMenu } from './AccountMenu'
-import { badgeText, isActive, primaryTabs } from './navigation'
+import { badgeText, headerLinks, isActive } from './navigation'
 
-// Top bar. From 768 px up it also carries the four primary links; on phones
+// Top bar. From 768 px up it also carries the primary links (plus Organizer for organizers); on phones
 // those move to the TabBar and the header keeps just the brand and the account.
 export function AppHeader({ session, unread, showLinks, onSignOut }) {
   const { pathname } = useLocation()
@@ -15,7 +15,7 @@ export function AppHeader({ session, unread, showLinks, onSignOut }) {
         </Link>
         {showLinks && (
           <nav className="header-links" aria-label="Main">
-            {primaryTabs(session).map(tab => {
+            {headerLinks(session).map(tab => {
               const text = tab.badge ? badgeText(unread) : undefined
               return (
                 <Link key={tab.to} to={tab.to} className="header-link" aria-current={isActive(tab, pathname) ? 'page' : undefined}>
@@ -26,7 +26,7 @@ export function AppHeader({ session, unread, showLinks, onSignOut }) {
             })}
           </nav>
         )}
-        <AccountMenu session={session} onSignOut={onSignOut} />
+        <AccountMenu session={session} onSignOut={onSignOut} organizerInMenu={!showLinks} />
       </div>
     </header>
   )

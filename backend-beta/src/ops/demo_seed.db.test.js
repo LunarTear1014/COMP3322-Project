@@ -7,6 +7,7 @@ import { create_utc_pool } from "../db/pool.js";
 import { create_password_hasher } from "../features/users/password_hasher.js";
 import { prepare_database, test_db_config } from "../../test/db_helper.js";
 import { attach_demo_club_icons } from "./demo_club_icons.js";
+import { attach_demo_club_photos } from "./demo_club_photos.js";
 import { CLUBS, EVENTS, seed_demo } from "./demo_seed.js";
 
 const { skip } = test_db_config();
@@ -75,6 +76,27 @@ describe("demo seed", { skip }, () => {
       await db.admin.query("UPDATE clubs SET icon_key = ? WHERE name = 'Debate Club'", [custom]);
       await attach_demo_club_icons({ pool, cover_dir: dir, log: null });
       assert.equal(await count("SELECT COUNT(*) AS n FROM clubs WHERE icon_key = ?", [custom]), 1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  test("club photos: every demo club gets one, a second run changes nothing and an uploaded photo is never replaced", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "club-photos-"));
+    try {
+      const first = await attach_demo_club_photos({ pool, cover_dir: dir, now: new Date("2026-11-16T04:00:00Z"), log: null });
+      assert.deepEqual(first, { attached: CLUBS.length, already: 0, missing: 0 });
+      assert.equal(await count("SELECT COUNT(*) AS n FROM clubs WHERE photo_key IS NULL OR photo_alt IS NULL"), 0);
+      assert.equal((await readdir(dir)).filter((name) => name.includes(".photo.")).length, CLUBS.length * 2);
+      assert.equal(await count("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'club.photo_set' AND actor_user_id IS NOT NULL"), CLUBS.length);
+      const again = await attach_demo_club_photos({ pool, cover_dir: dir, log: null });
+      assert.deepEqual(again, { attached: 0, already: CLUBS.length, missing: 0 });
+      assert.equal((await readdir(dir)).length, CLUBS.length * 2, "no extra files written");
+      const custom = "d".repeat(32);
+      await db.admin.query("UPDATE clubs SET photo_key = NULL WHERE name = 'Debate Club'");
+      await db.admin.query("UPDATE clubs SET photo_key = ? WHERE name = 'Film Society'", [custom]);
+      const third = await attach_demo_club_photos({ pool, cover_dir: dir, log: null });
+      assert.deepEqual(third, { attached: 1, already: CLUBS.length - 1, missing: 0 });
+      assert.equal(await count("SELECT COUNT(*) AS n FROM clubs WHERE photo_key = ?", [custom]), 1, "the existing photo stays");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -42,7 +42,7 @@ Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :8
                       seed    (one-shot: demo data on an empty database)
 ```
 
-Event covers and club icons live on the `cover_data` volume shared by
+Event covers, club icons and club photos live on the `cover_data` volume shared by
 `backend`, `worker` and `seed`; the TLS certificate lives on `web_certs`.
 
 ```text
@@ -61,7 +61,7 @@ On an empty database the one-shot `seed` service
 creates 5 clubs, 5 venues, 37 accounts and 25 events through the real API:
 past events with check-ins, upcoming events with a waitlist and pending
 requests, and requests still in the approval workflow. It also gives the five
-demo clubs generated icons. The names are fictional and the addresses use the
+demo clubs generated icons and photos. The names are fictional and the addresses use the
 reserved `.example` domain.
 
 **Password for every account: `clubspacetest123`**
@@ -365,7 +365,8 @@ folder of a rebuild).
 
 ### Images, migrations and environment
 
-Event covers and club icons (`*.icon.webp`) are stored under `COVER_DIR`
+Event covers, club icons (`*.icon.webp`) and club photos (`*.photo.card.webp`,
+`*.photo.full.webp`) are stored under `COVER_DIR`
 (`/app/data/covers` in the backend container) on the `cover_data` volume. Back it up with the database:
 `docker run --rm -v clubspace-pg19_cover_data:/data -v "$PWD":/backup alpine
 tar -czf /backup/covers.tgz -C /data .`. A scheduled sweep in the worker removes
@@ -393,7 +394,17 @@ add them by hand:
 docker compose exec -T backend node src/ops/attach-demo-club-icons.js
 ```
 
-The `club-*.jpg` images in `backend-beta/db/demo-images/` are not used.
+The five demo clubs also get a club photo, the generated `club-*.jpg` images in
+[`backend-beta/db/demo-images/`](backend-beta/db/demo-images/), loaded by
+[`backend-beta/src/ops/demo_club_photos.js`](backend-beta/src/ops/demo_club_photos.js).
+`seed` adds any missing ones on every `docker compose up` and never replaces a
+photo a committee uploaded. A database seeded before club photos existed gets
+them with this command, which skips clubs that already have a photo and is safe
+to run again:
+
+```bash
+docker compose exec -T backend node src/ops/attach-demo-club-photos.js
+```
 
 Venue administrators hold no club role. Migration 020 refuses to run while a
 venue admin still has a club membership or a pending join request, so on a

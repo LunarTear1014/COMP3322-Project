@@ -50,7 +50,7 @@ function create_app({
   });
 
   // Order (backend.md section 2): body limits -> session -> Origin/CSRF -> ...
-  // Multipart routes (event covers, club icons) parse their own body, after the CSRF check.
+  // Multipart routes (event covers, club icons, club photos) parse their own body, after the CSRF check.
   v1.use(json_body({ skip: is_multipart_route }));
   v1.use(session_middleware);
   v1.use(origin_and_csrf({ app_origin }));

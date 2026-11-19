@@ -5,7 +5,7 @@ import { start_v1 } from "../../test/v1_harness.js";
 import { build_world, future_date, published_event } from "../../test/world.js";
 
 // Beta club management on v1: remove a member, leave the committee, and the
-// president's action log with undo (club_action_log).
+// committee's action log and the president's undo (club_action_log).
 
 const { skip } = test_db_config();
 let app;
@@ -88,7 +88,8 @@ describe("v1 club management and action log", { skip }, () => {
     assert.equal(await role(ids.s4), "committee");
     assert.equal(await version(pres, ids.s4), before_version + 3, "every role write bumps the version");
     const comm = await app.client_for("comm@x.test");
-    assert.equal((await comm.get("/clubs/1/actions")).status, 403, "the log is president-only");
+    assert.equal((await comm.get("/clubs/1/actions")).status, 200, "the committee can read the log");
+    assert.equal((await (await app.client_for("mem@x.test")).get("/clubs/1/actions")).status, 403, "plain members cannot");
     assert.equal((await comm.post(`/clubs/1/actions/${demoted.id}/undo`, {})).status, 403);
   });
 
@@ -146,5 +147,27 @@ describe("v1 club management and action log", { skip }, () => {
     // Restore the fixture roles for any later test.
     await app.admin.query("UPDATE memberships SET role = 'committee' WHERE club_id = 1 AND user_id = ?", [ids.comm]);
     await app.admin.query("UPDATE memberships SET role = 'president' WHERE club_id = 1 AND user_id = ?", [ids.pres]);
+  });
+
+  test("the committee can read the action log but is never offered undo; plain members cannot read it", async () => {
+    await app.admin.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, 1, 'member') ON DUPLICATE KEY UPDATE role = 'member'", [ids.s2]);
+    const pres = await app.client_for("pres@x.test");
+    const comm = await app.client_for("comm@x.test");
+    const mem = await app.client_for("mem@x.test");
+    await comm.delete(`/clubs/1/members/${ids.s2}`);
+    const seen_by_president = (await pres.get("/clubs/1/actions")).body.data;
+    assert.ok(seen_by_president.some((row) => row.undoable), "the president is offered undo");
+    const response = await comm.get("/clubs/1/actions");
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.length, seen_by_president.length);
+    assert.ok(response.body.data.every((row) => row.undoable === false), "undoable is false for every row");
+    const entry = seen_by_president.find((row) => row.undoable);
+    const denied = await comm.post(`/clubs/1/actions/${entry.id}/undo`, {});
+    assert.equal(denied.status, 403);
+    assert.equal((await pres.get("/clubs/1/actions")).body.data.find((row) => row.id === entry.id).undoable, true, "still undoable by the president");
+    assert.equal((await mem.get("/clubs/1/actions")).status, 403);
+    assert.equal((await mem.post(`/clubs/1/actions/${entry.id}/undo`, {})).status, 403);
+    const outsider = await app.client_for("pres2@x.test");
+    assert.equal((await outsider.get("/clubs/1/actions")).status, 404);
   });
 });

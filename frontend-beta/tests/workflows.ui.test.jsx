@@ -138,7 +138,9 @@ describe('frontend preview workflows', () => {
       expect(removal).toBeTruthy()
     })
     expect(await screen.findByText('Riley Chen was removed from the club.')).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Club activity log' })).toBeNull()
+    // Committee members see the log too, read-only.
+    expect(screen.getByRole('heading', { name: 'Club activity log' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Undo/ })).toBeNull()
   })
 
   it('keeps role tools out of a student\'s account menu and sends management links to the directory', async () => {
@@ -362,21 +364,49 @@ describe('frontend preview workflows', () => {
   })
 
 
-  it('opens the account menu with role tools and restores focus to its trigger on Escape', async () => {
+  it('opens the account menu and restores focus to its trigger on Escape; Organizer sits in the top bar next to Clubs', async () => {
     window.history.replaceState({}, '', '/events')
     vi.stubGlobal('fetch', previewFetch())
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Find your next event.' })
+    const bar = screen.getByRole('navigation', { name: 'Main' })
+    expect(within(bar).getAllByRole('link').map(link => link.textContent.replace(/\d.*$/, '').trim())).toEqual(['Explore', 'My events', 'Clubs', 'Organizer', 'Inbox'])
     const trigger = screen.getByRole('button', { name: /Account/ })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(trigger)
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    for (const name of ['Profile', 'Organizer']) expect(screen.getByRole('link', { name })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Profile' })).toBeTruthy()
+    expect(within(bar).getByRole('link', { name: 'Organizer' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Organizer' })).toHaveLength(1)
     for (const name of ['Booking review', 'Venue schedule']) expect(screen.queryByRole('link', { name })).toBeNull()
     fireEvent.keyDown(screen.getByRole('link', { name: 'Profile' }), { key: 'Escape' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('marks Organizer current under /organizer in the top bar', async () => {
+    window.history.replaceState({}, '', '/organizer/clubs')
+    vi.stubGlobal('fetch', previewFetch())
+    render(<App />)
+
+    const bar = await screen.findByRole('navigation', { name: 'Main' })
+    expect(within(bar).getByRole('link', { name: 'Organizer' }).getAttribute('aria-current')).toBe('page')
+    expect(within(bar).getByRole('link', { name: 'Clubs' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('keeps Organizer in the account menu on phones, where the bottom bar stays at four tabs', async () => {
+    window.matchMedia = query => ({ matches: query.includes('max-width: 767.98px'), addEventListener() {}, removeEventListener() {} })
+    window.history.replaceState({}, '', '/events')
+    vi.stubGlobal('fetch', previewFetch())
+    render(<App />)
+
+    const bar = await screen.findByRole('navigation', { name: 'Main' })
+    expect(within(bar).getAllByRole('link').map(link => link.textContent.replace(/\d.*$/, '').trim())).toEqual(['Explore', 'My events', 'Clubs', 'Inbox'])
+    expect(screen.queryByRole('link', { name: 'Organizer' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Account/ }))
+    expect(screen.getByRole('link', { name: 'Organizer' }).getAttribute('href')).toBe('/organizer')
+    delete window.matchMedia
   })
 
   it('gives a venue administrator the venue tools and no organizer link', async () => {
@@ -388,6 +418,7 @@ describe('frontend preview workflows', () => {
     fireEvent.click(screen.getByRole('button', { name: /Account/ }))
     for (const name of ['Profile', 'Booking review', 'Venue schedule']) expect(screen.getByRole('link', { name })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Organizer' })).toBeNull()
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).queryByRole('link', { name: 'Organizer' })).toBeNull()
   })
 
   it('swaps My events for Schedule in a venue administrator\'s bottom bar', async () => {
@@ -442,7 +473,7 @@ describe('frontend preview workflows', () => {
     render(<App />)
 
     const nav = await screen.findByRole('navigation', { name: 'Main' })
-    expect(within(nav).getAllByRole('link').length).toBe(4)
+    expect(within(nav).getAllByRole('link').length).toBe(5)
     expect(within(nav).getByRole('link', { name: 'Inbox' })).toBeTruthy()
     expect(within(nav).queryByText(/unread/)).toBeNull()
   })

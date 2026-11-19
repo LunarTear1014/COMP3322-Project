@@ -33,7 +33,7 @@ const action_dto = (row) => ({
   undone_at: row.undone_epoch ? new Date(Number(row.undone_epoch) * 1000).toISOString() : null,
 });
 
-async function list_actions(db, club_id, { page, page_size }) {
+async function list_actions(db, club_id, { page, page_size }, { can_undo = true } = {}) {
   const [[{ total }]] = await db.query("SELECT COUNT(*) AS total FROM club_action_log WHERE club_id = ?", [club_id]);
   const [rows] = await db.query(
     `SELECT id, actor_user_id, actor_name, target_user_id, target_name, action_type, description, undoable, details,
@@ -49,7 +49,7 @@ async function list_actions(db, club_id, { page, page_size }) {
     const mine = new Set(touched_users(row));
     return newer.some((later) => Number(later.id) > Number(row.id) && touched_users(later).some((id) => mine.has(id)));
   };
-  return { rows: rows.map((row) => ({ ...action_dto(row), undoable: action_dto(row).undoable && !superseded(row) })), total: Number(total) };
+  return { rows: rows.map((row) => ({ ...action_dto(row), undoable: can_undo && action_dto(row).undoable && !superseded(row) })), total: Number(total) };
 }
 
 const changed = () => new ApiError("INVALID_STATE", "Things changed since this action, so it can’t be undone safely.");

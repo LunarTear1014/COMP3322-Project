@@ -5,14 +5,16 @@ const token = 'local-preview-token'
 const user = { id: 1, name: 'Alex Chan', email: 'preview@clubspace.test', student_id: 'PREVIEW-01', platform_role: 'student' }
 const adminUser = { id: 9, name: 'Jordan Ho', email: 'admin@clubspace.test', student_id: 'PREVIEW-02', platform_role: 'venue_admin' }
 const adminSession = { user: adminUser, memberships: [], csrf_token: token }
-const memberships = [{ club_id: 1, club_name: 'Photography Society', role: 'committee', joined_at: '2026-01-01T00:00:00Z' }]
+// Club photos are served as SVG art at the photo URL, standing in for uploaded WebP files (club 3 has none, to show the fallback).
+const clubPhoto = (id, alt) => ({ card_url: `/api/v1/clubs/${id}/photo/card?v=fixture`, full_url: `/api/v1/clubs/${id}/photo/full?v=fixture`, alt, width: 1200, height: 800, updated_at: '2026-11-01T00:00:00Z' })
+const memberships = [{ club_id: 1, club_name: 'Photography Society', role: 'committee', joined_at: '2026-01-01T00:00:00Z', club_icon: null, club_photo: clubPhoto(1, 'Students gathered around a table of printed photographs') }]
 const session = { user, memberships, csrf_token: token }
 const venues = [{ id: 1, name: 'Harbour Room', location: 'Student Centre · Level 2', description: 'A flexible space for workshops and club gatherings.', capacity: 80, is_active: true }, { id: 2, name: 'The Studio', location: 'Arts Building · Level 1', description: 'A bright space for creative sessions and small events.', capacity: 40, is_active: true }]
-const clubs = [{ id: 1, name: 'Photography Society', description: 'A community for people who love making images.', my_role: 'committee' }, { id: 2, name: 'Film Society', description: 'Screenings and conversations for film lovers.', my_role: null }]
+const clubs = [{ id: 1, name: 'Photography Society', description: 'A community for people who love making images.', my_role: 'committee', icon: null, photo: clubPhoto(1, 'Students gathered around a table of printed photographs') }, { id: 2, name: 'Film Society', description: 'Screenings and conversations for film lovers.', my_role: null, icon: null, photo: clubPhoto(2, 'An audience watching a film in red cinema seats') }]
 clubs.push(
-  { id: 3, name: '攝影 Chess & Strategy', description: 'Board games, puzzles and friendly tournaments.', my_role: 'member' },
-  { id: 4, name: 'Hiking Club', description: 'Weekend trails around the New Territories.', my_role: null },
-  { id: 5, name: 'Robotics Lab', description: 'Build, break and rebuild.', my_role: null },
+  { id: 3, name: '攝影 Chess & Strategy', description: 'Board games, puzzles and friendly tournaments.', my_role: 'member', icon: null, photo: null },
+  { id: 4, name: 'Hiking Club', description: 'Weekend trails around the New Territories.', my_role: null, icon: null, photo: clubPhoto(4, 'Hikers on a hillside trail above the city') },
+  { id: 5, name: 'Robotics Lab', description: 'Build, break and rebuild.', my_role: null, icon: null, photo: clubPhoto(5, 'Students building small robots on a workshop table') },
 )
 const slots = [{ id: 'early_morning', name: 'Early morning', start: '06:00', end: '09:00' }, { id: 'morning', name: 'Morning', start: '09:00', end: '12:00' }, { id: 'afternoon', name: 'Afternoon', start: '12:00', end: '15:00' }, { id: 'evening', name: 'Evening', start: '15:00', end: '18:00' }, { id: 'night', name: 'Night', start: '18:00', end: '21:00' }, { id: 'full_day', name: 'Full day', start: '06:00', end: '21:00' }]
 const future = days => new Date(Date.now() + days * 86400000).toISOString()
@@ -142,6 +144,16 @@ export function fixturePlugin() {
       if ((url.pathname === '/bookings' && req.method === 'GET') || url.pathname === '/admin/schedule' || /^\/bookings\/\d+\/decision$/.test(url.pathname)) {
         if (!isAdmin) return fail(403, 'FORBIDDEN', 'Only venue administrators can do this.')
       }
+      // The student organizer is a committee member of club 1, so the photo editor works there (nothing is stored).
+      if (/^\/clubs\/\d+\/photo$/.test(url.pathname) && (req.method === 'PUT' || req.method === 'DELETE')) {
+        const clubId = Number(url.pathname.split('/')[2])
+        if (isAdmin || clubId !== 1) return fail(403, 'FORBIDDEN', 'Only the club committee can change the club photo.')
+        if (req.method === 'DELETE') return send(200, { data: { club_id: clubId, photo: null } })
+        let raw = ''
+        req.on('data', chunk => { raw += chunk })
+        req.on('end', () => send(200, { data: { club_id: clubId, photo: clubPhoto(clubId, raw.match(/name="alt"\r?\n\r?\n([^\r\n]*)/)?.[1] || 'Club photo') } }))
+        return
+      }
       if (req.method !== 'GET') {
         if (/^\/bookings\/\d+\/decision$/.test(url.pathname)) return fail(409, 'VENUE_UNAVAILABLE', 'The venue is no longer available. Review the updated request before trying again.')
         return fail(503, 'PREVIEW_READ_ONLY', 'This is a read-only preview. Changes require the real backend.')
@@ -155,15 +167,30 @@ export function fixturePlugin() {
         res.setHeader('Content-Type', 'image/svg+xml')
         return res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400"><rect width="600" height="400" fill="hsl(${hue} 70% 55%)"/><circle cx="440" cy="150" r="90" fill="hsl(${(hue + 40) % 360} 85% 75%)"/><path d="M0 330 L170 210 L300 300 L420 230 L600 340 V400 H0Z" fill="hsl(${hue} 60% 35%)"/></svg>`)
       }
+      const photo = url.pathname.match(/^\/clubs\/(\d+)\/photo\/(card|full)$/)
+      if (photo) {
+        const hue = (Number(photo[1]) * 83 + 20) % 360
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'image/svg+xml')
+        return res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400"><rect width="600" height="400" fill="hsl(${hue} 65% 60%)"/><circle cx="130" cy="110" r="70" fill="hsl(${(hue + 50) % 360} 90% 80%)"/><path d="M0 300 L120 200 L240 280 L380 160 L500 250 L600 190 V400 H0Z" fill="hsl(${hue} 55% 38%)"/><circle cx="300" cy="215" r="48" fill="hsl(${hue} 40% 94%)" opacity=".85"/></svg>`)
+      }
       const id = url.pathname.match(/^\/events\/(\d+)$/)?.[1]
       if (id) { const event = events.find(e => e.id === Number(id)); return event ? send(200, { data: isAdmin ? adminView(event) : event }) : fail(404, 'NOT_FOUND', 'Event not found.') }
       if (url.pathname === '/events/36/join-requests') return send(200, list(joinRequests))
       if (url.pathname === '/events/35/participants') return send(200, list([{ user: { id: 3, name: 'Riley Chen', email: 'riley@example.test', student_id: 'S3' }, status: 'joined', queue_position: null, checked_in: true }, { user: { id: 4, name: 'Zara Wong', email: 'zara@example.test', student_id: 'S4' }, status: 'joined', queue_position: null, checked_in: false }]))
       if (/^\/events\/\d+\/participants$/.test(url.pathname)) return send(200, list([]))
+      // Deliberately not sorted by role: the page puts the president first, then the committee, then members.
       if (url.pathname === '/clubs/1/members') return send(200, list([
-        { user_id: user.id, name: user.name, role: 'committee', club_id: 1, version: 1, user: { id: user.id, name: user.name } },
-        { user_id: 3, name: 'Riley Chen', role: 'member', club_id: 1, version: 2, user: { id: 3, name: 'Riley Chen' } },
-        { user_id: 4, name: 'Zara Wong', role: 'committee', club_id: 1, version: 1, user: { id: 4, name: 'Zara Wong' } },
+        { user_id: user.id, name: user.name, role: 'committee', club_id: 1, version: 1, joined_at: '2026-01-01T00:00:00Z', user: { id: user.id, name: user.name } },
+        { user_id: 3, name: 'Riley Chen', role: 'member', club_id: 1, version: 2, joined_at: '2026-03-12T00:00:00Z', user: { id: 3, name: 'Riley Chen' } },
+        { user_id: 4, name: 'Zara Wong', role: 'committee', club_id: 1, version: 1, joined_at: '2026-02-02T00:00:00Z', user: { id: 4, name: 'Zara Wong' } },
+        { user_id: 2, name: 'Morgan Lee', role: 'president', club_id: 1, version: 1, joined_at: '2025-09-01T00:00:00Z', user: { id: 2, name: 'Morgan Lee' } },
+        { user_id: 6, name: 'Ada Ng', role: 'member', club_id: 1, version: 1, joined_at: '2026-04-20T00:00:00Z', user: { id: 6, name: 'Ada Ng' } },
+      ]))
+      // The committee reads the log; undo is the president's, so nothing is undoable here.
+      if (url.pathname === '/clubs/1/actions') return send(200, list([
+        { id: 22, type: 'member_promoted', description: 'Appointed a member to the committee.', actor: { id: 2, name: 'Morgan Lee' }, target: { id: 4, name: 'Zara Wong' }, undoable: false, created_at: future(-3), undone_at: null },
+        { id: 21, type: 'member_removed', description: 'Removed a regular member from the club.', actor: { id: 2, name: 'Morgan Lee' }, target: { id: 7, name: 'Sam Lee' }, undoable: false, created_at: future(-6), undone_at: null },
       ]))
       if (url.pathname === '/clubs/2/members') return send(200, list([{ user_id: 3, name: 'Morgan Lee', role: 'committee' }]))
       if (url.pathname === '/admin/schedule') {

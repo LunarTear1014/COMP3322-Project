@@ -1,16 +1,21 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { campusTime, query } from '../api'
+import { dateLabel } from '../lib/format'
 import { ErrorNotice, PageHeading, Pagination, Resource } from '../components/common'
 import { Button, StatusChip, TextField, useToast } from '../components/ui'
 import { ClubIconEditor } from '../components/ClubIconEditor'
+import { ClubBanner } from '../components/ClubBanner'
+import { CoverUploader } from '../components/CoverUploader'
 import { iconForm } from '../lib/clubIcon'
+import { PHOTO_HELP, photoForm, photoProblem } from '../lib/clubPhoto'
 import { clubColour } from '../lib/club'
 import { useAction, useAllOptions, useResource } from '../hooks/resources'
 import { useNotificationSignal } from '../hooks/useLiveSignal'
 import { isOrganizer } from '../lib/roles'
 
 const ROLE = { president: 'President', committee: 'Committee', member: 'Member' }
+const ROLE_ORDER = { president: 0, committee: 1, member: 2 }
 
 // The clubs a committee member or president runs: members, reports, and
 // stepping down from the committee.
@@ -21,6 +26,9 @@ export function ClubTools({ session, refreshSession }) {
   const action = useAction(() => refreshSession?.())
   const iconAction = useAction(() => refreshSession?.())
   const [iconClub, setIconClub] = useState(null)
+  const photoAction = useAction(() => refreshSession?.())
+  const [photoClub, setPhotoClub] = useState(null)
+  const [photoOpen, setPhotoOpen] = useState(null)
 
   async function leaveCommittee(club) {
     const result = await action.run(`/clubs/${club.club_id}/committee`, 'DELETE', {})
@@ -39,6 +47,17 @@ export function ClubTools({ session, refreshSession }) {
     const result = await iconAction.run(`/clubs/${club.club_id}/icon`, 'DELETE', {})
     if (result) toast.show({ message: `${club.club_name} icon removed.`, tone: 'info' })
   }
+  async function savePhoto(club, { file, alt }) {
+    setPhotoClub(club.club_id)
+    const result = await photoAction.run(`/clubs/${club.club_id}/photo`, 'PUT', photoForm({ file, alt }))
+    if (result) { toast.show({ message: `${club.club_name} photo saved.` }); setPhotoOpen(null) }
+  }
+  async function removePhoto(club) {
+    setPhotoClub(club.club_id)
+    const result = await photoAction.run(`/clubs/${club.club_id}/photo`, 'DELETE', {})
+    if (result) { toast.show({ message: `${club.club_name} photo removed.`, tone: 'info' }); setPhotoOpen(null) }
+  }
+  const photoError = club => (photoAction.error && photoClub === club.club_id ? photoAction.error.fields?.file || photoAction.error.fields?.alt || photoAction.error.message : '')
   const iconError = club => (iconAction.error && iconClub === club.club_id ? iconAction.error.fields?.file || iconAction.error.message : '')
 
   return (
@@ -48,11 +67,28 @@ export function ClubTools({ session, refreshSession }) {
       <div className="card-grid">
         {clubs.map(club => (
           <article key={club.club_id} className="cs-card is-flat has-actions" style={{ '--club': clubColour(club.club_id).cssVar }}>
+            <ClubBanner name={club.club_name} icon={club.club_icon} photo={club.club_photo} />
             <div className="cs-card-body">
               <h2 className="cs-card-title">{club.club_name}</h2>
               <StatusChip state="joined" label={ROLE[club.role]} />
+              {photoOpen === club.club_id ? (
+                <>
+                  <CoverUploader
+                    kind="photo" help={PHOTO_HELP} check={photoProblem} accept="image/jpeg,image/png,image/webp"
+                    title={`${club.club_name} members`} current={club.club_photo}
+                    busy={photoAction.busy && photoClub === club.club_id} serverError={photoError(club)}
+                    onSave={upload => savePhoto(club, upload)} onRemove={() => removePhoto(club)}
+                  />
+                  <Button onClick={() => setPhotoOpen(null)}>Close photo editor</Button>
+                </>
+              ) : (
+                <Button aria-label={`${club.club_photo ? 'Change' : 'Add'} the ${club.club_name} photo`} aria-expanded="false" onClick={() => { photoAction.reset?.(); setPhotoOpen(club.club_id) }}>
+                  {club.club_photo ? 'Change club photo' : 'Add club photo'}
+                </Button>
+              )}
               <ClubIconEditor clubName={club.club_name} current={club.club_icon} busy={iconAction.busy && iconClub === club.club_id} serverError={iconError(club)} onSave={file => saveIcon(club, file)} onRemove={() => removeIcon(club)} />
               <p><Link to={`/organizer/clubs/${club.club_id}/members`}>Members and roles</Link></p>
+              <p><Link to={`/organizer/clubs/${club.club_id}/members#action-log-title`}>Activity log</Link></p>
               <p><Link to={`/organizer/clubs/${club.club_id}/reports`}>Activity report</Link></p>
               <p><Link to={`/organizer/clubs/${club.club_id}/reports/effectiveness`}>Event effectiveness</Link></p>
               {club.role === 'committee' && (confirming === club.club_id ? (
@@ -75,54 +111,60 @@ export function ClubTools({ session, refreshSession }) {
   )
 }
 
+// One table row per member. A confirmation (make president, remove) replaces
+// the row's buttons in the Actions cell, so it stays next to the person it is about.
 function MemberRow({ member, mine, onChange, onRemove, busy, self }) {
   const [confirming, setConfirming] = useState(null)
   const president = mine === 'president'
   const name = member.user.name
+  let actions = null
   if (confirming === 'president') {
-    return (
-      <li className="member-row">
-        <span className="inline-confirm" role="group" aria-label={`Transfer the presidency to ${name}`}>
-          <span>Make {name} president? You become a committee member.</span>
+    actions = (
+      <div className="inline-confirm member-confirm" role="group" aria-label={`Transfer the presidency to ${name}`}>
+        <span>Make {name} president? You become a committee member.</span>
+        <div className="cs-row">
           <Button variant="danger" busy={busy} onClick={() => { setConfirming(null); onChange(member, 'president') }}>Transfer presidency</Button>
           <Button onClick={() => setConfirming(null)}>Cancel</Button>
-        </span>
-      </li>
+        </div>
+      </div>
     )
-  }
-  if (confirming === 'remove') {
-    return (
-      <li className="member-row">
-        <span className="inline-confirm" role="group" aria-label={`Remove ${name} from the club`}>
-          <span>Remove {name} from the club? Their places at members-only events end. The president can undo this.</span>
+  } else if (confirming === 'remove') {
+    actions = (
+      <div className="inline-confirm member-confirm" role="group" aria-label={`Remove ${name} from the club`}>
+        <span>Remove {name} from the club? Their places at members-only events end. The president can undo this.</span>
+        <div className="cs-row">
           <Button variant="danger" busy={busy} onClick={() => { setConfirming(null); onRemove(member) }}>Remove from club</Button>
           <Button onClick={() => setConfirming(null)}>Keep member</Button>
-        </span>
-      </li>
+        </div>
+      </div>
     )
+  } else {
+    const buttons = []
+    if (president && member.role === 'member') {
+      buttons.push(<Button key="appoint" disabled={busy} aria-label={`Appoint ${name} to the committee`} onClick={() => onChange(member, 'committee')}>Appoint to committee</Button>)
+    }
+    if (president && member.role === 'committee') {
+      buttons.push(<Button key="demote" disabled={busy} aria-label={`Remove ${name} from the committee`} onClick={() => onChange(member, 'member')}>Remove from committee</Button>)
+      buttons.push(<Button key="president" disabled={busy} aria-label={`Make ${name} president`} onClick={() => setConfirming('president')}>Make president</Button>)
+    }
+    if (mine && mine !== 'member' && member.role === 'member' && !self) {
+      buttons.push(<Button key="remove" disabled={busy} aria-label={`Remove ${name} from the club`} onClick={() => setConfirming('remove')}>Remove from club</Button>)
+    }
+    actions = buttons.length ? <div className="cs-row">{buttons}</div> : <span className="cs-meta" aria-label="No actions available">—</span>
   }
   return (
-    <li className="member-row">
-      <span className="member-name">{name}</span>
-      <StatusChip state="joined" label={ROLE[member.role]} />
-      {president && member.role === 'member' && (
-        <Button disabled={busy} aria-label={`Appoint ${name} to the committee`} onClick={() => onChange(member, 'committee')}>Appoint to committee</Button>
-      )}
-      {president && member.role === 'committee' && (
-        <>
-          <Button disabled={busy} aria-label={`Remove ${name} from the committee`} onClick={() => onChange(member, 'member')}>Remove from committee</Button>
-          <Button disabled={busy} aria-label={`Make ${name} president`} onClick={() => setConfirming('president')}>Make president</Button>
-        </>
-      )}
-      {mine && mine !== 'member' && member.role === 'member' && !self && (
-        <Button disabled={busy} aria-label={`Remove ${name} from the club`} onClick={() => setConfirming('remove')}>Remove from club</Button>
-      )}
-    </li>
+    <tr>
+      <th scope="row" className="member-name">{name}{self && <span className="cs-meta"> (you)</span>}</th>
+      <td><StatusChip state="joined" label={ROLE[member.role]} /></td>
+      <td className="cs-nums">{member.joined_at ? dateLabel(member.joined_at) : '—'}</td>
+      <td className="member-actions">{actions}</td>
+    </tr>
   )
 }
 
-// The president's log of role, membership and join-request actions, with undo.
-function ActionLog({ clubId, refresh, changes }) {
+// The committee's log of role, membership and join-request actions. Only the
+// president is offered Undo (the API sends undoable: false to everyone else).
+function ActionLog({ clubId, refresh, changes, canUndo }) {
   const [page, setPage] = useState(1)
   const toast = useToast()
   const log = useResource(`/clubs/${clubId}/actions${query({ page })}`)
@@ -134,9 +176,16 @@ function ActionLog({ clubId, refresh, changes }) {
     const result = await action.run(`/clubs/${clubId}/actions/${item.id}/undo`, 'POST', {})
     if (result) toast.show({ message: 'Action undone. Affected members were notified.' })
   }
+  // Arriving from "Activity log" (#action-log-title) brings the log into view.
+  const { hash } = useLocation()
+  const heading = useRef(null)
+  useEffect(() => {
+    if (hash === '#action-log-title' && heading.current) { heading.current.scrollIntoView?.({ block: 'start' }); heading.current.focus({ preventScroll: true }) }
+  }, [hash])
   return (
     <section className="action-log" aria-labelledby="action-log-title">
-      <h2 id="action-log-title" className="section-title">Club activity log</h2>
+      <h2 id="action-log-title" ref={heading} tabIndex={-1} className="section-title">Club activity log</h2>
+      {!canUndo && <p className="cs-meta">Only the president can undo actions.</p>}
       <ErrorNotice error={action.error} />
       <Resource value={log} empty="No club actions have been recorded yet.">
         <ul className="stack-list">
@@ -145,7 +194,7 @@ function ActionLog({ clubId, refresh, changes }) {
               <p><strong>{item.actor.name}</strong> · {item.description}</p>
               {item.target && <p className="cs-meta">Affected member: {item.target.name}</p>}
               <p className="cs-meta">{campusTime(item.created_at)} HKT{item.undone_at ? ' · Undone' : ''}</p>
-              {item.undoable && <Button disabled={action.busy} aria-label={`Undo: ${item.description}`} onClick={() => undo(item)}>Undo</Button>}
+              {canUndo && item.undoable && <Button disabled={action.busy} aria-label={`Undo: ${item.description}`} onClick={() => undo(item)}>Undo</Button>}
             </li>
           ))}
         </ul>
@@ -171,7 +220,10 @@ export function ClubMembers({ session, refreshSession }) {
     members.refresh()
     setChanges(count => count + 1)
   })
-  const shown = (members.data ?? []).filter(member => member.user.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+  // President first, then the committee, then members; alphabetical within a role.
+  const shown = (members.data ?? [])
+    .filter(member => member.user.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+    .sort((a, b) => (ROLE_ORDER[a.role] ?? 3) - (ROLE_ORDER[b.role] ?? 3) || a.user.name.localeCompare(b.user.name))
 
   async function change(member, role) {
     if (role === 'president') {
@@ -194,12 +246,20 @@ export function ClubMembers({ session, refreshSession }) {
       <ErrorNotice error={action.error} />
       <Resource value={members} empty="No members yet.">
         <TextField label="Search members" type="search" name="member-search" value={search} onChange={event => setSearch(event.target.value)} />
-        <ul className="stack-list">
-          {shown.map(member => <MemberRow key={member.user.id} member={member} mine={mine} self={member.user.id === session.user.id} busy={action.busy} onChange={change} onRemove={remove} />)}
-        </ul>
+        {shown.length > 0 && (
+          <div className="cs-tablewrap members-table" role="region" aria-label="Club members" tabIndex={0}>
+            <table className="cs-table">
+              <caption className="cs-sr">President, committee and members of this club</caption>
+              <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Joined</th><th scope="col">Actions</th></tr></thead>
+              <tbody>
+                {shown.map(member => <MemberRow key={member.user.id} member={member} mine={mine} self={member.user.id === session.user.id} busy={action.busy} onChange={change} onRemove={remove} />)}
+              </tbody>
+            </table>
+          </div>
+        )}
         {members.data && !shown.length && <p role="status">No members match “{search}”.</p>}
       </Resource>
-      {mine === 'president' && <ActionLog clubId={id} refresh={() => { members.refresh(); refreshSession?.() }} changes={changes} />}
+      <ActionLog clubId={id} canUndo={mine === 'president'} refresh={() => { members.refresh(); refreshSession?.() }} changes={changes} />
     </main>
   )
 }

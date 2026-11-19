@@ -22,6 +22,12 @@ export function timeLine(startAt, endAt) {
   return `${dayLabel(start)} · ${clock(start)}${endAt ? `–${clock(new Date(endAt))}` : ''}`
 }
 
+// "1 Sept 2025" (en-HK month abbreviations, as elsewhere in the app)
+export function dateLabel(instant) {
+  const p = parts({ day: 'numeric', month: 'short', year: 'numeric' }, new Date(instant))
+  return `${p.day} ${p.month} ${p.year}`
+}
+
 // "13:00–15:00"
 export function timeRange(startAt, endAt) {
   return `${clock(new Date(startAt))}–${clock(new Date(endAt))}`
