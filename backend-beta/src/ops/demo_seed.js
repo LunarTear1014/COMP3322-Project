@@ -279,7 +279,7 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
     return clients.get(key);
   };
 
-  const summary = { clubs: CLUBS.length, accounts: accounts.length, events: 0, registrations: 0, leaves: 0, promotions: 0, check_ins: 0 };
+  const summary = { clubs: CLUBS.length, accounts: accounts.length, events: 0, registrations: 0, leaves: 0, promotions: 0, check_ins: 0, views: 0 };
   try {
     // Club tags, created by each president.
     const tag_ids = {};
@@ -341,10 +341,35 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
           if (!takers.includes(key)) takers.push(key);
         }
       }
-      // A few people look without registering.
-      set_clock(new Date(published_at.getTime() + 20 * 3_600_000));
-      for (const key of pool_keys.slice((rotation + 3) % pool_keys.length).slice(0, 3)) {
-        await (await as(key)).post(`/events/${event.id}/views`, { source: "explore" });
+      // Browsers: people who open the event page without registering, so the
+      // activity report has members and non-members who looked but didn't join.
+      // Visits fall between publication and the earlier of the event's start
+      // and the seed's "now"; a third of them come back a day later.
+      const view_end = Math.min(start.getTime() - 3_600_000, now.getTime() - 30 * 60_000);
+      const span = view_end - published_at.getTime();
+      if (span > 3_600_000) {
+        const outside = (key) => !takers.includes(key);
+        const members = accounts.filter((a) => a.club === spec.club && a.role === "member").map((a) => a.key).filter(outside);
+        const others = pool_keys.filter((key) => users[key].club !== spec.club).filter(outside);
+        const total = Math.min(14, Math.max(4, Math.round(spec.capacity / 3)));
+        const member_count = Math.min(members.length, Math.round(total * 0.4));
+        const pick = (list, n, offset) => Array.from({ length: Math.min(n, list.length) }, (_, i) => list[(offset + i) % list.length]);
+        const browsers = [
+          ...pick(members, member_count, summary.events).map((key) => ({ key, sources: ["club", "inbox"] })),
+          ...pick(others, total - member_count, summary.events * 3).map((key) => ({ key, sources: ["explore", "share"] })),
+        ];
+        const visit = async (key, at, source) => {
+          set_clock(new Date(at));
+          await (await as(key)).post(`/events/${event.id}/views`, { source });
+          summary.views += 1;
+        };
+        for (const [index, { key, sources }] of browsers.entries()) {
+          const at = published_at.getTime() + Math.round(span * ((index + 1) / (browsers.length + 2)));
+          await visit(key, at, sources[index % sources.length]);
+          if (index % 3 === 0 && at + DAY_MS < view_end) await visit(key, at + DAY_MS, sources[(index + 1) % sources.length]);
+        }
+        // The committee opens its own event while managing it (the report leaves this out).
+        await visit(`committee1.${spec.club}`, published_at.getTime() + Math.round(span / 2), "club");
       }
       // Everyone follows the plan on the clock; each person looks at the event just before registering.
       const steps = (spec.plan ?? default_plan({ reg: takers.length, accept: spec.accept })).map(([hours, who, op], order) => ({ hours, who, op, order })).sort((a, b) => a.hours - b.hours || a.order - b.order);
@@ -360,6 +385,7 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
           continue;
         }
         await client.post(`/events/${event.id}/views`, { source: SOURCES[rotation % SOURCES.length] });
+        summary.views += 1;
         await client.post(`/events/${event.id}/registration`, { allow_waitlist: true });
         summary.registrations += 1;
       }
@@ -396,7 +422,7 @@ async function seed_demo({ pool, password, now = new Date(), hasher = create_pas
     await new Promise((resolve) => server.close(resolve));
   }
 
-  log?.(`Demo data: ${summary.clubs} clubs, ${summary.accounts} accounts, ${summary.events} events, ${summary.registrations} registrations, ${summary.leaves} leaves, ${summary.promotions} promotions, ${summary.check_ins} check-ins.`);
+  log?.(`Demo data: ${summary.clubs} clubs, ${summary.accounts} accounts, ${summary.events} events, ${summary.registrations} registrations, ${summary.leaves} leaves, ${summary.promotions} promotions, ${summary.check_ins} check-ins, ${summary.views} event page views.`);
   return { summary, accounts: accounts.map(({ email, name, platform_role, club, role }) => ({ email, name, platform_role, club, role })) };
 }
 

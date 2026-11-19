@@ -30,6 +30,23 @@ describe("demo seed", { skip }, () => {
   });
   after(async () => { await pool?.end(); await db?.close(); });
 
+  test("seeds event page views from members, non-members and the committee, never in the future", async () => {
+    const views = await count("SELECT COUNT(*) AS n FROM event_views");
+    assert.ok(views > 0 && views <= result.summary.views, `${views} rows for ${result.summary.views} recorded views`);
+    for (const role of ["member", "none", "committee"]) {
+      assert.ok(await count("SELECT COUNT(*) AS n FROM event_views WHERE viewer_role = ?", [role]) > 0, `views with viewer_role ${role}`);
+    }
+    assert.equal(await count("SELECT COUNT(*) AS n FROM event_views WHERE viewer_role IS NULL"), 0, "the seed records membership at view time");
+    assert.equal(await count("SELECT COUNT(*) AS n FROM event_views WHERE viewed_at > ?", ["2026-11-16 04:00:00"]), 0, "no view after the seed's now");
+    assert.equal(await count("SELECT COUNT(*) AS n FROM event_views v JOIN events e ON e.id = v.event_id WHERE v.viewed_at >= e.start_time"), 0, "no view after the event starts");
+    // Some people look without registering, members and non-members alike.
+    const browsed = `SELECT COUNT(DISTINCT v.event_id, v.user_id) AS n FROM event_views v
+      LEFT JOIN participations p ON p.event_id = v.event_id AND p.user_id = v.user_id
+      WHERE p.user_id IS NULL AND v.viewer_role = ?`;
+    assert.ok(await count(browsed, ["member"]) > 0, "members who looked but did not register");
+    assert.ok(await count(browsed, ["none"]) > 0, "non-members who looked but did not register");
+  });
+
   test("creates the clubs, accounts and roles", async () => {
     assert.equal(await count("SELECT COUNT(*) AS n FROM clubs"), CLUBS.length);
     assert.equal(await count("SELECT COUNT(*) AS n FROM venues"), 5);

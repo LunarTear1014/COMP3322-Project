@@ -60,7 +60,9 @@ On an empty database the one-shot `seed` service
 ([`backend-beta/src/ops/demo_seed.js`](backend-beta/src/ops/demo_seed.js))
 creates 5 clubs, 5 venues, 37 accounts and 25 events through the real API:
 past events with check-ins, upcoming events with a waitlist and pending
-requests, and requests still in the approval workflow. It also gives the five
+requests, requests still in the approval workflow, and event page views from
+members and non-members (some of whom never join) for the activity report.
+It also gives the five
 demo clubs generated icons and photos. The names are fictional and the addresses use the
 reserved `.example` domain.
 
