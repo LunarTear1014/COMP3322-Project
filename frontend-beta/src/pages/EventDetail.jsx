@@ -1,4 +1,4 @@
-import { CalendarPlus, ChevronLeft, MapPin, CalendarDays } from 'lucide-react'
+import { CalendarPlus, ChevronLeft, MapPin, CalendarDays, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { request } from '../api'
@@ -10,6 +10,7 @@ import { useAction, useResource } from '../hooks/resources'
 import { eventChanged, useLiveSignal } from '../hooks/useLiveSignal'
 import { usePhone } from '../hooks/useMediaQuery'
 import { clubColour } from '../lib/club'
+import { isOrganizer } from '../lib/roles'
 import { dateTile, seatSummary, timeLine } from '../lib/format'
 import { downloadIcs, icsFileName } from '../lib/ics'
 import { registrationToast, registrationView } from '../lib/registration'
@@ -21,7 +22,7 @@ const LEAVE_WORDS = {
   cancel_request: { pending: 'Cancelling your request in a few seconds.', done: 'You cancelled your request.' },
 }
 
-export function EventDetail() {
+export function EventDetail({ session }) {
   const { id } = useParams()
   const event = useResource(`/events/${id}`)
   const action = useAction(event.refresh)
@@ -119,6 +120,7 @@ export function EventDetail() {
             checkingIn={checkingIn}
             setCheckingIn={setCheckingIn}
             backTo={backTo}
+            organizes={Boolean(session?.memberships?.some(item => item.club_id === details.club?.id && isOrganizer(item)))}
           />
         )}
       </Resource>
@@ -198,7 +200,7 @@ function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, detail
   }
 }
 
-function EventBody({ details, view, phone, going, leaving, busy, error, onRegister, onLeave, checkingIn, setCheckingIn, backTo }) {
+function EventBody({ details, view, phone, going, leaving, busy, error, onRegister, onLeave, checkingIn, setCheckingIn, backTo, organizes }) {
   const toast = useToast()
   // The download happens silently in most browsers, so say where it went (DISC-09).
   const onCalendar = event => {
@@ -273,6 +275,15 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
             <div className="cs-meter-track" role="presentation"><div className={`cs-meter-fill${full ? ' is-full' : hot ? ' is-hot' : ''}`} style={{ width: `${Math.round(seats.ratio * 100)}%` }} /></div>
             <div className="cs-meter-caption"><span>{seats.joined}</span><span>{details.waitlisted_count > 0 ? `${details.waitlisted_count} waiting` : seats.caption}</span></div>
           </div>
+
+          {/* The club's committee and president jump to who has joined or quit. */}
+          {organizes && (
+            <div className="event-organizer-tools">
+              <ButtonLink to={`/organizer/events/${details.id}?tab=people`}>
+                <Users className="cs-icon" aria-hidden="true" />See who's joining
+              </ButtonLink>
+            </div>
+          )}
 
           <section className="event-about">
             <h2>About this event</h2>

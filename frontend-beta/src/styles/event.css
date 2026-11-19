@@ -70,3 +70,6 @@
 .tag-list li.is-club::before { content: "" / ""; width: 8px; height: 8px; border-radius: 50%; background: var(--club, var(--ink)); border: 1.5px solid var(--outline); opacity: 1; }
 .event-card .tag-list { gap: var(--space-1); }
 .event-card .tag-list li { font-size: 12px; line-height: 16px; padding: 1px 9px; }
+
+/* The club committee and president get a shortcut to who joined or quit. */
+.event-organizer-tools { display: flex; flex-wrap: wrap; gap: var(--space-2); }

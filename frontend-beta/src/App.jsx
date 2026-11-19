@@ -200,7 +200,7 @@ function Shell({ streamOverride }) {
           <Route path="/login" element={<Navigate to={safeReturn(location.search)} replace />} />
           <Route path="/register" element={<Navigate to="/events" replace />} />
           <Route path="/events" element={<Events />} />
-          <Route path="/events/:id" element={<EventDetail />} />
+          <Route path="/events/:id" element={<EventDetail session={session} />} />
           <Route path="/profile" element={<Profile session={session} refreshSession={refreshSession} />} />
           <Route path="/me/registrations" element={<Registrations />} />
           <Route path="/venues" element={<Venues />} />
