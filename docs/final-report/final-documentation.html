@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ClubSpace: Final Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1d2433; --muted: #5b6475; --line: #dfe3ea; --soft: #f5f7fa;
+    --brand: #2457c5; --brand-soft: #e8efff; --accent: #f5b301;
+    --ok: #1f7a4d; --ok-soft: #e4f4ea; --warn-soft: #fff4dc;
+  }
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  @page landscape { size: A4 landscape; margin: 12mm 12mm 14mm 12mm; }
+  @page cover { margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 9.3pt; line-height: 1.48; color: var(--ink); background: #fff; }
+  h1, h2, h3 { font-family: "Bricolage Grotesque", Inter, sans-serif; line-height: 1.2; margin: 0; }
+  h2 { font-size: 19pt; font-weight: 800; margin: 0 0 4mm; padding-top: 1mm; }
+  h2 .num { color: var(--brand); margin-right: 3mm; }
+  h3 { font-size: 12pt; font-weight: 600; margin: 5mm 0 2mm; break-after: avoid; page-break-after: avoid; }
+  p { margin: 0 0 2.6mm; }
+  a { color: var(--brand); text-decoration: none; }
+  code, .mono { font-family: "JetBrains Mono", Menlo, monospace; font-size: 8.4pt; }
+  code { background: var(--soft); border: 1px solid var(--line); border-radius: 3px; padding: 0 1.2mm; }
+  section { break-before: page; }
+  .lead { font-size: 10.6pt; color: var(--muted); margin-bottom: 4mm; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 3.5mm; font-size: 8.5pt; }
+  th, td { text-align: left; vertical-align: top; padding: 1.6mm 2.2mm; border-bottom: 1px solid var(--line); }
+  th { background: var(--soft); font-weight: 600; color: var(--muted); font-size: 8pt; text-transform: uppercase; letter-spacing: .04em; }
+  tr { break-inside: avoid; }
+  td code { white-space: nowrap; }
+  .m { display: inline-block; min-width: 12mm; text-align: center; font: 600 7.4pt "JetBrains Mono", monospace; border-radius: 3px; padding: .3mm 1.2mm; color: #fff; }
+  .GET { background: #2e7d5b; } .POST { background: #2457c5; } .PUT { background: #8a4fd0; } .PATCH { background: #c98a12; } .DELETE { background: #c5483b; }
+  .pill { display: inline-block; font-size: 7.6pt; font-weight: 600; border-radius: 99px; padding: .2mm 2mm; background: var(--ok-soft); color: var(--ok); white-space: nowrap; }
+  .pill.bonus { background: var(--warn-soft); color: #8a5a00; }
+  .pill.extra { background: var(--brand-soft); color: var(--brand); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .card { border: 1px solid var(--line); border-radius: 3mm; padding: 3mm 3.6mm; background: #fff; break-inside: avoid; }
+  .card h4 { margin: 0 0 1.5mm; font-size: 10pt; }
+  .card p, .card ul { margin: 0; }
+  ul { margin: 0 0 3mm; padding-left: 5mm; }
+  li { margin-bottom: 1mm; }
+  figure { margin: 3mm 0 5mm; break-inside: avoid; }
+  figure img, figure svg { display: block; width: 100%; border: 1px solid var(--line); border-radius: 2.5mm; }
+  figure.diagram svg, figure.diagram img { border: none; }
+  figcaption { font-size: 8.2pt; color: var(--muted); margin-top: 1.5mm; }
+  .note { background: var(--soft); border-left: 3px solid var(--brand); padding: 2.5mm 3.5mm; border-radius: 0 2mm 2mm 0; font-size: 9pt; margin: 3mm 0; }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 5mm; }
+  .shots figure { margin: 0; }
+  .toc { list-style: none; padding: 0; margin: 4mm 0 0; columns: 1; }
+  .toc li { display: flex; gap: 3mm; padding: 2mm 0; border-bottom: 1px dashed var(--line); font-size: 10.5pt; }
+  .toc .n { color: var(--brand); font-weight: 700; width: 8mm; }
+  .toc .d { color: var(--muted); font-size: 9pt; margin-left: auto; }
+
+  /* cover */
+  .cover { page: cover; height: 297mm; position: relative; overflow: hidden; background: #fff; }
+  .cover .band { position: absolute; inset: 0 0 auto 0; height: 128mm; background: var(--brand); }
+  .cover .band::after { content: ""; position: absolute; right: -30mm; top: 18mm; width: 120mm; height: 120mm; border-radius: 50%; background: rgba(255,255,255,.07); }
+  .cover .inner { position: absolute; left: 20mm; right: 20mm; top: 26mm; }
+  .cover .logo { display: flex; align-items: center; gap: 3mm; color: #fff; font: 800 15pt "Bricolage Grotesque", sans-serif; }
+  .cover .logo .mark { width: 11mm; height: 11mm; border-radius: 3mm; background: #fff; color: var(--brand); display: grid; place-items: center; font-size: 17pt; position: relative; }
+  .cover .logo .mark::after { content: ""; position: absolute; right: -1.5mm; top: -1.5mm; width: 3.6mm; height: 3.6mm; border-radius: 50%; background: var(--accent); }
+  .cover h1 { color: #fff; font-size: 40pt; font-weight: 800; margin: 20mm 0 3mm; letter-spacing: -.01em; }
+  .cover .sub { color: #dbe5ff; font-size: 13pt; max-width: 140mm; }
+  .cover .meta { position: absolute; left: 20mm; right: 20mm; top: 146mm; }
+  .cover .meta .kind { font: 800 22pt "Bricolage Grotesque", sans-serif; }
+  .cover .meta .course { color: var(--muted); font-size: 11pt; margin-top: 1mm; }
+  .cover dl { display: grid; grid-template-columns: 34mm 1fr; gap: 2.4mm 4mm; margin: 10mm 0 0; font-size: 10pt; }
+  .cover dt { color: var(--muted); font-weight: 600; }
+  .cover dd { margin: 0; }
+  .cover .team td { border: none; padding: .6mm 0; font-size: 10pt; }
+  .cover .foot { position: absolute; left: 20mm; right: 20mm; bottom: 16mm; color: var(--muted); font-size: 8.6pt; border-top: 1px solid var(--line); padding-top: 3mm; }
+
+  .keep { break-inside: avoid; }
+  .landscape { page: landscape; }
+  .landscape h2 { font-size: 16pt; margin-bottom: 2mm; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="band"></div>
+  <div class="inner">
+    <div class="logo"><span class="mark">C</span> ClubSpace</div>
+    <h1>ClubSpace</h1>
+    <div class="sub">A university club event and venue management platform: from venue request to sign-off, approval, publication, registration, check-in and reports.</div>
+  </div>
+  <div class="meta">
+    <div class="kind">Final Documentation</div>
+    <div class="course">COMP3322 Modern Technologies on World Wide Web · Group Project · Group 19 (PG19)</div>
+    <dl>
+      <dt>Live deployment</dt><dd><a href="https://c3322-pg19.cs.hku.hk">https://c3322-pg19.cs.hku.hk</a> <span style="color:var(--muted)">(HKUVPN; self-signed certificate)</span></dd>
+      <dt>Source code</dt><dd><a href="https://github.com/LunarTear1014/PG19-ClubSpace">github.com/LunarTear1014/PG19-ClubSpace</a> <span style="color:var(--muted)">(branch <code>main</code>)</span></dd>
+      <dt>Demo password</dt><dd><code>clubspacetest123</code> for every demo account (Section 9)</dd>
+      <dt>Team</dt>
+      <dd><table class="team">
+        <tr><td>Chan Ka Ho Charlie</td><td>3035927104</td></tr>
+        <tr><td>Lucien Balthazar Neale</td><td>3036720486</td></tr>
+        <tr><td>Chan Ka Hei Aubrey</td><td>3036388381</td></tr>
+      </table></dd>
+    </dl>
+  </div>
+  <div class="foot">The University of Hong Kong · November 2026 · This PDF is stored in the root of the repository as required by the project guideline.</div>
+</div>
+
+<!-- ============ CONTENTS ============ -->
+<section style="break-before: page">
+  <h2>Contents</h2>
+  <ol class="toc">
+    <li><span class="n">1</span>Project overview<span class="d">title, description, users, problem</span></li>
+    <li><span class="n">2</span>Feature list<span class="d">must-have, bonus and extra features</span></li>
+    <li><span class="n">3</span>Team task allocation<span class="d">who built what</span></li>
+    <li><span class="n">4</span>System architecture<span class="d">containers, backend layers, design decisions</span></li>
+    <li><span class="n">5</span>Database design and ER diagram<span class="d">26 MySQL tables, keys, integrity rules</span></li>
+    <li><span class="n">6</span>API documentation<span class="d">REST conventions, status codes, all endpoints</span></li>
+    <li><span class="n">7</span>Key workflows and business logic<span class="d">lifecycle, waitlist, concurrency, real-time</span></li>
+    <li><span class="n">8</span>User interface<span class="d">screenshots of the deployed app</span></li>
+    <li><span class="n">9</span>Deployment, demo accounts and testing<span class="d">Docker Compose on PG19</span></li>
+    <li><span class="n">10</span>Credits and academic integrity<span class="d">third-party libraries and assets</span></li>
+  </ol>
+
+  <div class="note" style="margin-top:8mm">
+    <strong>How this maps to the guideline.</strong> The project guideline (Section 6) asks the final documentation to include the project title (1), description (1), feature list (2), team task allocation (3), system architecture diagram (4), database ER diagram (5), API document (6), and other supporting material (7–10).
+  </div>
+</section>
+
+<!-- ============ 1 OVERVIEW ============ -->
+<section>
+  <h2><span class="num">1</span>Project overview</h2>
+  <p class="lead"><strong>ClubSpace: University Club Event &amp; Venue Management Platform.</strong></p>
+
+  <h3>Project description</h3>
+  <p>ClubSpace is a responsive single-page web application that coordinates university club events, venue requests and student participation in one place. Club committee members prepare an event and request a campus venue in a single step. The club president signs the request off, and a venue administrator approves or rejects it. The database guarantees that a room is never double-booked. Once the venue is confirmed, the event is published. Students can then browse and filter events, register, or join a first-in, first-out waitlist when the event is full. On the day they check in with a four-digit code. Notifications and seat counts update live, and club leaders see attendance and effectiveness reports.</p>
+
+  <h3>Target users</h3>
+  <div class="grid2" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="card"><h4>Students</h4><p>Discover events across clubs, see eligibility and remaining places, register or wait-list, check in, and get reminders.</p></div>
+    <div class="card"><h4>Club committee and president</h4><p>Request venues, draft and manage events, accept join requests, mark attendance and read reports. The president manages roles, signs off venue requests and publications, can hand over the presidency, and can undo club actions.</p></div>
+    <div class="card"><h4>Venue administrators</h4><p>Review pending venue requests across clubs. Availability is re-checked when they decide, and they cannot decide a request for a club they serve on.</p></div>
+  </div>
+
+  <h3>Problem</h3>
+  <p>University clubs usually handle venue booking, event publicity and sign-ups in separate places such as forms, chat groups and spreadsheets. This leads to conflicting room bookings, students who cannot find events or are unsure whether they have a place, and organisers who cannot tell whether an event worked. ClubSpace puts the whole process into one auditable workflow with clear statuses at every step. A web application suits this because it needs no installation, works on phones and desktops, and keeps one shared record of bookings and registrations.</p>
+
+  <h3>Technology stack</h3>
+  <table>
+    <tr><th style="width:26%">Layer</th><th>Technology</th></tr>
+    <tr><td>Frontend (SPA)</td><td>React 19, React Router 7, MUI 9 and MUI X Charts, built with Vite; responsive, with bottom tabs on phones.</td></tr>
+    <tr><td>Backend (REST API)</td><td>Node.js 22 and Express 5, a versioned REST API under <code>/api/v1</code>, express-session, Multer and sharp for cover images, and openid-client for Google sign-in.</td></tr>
+    <tr><td>Database</td><td>MySQL 8.4 accessed through mysql2, with a baseline schema and 15 ordered, checksummed migrations.</td></tr>
+    <tr><td>Asynchronous processing</td><td>Durable job queue (transactional outbox) with a separate worker; Server-Sent Events for live updates.</td></tr>
+    <tr><td>Deployment</td><td>Docker Compose on the Ubuntu VM <code>c3322-pg19.cs.hku.hk</code>, with nginx serving HTTPS through a self-signed certificate.</td></tr>
+  </table>
+</section>
+
+<!-- ============ 2 FEATURES ============ -->
+<section>
+  <h2><span class="num">2</span>Feature list</h2>
+  <p class="lead">Every must-have feature from the proposal is implemented and deployed. <span class="pill">Must-have</span> marks proposal core scope, <span class="pill bonus">Bonus</span> the proposed bonus, and <span class="pill extra">Extra</span> features added after the beta interview feedback.</p>
+
+  <table>
+    <tr><th style="width:24%">Area</th><th>What users can do</th><th style="width:14%">Scope</th></tr>
+    <tr><td><strong>Accounts and profiles</strong></td><td>Register, sign in and out, and edit a persistent profile. Sessions are HttpOnly cookies stored in MySQL. Every change needs a CSRF token and a matching <code>Origin</code>. Logins are rate-limited.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Clubs and membership</strong></td><td>Browse clubs, request to join (the committee accepts or rejects), and leave. Belong to several clubs with club-specific roles: member, committee or president. Only one president per club is enforced in the database.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Venues and calendar</strong></td><td>Weekly venue calendars with three campus slots (10:00–12:00, 13:00–15:00, 16:00–18:00 HKT). Private bookings show only "Reserved". Pending requests do not reserve a slot.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Venue requests and approval</strong></td><td>Create an event draft and venue request together. The venue administrator approves or rejects with a reason. Overlaps are re-checked under row locks when approving, and administrators cannot decide their own club's request.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Event management</strong></td><td>Publish separately after approval. Edit with optimistic version checks. Cancel, which cancels the booking, registrations and pending requests in one transaction. Public or members-only visibility, and participant lists for the committee.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Discovery and participation</strong></td><td>Search and filter events by date, club, visibility and tags, and see upcoming and past events. Register or withdraw subject to eligibility, deadline and capacity. A first-in, first-out waitlist promotes the next student automatically, and "My events" lists your registrations.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Notifications and reminders</strong></td><td>Persistent in-app inbox for workflow changes, with event reminders and a daily 09:00 HKT club digest produced by a background worker. Retries are capped, and duplicates are prevented by unique keys.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Organiser reports</strong></td><td>Registration counts, daily registration actions and booked venue hours as charts, each with an equivalent data table.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Reliability and deployment</strong></td><td>Layered API, data-preserving migrations, consistent JSON errors with request IDs, concurrency tests for final-seat and conflicting approvals, and Docker Compose deployment.</td><td><span class="pill">Must-have</span></td></tr>
+    <tr><td><strong>Google sign-in</strong></td><td>"Continue with Google" via OpenID Connect with backend token verification. New users complete their profile (student ID). Accounts are linked by verified email.</td><td><span class="pill bonus">Bonus</span></td></tr>
+    <tr><td><strong>President sign-off</strong></td><td>Committee venue requests and publications wait for the president, who sends them on or returns them with a reason. The president can also transfer the presidency.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Live updates (SSE)</strong></td><td>Notifications, seat counts, waitlist changes and check-ins reach open pages within about two seconds over Server-Sent Events, without reloading.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Check-in and attendance</strong></td><td>A four-digit check-in code is shown during the event window, or the committee marks attendance by hand.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Effectiveness report</strong></td><td>Fill rate, turnout, drop-outs, no-shows, peak waitlist, promotions and view-to-join by source, with comparisons by tag, weekday and slot.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Tags and covers</strong></td><td>Admin-curated campus tags (1–3 per event) and club tags (0–5 per event), both filterable. Event cover images (JPEG or WebP up to 5 MB) are resized by sharp.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Club action log</strong></td><td>The president sees a history of committee actions and can undo the ones that are safe to undo.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Members-only join requests</strong></td><td>Students outside a club can request a place at a members-only event, and the committee decides.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Credits, privacy and terms</strong></td><td>An in-app <code>/credits</code> page as the guideline requires, plus public privacy policy and terms pages for the Google consent screen.</td><td><span class="pill extra">Extra</span></td></tr>
+  </table>
+</section>
+
+<!-- ============ 3 TEAM ============ -->
+<section>
+  <h2><span class="num">3</span>Team task allocation</h2>
+  <p class="lead">The planned split from the proposal, and the main pieces each member delivered according to the Git history of <code>main</code>. All members took part in integration, testing, interviews and documentation.</p>
+
+  <table>
+    <tr><th style="width:22%">Member</th><th style="width:22%">Planned responsibility</th><th>Main contributions delivered</th></tr>
+    <tr>
+      <td><strong>Chan Ka Ho Charlie</strong><br><span class="mono" style="color:var(--muted)">3035927104</span></td>
+      <td>Backend and API, authentication, authorisation, event business logic</td>
+      <td><ul>
+        <li>Versioned <code>/api/v1</code> REST API: sessions in MySQL, CSRF and origin checks, error format, rate limits</li>
+        <li>Venue request → sign-off → approval → publish workflow, with row locking against double booking</li>
+        <li>Registration, waitlist promotion and concurrency tests on real MySQL</li>
+        <li>Durable job queue, reminder/digest worker and Server-Sent Events live updates</li>
+        <li>Migrations, reports, effectiveness, tags, check-in and cover uploads</li>
+        <li>Docker Compose deployment on PG19 over HTTPS, Google sign-in backend, demo seed, README</li>
+      </ul></td>
+    </tr>
+    <tr>
+      <td><strong>Lucien Balthazar Neale</strong><br><span class="mono" style="color:var(--muted)">3036720486</span></td>
+      <td>React frontend, UI components, pages, event browsing and participation</td>
+      <td><ul>
+        <li>React pages for accounts, profile editing and account deletion</li>
+        <li>Clubs page, join requests and the committee/president role tools (promote, demote, remove members)</li>
+        <li>Club action log with undo, and notifications for club actions</li>
+        <li>Event participation, search filters, participant lists, waitlist and cancellation in the UI</li>
+        <li>First Express routes connecting memberships and events to the database</li>
+      </ul></td>
+    </tr>
+    <tr>
+      <td><strong>Chan Ka Hei Aubrey</strong><br><span class="mono" style="color:var(--muted)">3036388381</span></td>
+      <td>MySQL database design, venue/booking logic, Docker deployment</td>
+      <td><ul>
+        <li>Proposal draft, initial MySQL schema and first ER diagram</li>
+        <li>Moved the database into <code>backend-beta</code> and added the <code>.env.example</code> template</li>
+        <li>Refactored the backend into feature modules (routes, services, queries), protected by characterisation tests</li>
+        <li>Styled Google sign-in button and divider on the sign-in page</li>
+      </ul></td>
+    </tr>
+  </table>
+</section>
+
+<!-- ============ 4 ARCHITECTURE ============ -->
+<section>
+  <h2><span class="num">4</span>System architecture</h2>
+  <p class="lead">Six Docker Compose services on one Linux VM. Only nginx is reachable from outside, and MySQL's port 3306 is never published.</p>
+
+  <figure class="diagram">
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="Inter, Arial, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b6475"/></marker>
+    <style>
+      .bx{fill:#fff;stroke-width:1.6}.t{font-size:12.5px;font-weight:700;fill:#1d2433}.s{font-size:10px;fill:#5b6475}.lbl{font-size:9.5px;fill:#5b6475;font-style:italic}
+      .ln{stroke:#5b6475;stroke-width:1.4;fill:none}
+    </style>
+  </defs>
+  <!-- host frame -->
+  <rect x="176" y="70" width="574" height="380" rx="14" fill="#f5f7fa" stroke="#9aa3b2" stroke-dasharray="6 4"/>
+  <text x="192" y="442" class="s" font-weight="600">Docker Compose · Ubuntu 24.04 VM c3322-pg19.cs.hku.hk (reachable through HKUVPN)</text>
+
+  <!-- browser -->
+  <rect x="10" y="170" width="140" height="96" rx="10" class="bx" stroke="#2457c5"/>
+  <text x="80" y="196" text-anchor="middle" class="t">Browser</text>
+  <text x="80" y="214" text-anchor="middle" class="s">React 19 SPA</text>
+  <text x="80" y="229" text-anchor="middle" class="s">React Router · MUI</text>
+  <text x="80" y="244" text-anchor="middle" class="s">phone · tablet · desktop</text>
+
+  <!-- google -->
+  <rect x="420" y="6" width="160" height="44" rx="10" class="bx" stroke="#c98a12"/>
+  <text x="500" y="25" text-anchor="middle" class="t">Google OpenID Connect</text>
+  <text x="500" y="40" text-anchor="middle" class="s">optional bonus sign-in</text>
+
+  <!-- web -->
+  <rect x="200" y="170" width="160" height="96" rx="10" class="bx" stroke="#2e7d5b"/>
+  <text x="280" y="194" text-anchor="middle" class="t">web · nginx</text>
+  <text x="280" y="212" text-anchor="middle" class="s">TLS on :443, :80 → :443</text>
+  <text x="280" y="227" text-anchor="middle" class="s">serves the built SPA</text>
+  <text x="280" y="242" text-anchor="middle" class="s">proxies /api/ (5 MB uploads)</text>
+
+  <!-- backend -->
+  <rect x="410" y="118" width="170" height="134" rx="10" class="bx" stroke="#2457c5"/>
+  <text x="495" y="142" text-anchor="middle" class="t">backend · Express 5</text>
+  <text x="495" y="160" text-anchor="middle" class="s">REST API /api/v1</text>
+  <text x="495" y="175" text-anchor="middle" class="s">sessions in MySQL · CSRF</text>
+  <text x="495" y="190" text-anchor="middle" class="s">origin check · rate limits</text>
+  <text x="495" y="205" text-anchor="middle" class="s">SSE hub (live updates)</text>
+  <text x="495" y="220" text-anchor="middle" class="s">cover upload (sharp)</text>
+  <text x="495" y="235" text-anchor="middle" class="s">writes jobs to the outbox</text>
+
+  <!-- worker -->
+  <rect x="410" y="290" width="170" height="70" rx="10" class="bx" stroke="#8a4fd0"/>
+  <text x="495" y="313" text-anchor="middle" class="t">worker · Node.js</text>
+  <text x="495" y="330" text-anchor="middle" class="s">reminders · daily digests</text>
+  <text x="495" y="345" text-anchor="middle" class="s">clean-up · heartbeat · retries</text>
+
+  <!-- db cylinder -->
+  <g>
+    <path d="M626,160 v120 a52,14 0 0 0 104,0 v-120" fill="#fff" stroke="#c5483b" stroke-width="1.6"/>
+    <ellipse cx="678" cy="160" rx="52" ry="14" fill="#fdeceb" stroke="#c5483b" stroke-width="1.6"/>
+    <text x="678" y="200" text-anchor="middle" class="t">db</text>
+    <text x="678" y="216" text-anchor="middle" class="s">MySQL 8.4</text>
+    <text x="678" y="231" text-anchor="middle" class="s">26 tables</text>
+    <text x="678" y="246" text-anchor="middle" class="s">volume db_data</text>
+    <text x="678" y="261" text-anchor="middle" class="s">3306 not published</text>
+  </g>
+
+  <!-- one-shots -->
+  <rect x="610" y="330" width="62" height="42" rx="8" class="bx" stroke="#9aa3b2" stroke-dasharray="4 3"/>
+  <text x="641" y="348" text-anchor="middle" class="t" font-size="11">migrate</text>
+  <text x="641" y="362" text-anchor="middle" class="s" font-size="8.5">one-shot</text>
+  <rect x="680" y="330" width="62" height="42" rx="8" class="bx" stroke="#9aa3b2" stroke-dasharray="4 3"/>
+  <text x="711" y="348" text-anchor="middle" class="t" font-size="11">seed</text>
+  <text x="711" y="362" text-anchor="middle" class="s" font-size="8.5">demo data</text>
+
+  <!-- volumes -->
+  <rect x="200" y="300" width="160" height="34" rx="17" fill="#fff" stroke="#9aa3b2"/>
+  <text x="280" y="321" text-anchor="middle" class="s">volume web_certs (TLS cert)</text>
+  <rect x="410" y="396" width="170" height="34" rx="17" fill="#fff" stroke="#9aa3b2"/>
+  <text x="495" y="417" text-anchor="middle" class="s">volume cover_data (event covers)</text>
+
+  <!-- arrows -->
+  <path d="M150,206 H198" class="ln" marker-end="url(#ar)" marker-start="url(#ar)"/>
+  <text x="174" y="198" text-anchor="middle" class="lbl">HTTPS</text>
+  <text x="174" y="226" text-anchor="middle" class="lbl">SSE</text>
+  <path d="M360,206 H408" class="ln" marker-end="url(#ar)"/>
+  <text x="384" y="198" text-anchor="middle" class="lbl">/api/*</text>
+  <path d="M580,200 H624" class="ln" marker-end="url(#ar)"/>
+  <text x="602" y="192" text-anchor="middle" class="lbl">SQL</text>
+  <path d="M580,325 H600 V268 H624" class="ln" marker-end="url(#ar)"/>
+  <text x="603" y="318" text-anchor="start" class="lbl">SQL</text>
+  <path d="M641,330 V300" class="ln" marker-end="url(#ar)"/>
+  <path d="M711,330 V300" class="ln" marker-end="url(#ar)"/>
+  <path d="M495,118 V52" class="ln" marker-end="url(#ar)"/>
+  <text x="502" y="96" class="lbl">token exchange</text>
+  <path d="M280,300 V268" class="ln"/>
+  <path d="M470,360 V394" class="ln"/>
+  <path d="M520,252 V288" class="ln" stroke-dasharray="4 3"/>
+  <path d="M410,236 H394 V413 H408" class="ln"/>
+  <text x="526" y="274" class="lbl">outbox jobs</text>
+</svg>
+    <figcaption>Figure 1. Deployment architecture. Arrows show request flow. The backend and worker share the database (including the outbox and notifications tables) and the cover volume. <code>migrate</code> applies schema migrations before the API and worker start, and <code>seed</code> loads demo data into an empty database.</figcaption>
+  </figure>
+
+  <h3>Backend layering</h3>
+  <table>
+    <tr><th style="width:22%">Layer</th><th>Responsibility</th></tr>
+    <tr><td>Middleware</td><td>Request ID, JSON body limit, session loading, CSRF token and <code>Origin</code> check on every change, and one error handler that turns errors into <code>{ error: { code, message, fields, request_id } }</code>.</td></tr>
+    <tr><td>Routers (<code>api_v1/</code>)</td><td>One router per area (auth, clubs, events, registration, engagement, reports, covers, notifications, Google). They validate input, check role and club permission, and pick the status code.</td></tr>
+    <tr><td>Transactions and queries</td><td>Business rules run inside MySQL transactions with an explicit lock order (venue → club → bookings → event → participations), so concurrent requests cannot oversell seats or double-book a room. SQL lives in query/repository modules, kept apart from HTTP code.</td></tr>
+    <tr><td>Jobs and live delivery</td><td>Side effects (notifications, reminders) are written to <code>notification_jobs</code> in the <em>same</em> transaction as the change (transactional outbox). The worker claims due jobs with lease tokens. The SSE hub follows the <code>notifications</code> and <code>live_signals</code> tables and pushes them to open connections.</td></tr>
+  </table>
+
+  <h3>Main design decisions</h3>
+  <div class="grid2">
+    <div class="card"><h4>The database guards the rules</h4><p>Check constraints (time order, capacity 1–500, deadline before start), a generated column that allows only one president per club, unique keys for idempotency, and an optimistic <code>version</code> column on bookings, events and memberships.</p></div>
+    <div class="card"><h4>At-least-once jobs, exactly-once effects</h4><p>Jobs are tried up to 5 times, waiting 5 s, 30 s, 2 min and then 10 min between attempts. A unique <code>action_key</code> and <code>dedup_key</code> make retries harmless, and failed jobs can be re-queued by an operator with an audit entry.</p></div>
+    <div class="card"><h4>SSE rather than WebSockets</h4><p>Updates only flow from server to client, so SSE over plain HTTP through nginx is simpler. <code>Last-Event-ID</code> lets a reconnecting client catch up on missed notifications.</p></div>
+    <div class="card"><h4>All times stored in UTC</h4><p>Times are stored as UTC <code>DATETIME(6)</code> and exchanged as ISO 8601 UTC. The UI shows Hong Kong time. Campus slots and the 09:00 digest are calculated in <code>Asia/Hong_Kong</code>.</p></div>
+  </div>
+</section>
+
+<!-- ============ 5 DATABASE ============ -->
+<section class="landscape">
+  <h2><span class="num">5</span>Database ER diagram</h2>
+  <figure class="diagram" style="margin:0">
+    <img src="er.svg" alt="Entity-relationship diagram of the core ClubSpace tables" style="max-height:150mm; width:auto; margin:0 auto;">
+    <figcaption>Figure 2. The 17 domain tables of the final MySQL 8.4 schema (baseline <code>schema.sql</code> plus migrations up to <code>018_google_identity</code>). Crow's-foot notation: a bar is "one" and a fork is "many". The two vertical buses carry the <code>event_id</code> and <code>user_id</code> foreign keys of the per-student tables. <strong>PK</strong> primary key, <strong>FK</strong> foreign key, <strong>UQ</strong> unique. Infrastructure tables are listed on the next page.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="num">5</span>Database design (continued)</h2>
+  <h3>Table catalogue</h3>
+  <table>
+    <tr><th style="width:27%">Table</th><th>Purpose</th></tr>
+    <tr><td><code>users</code></td><td>Accounts with a platform role (<code>student</code> or <code>venue_admin</code>), a unique email and student ID, and an optional Google subject for linked sign-in.</td></tr>
+    <tr><td><code>clubs</code>, <code>memberships</code>, <code>club_join_requests</code></td><td>Clubs; the many-to-many link between users and clubs with a club role (<code>member</code>, <code>committee</code>, <code>president</code>); and requests to join, decided by the committee.</td></tr>
+    <tr><td><code>venues</code>, <code>bookings</code></td><td>Rooms and time-slot requests. Status: <code>awaiting_president → pending → confirmed / rejected</code>, or <code>returned</code> / <code>cancelled</code>.</td></tr>
+    <tr><td><code>events</code></td><td>Exactly one event per booking (unique <code>booking_id</code>; a composite foreign key keeps the club consistent). Holds capacity, visibility, registration deadline, check-in code and cover.</td></tr>
+    <tr><td><code>participations</code>, <code>participation_history</code></td><td>Current registration state per student and event (<code>joined</code>, <code>waitlisted</code>, <code>left</code>, <code>cancelled</code> and others), plus an append-only history used by the reports.</td></tr>
+    <tr><td><code>event_join_requests</code></td><td>Requests from non-members for members-only events.</td></tr>
+    <tr><td><code>event_attendance</code>, <code>event_views</code></td><td>Check-ins (by code or marked by the committee), and de-duplicated page views by source for the effectiveness report.</td></tr>
+    <tr><td><code>campus_tags</code>, <code>club_tags</code> and their link tables</td><td>Admin-curated campus tags and per-club tags, linked to events many-to-many.</td></tr>
+    <tr><td><code>notifications</code></td><td>Each user's inbox. The unique <code>(user_id, dedup_key)</code> prevents duplicate deliveries.</td></tr>
+    <tr><td><code>notification_jobs</code></td><td>Durable outbox and job queue: due time, attempts (at most 5), lease token and last error.</td></tr>
+    <tr><td><code>live_signals</code></td><td>Short-lived "event N changed" hints that the SSE hub fans out so open pages refetch.</td></tr>
+    <tr><td><code>audit_logs</code>, <code>club_action_log</code></td><td>Audit trail of booking and event decisions, and the president's undoable club action history.</td></tr>
+    <tr><td><code>sessions</code>, <code>activity_digests</code>, <code>worker_heartbeats</code></td><td>Server-side session store; one row per club per day once its digest is sent; worker liveness.</td></tr>
+    <tr><td><code>schema_migrations</code>, <code>schema_metadata</code></td><td>Applied migration versions with SHA-256 checksums, and the schema version marker.</td></tr>
+  </table>
+
+  <h3>Integrity rules enforced in MySQL</h3>
+  <ul>
+    <li><strong>One president per club:</strong> a generated column <code>president_club_id = IF(role='president', club_id, NULL)</code> with a unique index.</li>
+    <li><strong>No double booking:</strong> overlapping confirmed bookings for a venue are rejected inside the approval transaction, which locks the venue row and the overlapping bookings (<code>SELECT … FOR UPDATE</code>).</li>
+    <li><strong>Check constraints:</strong> <code>end_time &gt; start_time</code>; event capacity between 1 and 500; venue capacity &gt; 0; <code>registration_closes_at ≤ start_time</code>; at most 5 job attempts.</li>
+    <li><strong>Case-insensitive club tags:</strong> a generated <code>name_key = LOWER(name)</code> that is unique per club.</li>
+    <li><strong>Idempotency keys:</strong> <code>notification_jobs.action_key</code>, <code>notifications(user_id, dedup_key)</code>, <code>audit_logs.action_id</code>, and <code>event_views(event_id, user_id, bucket)</code>.</li>
+  </ul>
+</section>
+
+<!-- ============ 6 API ============ -->
+<section>
+  <h2><span class="num">6</span>API documentation</h2>
+  <p class="lead">A RESTful JSON API under <code>/api/v1</code>, served through nginx at <code>https://c3322-pg19.cs.hku.hk/api/v1</code>. The SPA uses only this version.</p>
+
+  <div class="grid2">
+    <div class="card"><h4>Conventions</h4><ul>
+      <li>A successful response is <code>{ "data": …, "meta": … }</code>. List responses are paginated with <code>page</code> and <code>page_size</code>.</li>
+      <li>An error is <code>{ "error": { "code", "message", "fields", "request_id" } }</code>.</li>
+      <li>Authentication uses an HttpOnly session cookie. Every POST, PUT, PATCH and DELETE also needs <code>X-CSRF-Token</code> and a matching <code>Origin</code>.</li>
+      <li>Times are ISO 8601 in UTC. Changed resources carry a <code>version</code> to detect stale edits.</li>
+    </ul></div>
+    <div class="card"><h4>HTTP status codes</h4>
+      <table style="margin:0">
+        <tr><td><code>200</code> <code>201</code> <code>204</code></td><td>OK · created · no body</td></tr>
+        <tr><td><code>202</code></td><td>Request queued for approval (join requests)</td></tr>
+        <tr><td><code>400</code> / <code>422</code></td><td>Malformed JSON / validation failed (per-field)</td></tr>
+        <tr><td><code>401</code> / <code>403</code></td><td>Not signed in / not allowed, bad CSRF or origin</td></tr>
+        <tr><td><code>404</code> / <code>409</code></td><td>Missing or hidden / conflict (slot taken, full, stale)</td></tr>
+        <tr><td><code>413</code> <code>415</code> <code>429</code></td><td>Upload too large · not JPEG or WebP · rate limited</td></tr>
+        <tr><td><code>500</code> / <code>503</code></td><td>Unexpected error / database unavailable</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <p style="margin-top:3mm"><strong>Access:</strong> <em>Public</em> means no sign-in; <em>User</em> any signed-in user; <em>Committee</em> a committee member or the president of that club; <em>President</em> that club's president; <em>Admin</em> a venue administrator. All paths are relative to <code>/api/v1</code>.</p>
+
+  <div class="keep"><h3>Authentication and profile</h3>
+  <table>
+    <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/config</code></td><td>Public</td><td>Feature flags, e.g. whether Google sign-in is enabled</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/auth/csrf</code></td><td>Public</td><td>Issue the CSRF token for this session</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/auth/register</code></td><td>Public</td><td>Create an account and sign in (<code>201</code>)</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/auth/login</code></td><td>Public</td><td>Sign in with email and password (rate-limited)</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/auth/session</code></td><td>Public</td><td>Current user, or <code>401</code></td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/auth/logout</code></td><td>User</td><td>End the session (<code>204</code>)</td></tr>
+    <tr><td><span class="m GET">GET</span> <span class="m PATCH">PATCH</span></td><td><code>/profile</code></td><td>User</td><td>Read or update name, student ID and password</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/api/auth/google/start</code>, <code>…/callback</code></td><td>Public</td><td>Google OpenID Connect redirect and callback (bonus)</td></tr>
+  </table></div>
+
+  <div class="keep"><h3>Clubs, roles and tags</h3>
+  <table>
+    <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs</code></td><td>User</td><td>Clubs with the caller's membership status and role</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/me/memberships</code></td><td>User</td><td>The caller's clubs and roles</td></tr>
+    <tr><td><span class="m PUT">PUT</span> <span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/membership</code></td><td>User</td><td>Request to join (<code>202</code>) or leave (<code>204</code>)</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/join-requests</code></td><td>Committee</td><td>Pending join requests</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/clubs/:id/join-requests/:rid/review</code></td><td>Committee</td><td>Accept or reject a join request</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/members</code></td><td>Committee</td><td>Members and roles</td></tr>
+    <tr><td><span class="m PATCH">PATCH</span> <span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/members/:user_id</code></td><td>President / Committee</td><td>Change a role (president only), or remove a member</td></tr>
+    <tr><td><span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/committee</code></td><td>Committee</td><td>Step down from the committee</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/clubs/:id/presidency</code></td><td>President</td><td>Hand the presidency to a committee member</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/actions</code></td><td>President</td><td>Club action log</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/clubs/:id/actions/:aid/undo</code></td><td>President</td><td>Undo an undoable club action</td></tr>
+    <tr><td><span class="m GET">GET</span> <span class="m POST">POST</span></td><td><code>/tags</code></td><td>User / Admin</td><td>List campus tags, or create one (admin)</td></tr>
+    <tr><td><span class="m PATCH">PATCH</span></td><td><code>/tags/:id</code></td><td>Admin</td><td>Rename or retire a campus tag</td></tr>
+    <tr><td><span class="m GET">GET</span> <span class="m POST">POST</span></td><td><code>/clubs/:id/tags</code></td><td>User / Committee</td><td>List or create club tags</td></tr>
+    <tr><td><span class="m DELETE">DELETE</span></td><td><code>/clubs/:id/tags/:tag_id</code></td><td>Committee</td><td>Delete a club tag</td></tr>
+  </table></div>
+
+  <div class="keep"><h3>Venues, bookings and sign-off</h3>
+  <table>
+    <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/venues</code></td><td>User</td><td>Active venues with capacity and location</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/venues/:id/calendar</code></td><td>User</td><td>Week of slots: available, reserved or past (private details hidden)</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/bookings</code></td><td>Admin</td><td>Venue requests waiting for a decision</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/bookings/:id/decision</code></td><td>Admin</td><td>Approve or reject with a reason. Re-checks overlap (<code>409</code>); <code>403</code> for own club</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/bookings/:id/signoff</code></td><td>President</td><td>Send a committee venue request to the venue team, or return it</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/me/signoffs</code></td><td>President</td><td>Venue requests and publications waiting for the president</td></tr>
+  </table></div>
+
+  <div class="keep"><h3>Events</h3>
+  <table>
+    <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/events</code></td><td>User</td><td>Published events, paginated, with filters: <code>q</code>, <code>club_id</code>, <code>venue_id</code>, <code>visibility</code>, <code>phase</code> (upcoming/past), <code>from</code>/<code>to</code>, <code>tag</code></td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events</code></td><td>Committee</td><td>Create an event draft and its venue request together (<code>201</code>)</td></tr>
+    <tr><td><span class="m GET">GET</span> <span class="m PATCH">PATCH</span></td><td><code>/events/:id</code></td><td>User / Committee</td><td>Event detail, or edit with a version check (<code>409</code> if stale)</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/publish</code></td><td>Committee</td><td>Publish an approved draft. A committee member's request waits for the president</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/signoff</code></td><td>President</td><td>Approve the publication, or return it to draft with a reason</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/cancel</code></td><td>Committee</td><td>Cancel the event, its booking, registrations and pending requests</td></tr>
+    <tr><td><span class="m PUT">PUT</span> <span class="m DELETE">DELETE</span></td><td><code>/events/:id/cover</code></td><td>Committee</td><td>Upload a JPEG or WebP cover (≤ 5 MB), or remove it</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/cover/:size</code></td><td>User</td><td>Resized cover image</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/me/events</code></td><td>Committee</td><td>Events of the caller's clubs, by state</td></tr>
+  </table></div>
+
+  <div class="keep"><h3>Participation, check-in and reports</h3>
+  <table>
+    <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
+    <tr><td><span class="m POST">POST</span> <span class="m DELETE">DELETE</span></td><td><code>/events/:id/registration</code></td><td>User</td><td>Register, join the waitlist, or ask to join (members-only); withdraw</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/me/registrations</code></td><td>User</td><td>The caller's registrations and waitlist positions</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/participants</code></td><td>Committee</td><td>Participant list</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/join-requests</code></td><td>Committee</td><td>Requests for a members-only event</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/join-requests/:user_id/decision</code></td><td>Committee</td><td>Accept or reject a request</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/checkin</code></td><td>Committee</td><td>Open check-in (from 30 min before the start to 2 h after the end) and get the four-digit code</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/attendance</code></td><td>User</td><td>Check in with the four-digit code</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/events/:id/attendance</code></td><td>Committee</td><td>Attendance list</td></tr>
+    <tr><td><span class="m PUT">PUT</span> <span class="m DELETE">DELETE</span></td><td><code>/events/:id/attendance/:user_id</code></td><td>Committee</td><td>Mark or unmark a participant as present</td></tr>
+    <tr><td><span class="m POST">POST</span></td><td><code>/events/:id/views</code></td><td>User</td><td>Record a view and its source (<code>204</code>)</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/reports</code></td><td>Committee</td><td>Participant counts, daily registration actions, venue hours</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/clubs/:id/reports/effectiveness</code></td><td>Committee</td><td>Fill rate, turnout, drop-out, waitlist and view-to-join</td></tr>
+  </table></div>
+
+  <div class="keep"><h3>Notifications and health</h3>
+  <table>
+    <tr><th style="width:11%">Method</th><th style="width:33%">Path</th><th style="width:12%">Access</th><th>Purpose</th></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/notifications</code></td><td>User</td><td>Inbox, newest first, with unread count</td></tr>
+    <tr><td><span class="m PATCH">PATCH</span></td><td><code>/notifications/:id/read</code></td><td>User</td><td>Mark one notification as read</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/notifications/stream</code></td><td>User</td><td>Server-Sent Events stream of notifications and live hints (<code>text/event-stream</code>)</td></tr>
+    <tr><td><span class="m GET">GET</span></td><td><code>/api/health</code></td><td>Public</td><td><code>{"status":"ok"}</code>, or <code>503</code> when MySQL is unreachable</td></tr>
+  </table></div>
+
+  <h3>Example: register for an event</h3>
+<pre class="mono" style="background:var(--soft);border:1px solid var(--line);border-radius:2mm;padding:3mm 4mm;font-size:8pt;line-height:1.45;white-space:pre-wrap;break-inside:avoid">POST /api/v1/events/10/registration
+Cookie: clubspace.sid=…   X-CSRF-Token: 6c1f…   Origin: https://c3322-pg19.cs.hku.hk
+{ "allow_waitlist": true }
+
+201 Created
+{ "data": { "event_id": 10, "status": "waitlisted", "queue_position": 3,
+            "joined_count": 6, "waitlisted_count": 3 } }
+
+409 Conflict   (when the event is full and allow_waitlist is false)
+{ "error": { "code": "EVENT_FULL", "message": "This event is full.", "request_id": "…" } }</pre>
+  <p style="color:var(--muted);font-size:8.4pt">The full contract, with every request and response shape and error code, is in <code>openspec/changes/expand-clubspace-workflows/handoff/api.md</code> in the repository.</p>
+</section>
+
+<!-- ============ 7 WORKFLOWS ============ -->
+<section>
+  <h2><span class="num">7</span>Key workflows and business logic</h2>
+  <p class="lead">The core of ClubSpace is a multi-party approval workflow. Booking and event states change only inside database transactions.</p>
+
+  <figure class="diagram">
+<svg viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="Inter, Arial, sans-serif">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6475"/></marker>
+    <style>.st{fill:#fff;stroke-width:1.6}.sn{font-size:11.5px;font-weight:700;fill:#1d2433}.ed{font-size:9.5px;fill:#5b6475}.lane{font-size:11px;font-weight:700;fill:#2457c5;letter-spacing:.06em}.l{stroke:#5b6475;stroke-width:1.4;fill:none}</style>
+  </defs>
+  <text x="750" y="22" class="lane" text-anchor="end">VENUE BOOKING</text>
+  <rect x="10" y="42" width="140" height="40" rx="20" class="st" stroke="#c98a12"/><text x="80" y="66" text-anchor="middle" class="sn">awaiting_president</text>
+  <rect x="250" y="42" width="110" height="40" rx="20" class="st" stroke="#2457c5"/><text x="305" y="66" text-anchor="middle" class="sn">pending</text>
+  <rect x="470" y="42" width="120" height="40" rx="20" class="st" stroke="#2e7d5b" fill="#e4f4ea"/><text x="530" y="66" text-anchor="middle" class="sn">confirmed</text>
+  <rect x="470" y="110" width="120" height="34" rx="17" class="st" stroke="#c5483b"/><text x="530" y="131" text-anchor="middle" class="sn">rejected</text>
+  <rect x="10" y="110" width="140" height="34" rx="17" class="st" stroke="#c5483b"/><text x="80" y="131" text-anchor="middle" class="sn">returned</text>
+  <path d="M150,62 H248" class="l" marker-end="url(#a2)"/><text x="199" y="55" text-anchor="middle" class="ed">president sends</text>
+  <path d="M360,62 H468" class="l" marker-end="url(#a2)"/><text x="414" y="55" text-anchor="middle" class="ed">admin approves*</text>
+  <path d="M330,82 V127 H468" class="l" marker-end="url(#a2)"/><text x="400" y="121" text-anchor="middle" class="ed">admin rejects</text>
+  <path d="M80,82 V108" class="l" marker-end="url(#a2)"/><text x="86" y="99" class="ed">president returns</text>
+  <path d="M305,20 V40" class="l" marker-end="url(#a2)"/><text x="312" y="24" class="ed">president's own request</text>
+  <path d="M80,4 V40" class="l" marker-end="url(#a2)" /><text x="87" y="18" class="ed">committee requests venue + draft</text>
+  <text x="600" y="54" class="ed">* overlap re-checked</text><text x="600" y="67" class="ed">under row locks; never</text><text x="600" y="80" class="ed">your own club</text>
+
+  <line x1="10" y1="168" x2="750" y2="168" stroke="#dfe3ea"/>
+  <text x="750" y="190" class="lane" text-anchor="end">EVENT</text>
+  <rect x="10" y="210" width="110" height="40" rx="20" class="st" stroke="#9aa3b2"/><text x="65" y="234" text-anchor="middle" class="sn">draft</text>
+  <rect x="250" y="210" width="150" height="40" rx="20" class="st" stroke="#c98a12"/><text x="325" y="234" text-anchor="middle" class="sn">awaiting_president</text>
+  <rect x="470" y="210" width="120" height="40" rx="20" class="st" stroke="#2e7d5b" fill="#e4f4ea"/><text x="530" y="234" text-anchor="middle" class="sn">published</text>
+  <rect x="640" y="210" width="110" height="40" rx="20" class="st" stroke="#c5483b"/><text x="695" y="234" text-anchor="middle" class="sn">cancelled</text>
+  <path d="M120,230 H248" class="l" marker-end="url(#a2)"/><text x="184" y="223" text-anchor="middle" class="ed">committee publishes</text>
+  <path d="M400,230 H468" class="l" marker-end="url(#a2)"/><text x="434" y="223" text-anchor="middle" class="ed">signs off</text>
+  <path d="M325,250 V280 H65 V252" class="l" marker-end="url(#a2)"/><text x="195" y="295" text-anchor="middle" class="ed">president returns with a reason</text>
+  <path d="M65,210 V196 H500 V208" class="l" marker-end="url(#a2)"/><text x="283" y="191" text-anchor="middle" class="ed">president publishes directly</text>
+  <path d="M590,230 H638" class="l" marker-end="url(#a2)"/><text x="614" y="223" text-anchor="middle" class="ed">cancel</text>
+  <path d="M530,82 V100 Q530,104 534,104 H620 V170" class="l" stroke-dasharray="4 3"/>
+  <text x="626" y="150" class="ed">publish requires a</text><text x="626" y="162" class="ed">confirmed booking</text>
+  <text x="470" y="275" class="ed">Cancelling cancels the booking, all registrations</text>
+  <text x="470" y="288" class="ed">and pending join requests, and notifies everyone,</text>
+  <text x="470" y="301" class="ed">all in one transaction.</text>
+</svg>
+    <figcaption>Figure 3. Booking and event lifecycles. Each transition is one API call, runs in a MySQL transaction, writes an audit entry and queues notifications in the outbox.</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="card"><h4>Registration, capacity and waitlist</h4><p>A registration locks the event's participation rows (<code>FOR UPDATE</code>), counts joined seats and either confirms, wait-lists (first in, first out by <code>queued_at</code>), or answers <code>409</code>. When a seat is freed by a withdrawal, a capacity increase or a removal, the first eligible wait-listed student is promoted in the same transaction. That student is notified, and every change is written to <code>participation_history</code>.</p></div>
+    <div class="card"><h4>Concurrency</h4><p>All writers lock rows in one fixed order (venue → club → bookings → event → participations) to avoid deadlocks. Optimistic <code>version</code> columns reject stale edits. Database tests open independent MySQL connections to race two approvals for the same slot and two students for the last seat, and check that exactly one wins.</p></div>
+    <div class="card"><h4>Background worker</h4><p>Every 5 s the worker claims due jobs using a lease token. It commits the claim before taking any domain lock. Every 60 s it scans for reminders and digests. Failed jobs back off and stop after 5 attempts. A heartbeat row shows that the worker is alive.</p></div>
+    <div class="card"><h4>Real-time updates</h4><p>The SSE hub in the API process follows the shared <code>notifications</code> and <code>live_signals</code> tables, so rows written by the worker arrive the same way. Public hints ("event 10 changed") go to everyone, and committee-only hints go to that club. Pages then refetch through the normal authorised routes, so no private data travels in a hint.</p></div>
+  </div>
+</section>
+
+<!-- ============ 8 UI ============ -->
+<section>
+  <h2><span class="num">8</span>User interface</h2>
+  <p class="lead">Screenshots of the final build with the demo data. The same code runs on <code>c3322-pg19.cs.hku.hk</code>.</p>
+  <div class="shots">
+    <figure><img src="img/01-events.jpg" alt=""><figcaption>Explore: search, quick filters and tags, with live seat counts on each card (student).</figcaption></figure>
+    <figure><img src="img/04-full-waitlist.jpg" alt=""><figcaption>Event detail: registration state, add to calendar, and leave event (member).</figcaption></figure>
+    <figure><img src="img/06-calendar.jpg" alt=""><figcaption>Venue calendar with the three campus slots. Pending requests do not reserve a slot (committee).</figcaption></figure>
+    <figure><img src="img/07-admin.jpg" alt=""><figcaption>Booking review: pending venue requests for the venue administrator.</figcaption></figure>
+    <figure><img src="img/08-organizer.jpg" alt=""><figcaption>Organizer: the president's sign-off queue, with send or return actions.</figcaption></figure>
+    <figure><img src="img/09-effectiveness.jpg" alt=""><figcaption>Effectiveness report: fill rate and turnout per event, with an exact-number table.</figcaption></figure>
+    <figure><img src="img/05-inbox.jpg" alt=""><figcaption>Inbox: notifications arrive live over Server-Sent Events.</figcaption></figure>
+    <figure style="display:grid;grid-template-columns:38% 1fr;gap:4mm;align-items:start"><img src="img/03-mobile-events.jpg" alt="" style="width:100%"><figcaption style="margin-top:0">Responsive layout on a phone (390 px wide): content stacks into one column and navigation moves to a bottom tab bar (Explore, My events, Clubs, Inbox).</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============ 9 DEPLOYMENT ============ -->
+<section>
+  <h2><span class="num">9</span>Deployment, demo accounts and testing</h2>
+
+  <h3>Deployment</h3>
+  <p>The server runs the <code>main</code> branch cloned from GitHub to <code>~/clubspace-pg19</code>. Nothing is edited on the server, so the deployed code always matches GitHub. The README contains the full step-by-step guide. In short:</p>
+<pre class="mono" style="background:var(--soft);border:1px solid var(--line);border-radius:2mm;padding:3mm 4mm;font-size:8pt;line-height:1.5;white-space:pre-wrap">git clone https://github.com/LunarTear1014/PG19-ClubSpace.git clubspace &amp;&amp; cd clubspace
+(umask 077; printf 'MYSQL_ROOT_PASSWORD=%s\nMYSQL_PASSWORD=%s\nSESSION_SECRET=%s\n' \
+  "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" &gt; .env)
+docker compose up -d --build          # db → migrate → backend + worker → web → seed
+curl -fsS http://127.0.0.1/api/health # {"status":"ok"}</pre>
+  <ul>
+    <li><strong>Secrets:</strong> <code>.env</code>, the TLS key and the Google client secret are git-ignored. <code>.env.example</code> is the committed template.</li>
+    <li><strong>HTTPS:</strong> the web container generates a self-signed certificate on first start (Option A of the server guide), because Google sign-in needs an <code>https</code> redirect URI. Port 80 redirects to 443.</li>
+    <li><strong>Resources:</strong> the VM has 4 GB of RAM and 8.6 GB of disk. The images use small Alpine/slim bases with <code>.dockerignore</code> files, the backend image is built once and reused by <code>migrate</code>, <code>seed</code> and <code>worker</code>, and container logs are capped.</li>
+    <li><strong>Updates:</strong> each deploy backs up MySQL with <code>mysqldump</code>, pulls <code>main</code> (fast-forward only), rebuilds, and lets <code>migrate</code> apply new migrations before the API starts.</li>
+  </ul>
+
+  <h3>Demo accounts</h3>
+  <p>On an empty database, the seed creates 5 clubs, 5 venues, 37 accounts and 25 events through the real API. These include past events with check-ins, a full event with a waitlist, members-only events with pending requests, and requests still in the approval workflow. Every account uses the password <code>clubspacetest123</code>.</p>
+  <table>
+    <tr><th style="width:38%">Sign in as</th><th>Try</th></tr>
+    <tr><td><code>admin@clubspace.example</code></td><td>Approve or reject Film Society's Animation Night venue request</td></tr>
+    <tr><td><code>president.photo@clubspace.example</code></td><td>Sign off the Exhibition Planning Meeting request, accept a join request, promote a member</td></tr>
+    <tr><td><code>president.debate@clubspace.example</code></td><td>Approve the publication of Debate Workshop: Rebuttals</td></tr>
+    <tr><td><code>committee1.debate@clubspace.example</code></td><td>Create an event and request a venue; review members-only join requests</td></tr>
+    <tr><td><code>member1.hiking@clubspace.example</code></td><td>Lion Rock Sunrise Hike: full, with a waitlist</td></tr>
+    <tr><td><code>student1@clubspace.example</code></td><td>Register for a public event and watch the seat count update in a second browser</td></tr>
+  </table>
+
+  <h3>Testing and quality</h3>
+  <ul>
+    <li><strong>56 automated test files.</strong> The backend has unit tests and 18 database test suites that run against a disposable MySQL 8.4 container (they refuse any database whose name lacks "test"). They cover migrations, authentication, governance, registration races, the job queue, live signals, covers and the demo seed. The frontend uses the Node test runner, plus Vitest and Testing Library for components.</li>
+    <li><strong>Static checks:</strong> Oxlint for the frontend, and a production build in the Docker image.</li>
+    <li><strong>Query plans:</strong> <code>explain.db.test.js</code> checks that hot queries use their indexes. These include the booking overlap check, the admin review queue, waitlist order, job claims, reminder scans and the inbox.</li>
+  </ul>
+</section>
+
+<!-- ============ 10 CREDITS ============ -->
+<section>
+  <h2><span class="num">10</span>Credits and academic integrity</h2>
+  <p>All project code was written by the three team members, with AI tools used as the course policy allows. As the guideline requires, third-party libraries, fonts and assets are credited on the in-app credits page at <a href="https://c3322-pg19.cs.hku.hk/credits">/credits</a>.</p>
+  <table>
+    <tr><th style="width:30%">Area</th><th>Credited libraries and assets</th></tr>
+    <tr><td>Frontend</td><td>React and React DOM, React Router, MUI Material UI, MUI X Charts, Emotion, Lucide icons</td></tr>
+    <tr><td>Fonts</td><td>Bricolage Grotesque, Lexend</td></tr>
+    <tr><td>Backend</td><td>Node.js and Express, express-session, mysql2, Multer, sharp, dotenv</td></tr>
+    <tr><td>Database and infrastructure</td><td>MySQL 8.4, Docker and nginx</td></tr>
+    <tr><td>Tooling</td><td>Vite, Vitest and Testing Library, Oxlint</td></tr>
+    <tr><td>Demo images</td><td>Generated cover images for the fictional demo clubs and events (<code>backend-beta/db/demo-images/</code>). All demo people are fictional and use the reserved <code>.example</code> domain.</td></tr>
+  </table>
+
+  <h3>Repository map</h3>
+<pre class="mono" style="background:var(--soft);border:1px solid var(--line);border-radius:2mm;padding:3mm 4mm;font-size:8.2pt;line-height:1.55">frontend-beta/     React + Vite SPA, Dockerfile, nginx config
+backend-beta/      Express API (src/api_v1), worker, ops scripts,
+                   db/schema.sql, db/migrations/, tests
+openspec/          specifications and the full v1 API contract
+proposal/          Proposal.md
+docs/final-report/ sources of this PDF (HTML, ER diagram generator, screenshots)
+compose.yaml       Docker Compose deployment (six services)
+README.md          deployment URL, rebuild guide, operations
+ARCHITECTURE.md    architecture summary and ER diagram</pre>
+</section>
+
+</body>
+</html>

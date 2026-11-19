@@ -119,8 +119,6 @@ ClubSpace brings these activities into one browser-based application. It gives s
 
 ## 10. Implementation and Review Status
 
-The current beta provides a React frontend and an Express backend with account, club, event, venue, participation, and notification workflows. The frontend also has a read-only fixture preview for planned v1 screens. The current backend uses unversioned routes and in-memory sessions, and its booking flow combines booking and publication.
+*Updated for the final submission (19 November 2026).* Every must-have feature above is implemented in the final version and deployed at https://c3322-pg19.cs.hku.hk. This includes separate venue approval and publication, the versioned `/api/v1` API, sessions stored in MySQL, the background worker, data-preserving migrations and the organiser reports. The Google sign-in bonus is also implemented.
 
-Separate venue approval and publication, the planned v1 API, durable sessions and worker, migrations, and organizer reports require further implementation and integration. Fixture previews do not establish persistence, authorization, or successful live transactions. The team will verify the complete journey and deployment with real services before presenting these capabilities as completed.
-
-The expanded scope and Google sign-in bonus require team and instructor review. OpenSpec documents under `openspec/changes/` provide the proposed behavior, technical contracts, and verification checklist.
+After the beta interview, the team added president sign-off, live updates over Server-Sent Events, check-in, campus and club tags, cover images and an effectiveness report. The final documentation (`ClubSpace-Final-Documentation-Group19.pdf` in the repository root) describes the delivered system, and `openspec/changes/` holds the detailed specifications and API contract.

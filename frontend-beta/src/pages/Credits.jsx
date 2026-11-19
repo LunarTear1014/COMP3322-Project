@@ -25,6 +25,7 @@ const BACKEND = [
   { name: 'Multer', use: 'Event cover uploads', licence: 'MIT', url: 'https://github.com/expressjs/multer' },
   { name: 'sharp', use: 'Resizing cover images and removing their metadata', licence: 'Apache-2.0', url: 'https://sharp.pixelplumbing.com/' },
   { name: 'dotenv', use: 'Local configuration', licence: 'BSD-2-Clause', url: 'https://github.com/motdotla/dotenv' },
+  { name: 'openid-client', use: 'Google sign-in (OpenID Connect)', licence: 'MIT', url: 'https://github.com/panva/openid-client' },
   { name: 'MySQL 8.4', use: 'Database', licence: 'GPL-2.0 (Community Edition)', url: 'https://www.mysql.com/' },
 ]
 
@@ -64,6 +65,13 @@ export function Credits({ signedIn }) {
       <CreditList title="Fonts" items={FONTS} />
       <CreditList title="Backend and database" items={BACKEND} />
       <CreditList title="Build, test and deployment tools" items={TOOLS} />
+      <section className="credits-section" aria-labelledby="credits-images">
+        <h2 id="credits-images" className="section-title">Images</h2>
+        <p>
+          The demo club and event cover images were AI-generated for ClubSpace&apos;s fictional demo data. They are not
+          taken from stock libraries or other websites, and the people shown are not real.
+        </p>
+      </section>
       <p>See also the <Link to="/privacy">privacy policy</Link> and <Link to="/terms">terms of use</Link>.</p>
       <p><Link to={signedIn ? '/events' : '/login'}>{signedIn ? 'Back to Explore' : 'Back to sign in'}</Link></p>
     </main>

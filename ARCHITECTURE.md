@@ -1,116 +1,71 @@
 # ClubSpace Architecture
 
-## 1. Entity-Relationship Diagram
+This file summarises the final architecture. The full write-up, including the
+API reference, workflows and screenshots, is in
+[`ClubSpace-Final-Documentation-Group19.pdf`](ClubSpace-Final-Documentation-Group19.pdf).
 
-```mermaid
-erDiagram
-    USER ||--o{ MEMBERSHIP : "has"
-    CLUB ||--o{ MEMBERSHIP : "has"
-    CLUB ||--o{ EVENT : "organizes"
-    VENUE ||--o{ BOOKING : "has"
-    BOOKING ||--|| EVENT : "linked to"
-    USER ||--o{ PARTICIPATION : "joins"
-    EVENT ||--o{ PARTICIPATION : "has"
+## 1. Deployment
 
-    USER {
-        int id PK
-        string email UK
-        string password_hash
-        string name
-        string student_id UK
-        timestamp created_at
-        timestamp updated_at
-    }
+Six Docker Compose services ([`compose.yaml`](compose.yaml)) run on the Group 19
+VM `c3322-pg19.cs.hku.hk`. Only nginx is reachable from outside, and MySQL's port
+3306 is not published.
 
-    CLUB {
-        int id PK
-        string name UK
-        string description
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    MEMBERSHIP {
-        int user_id PK,FK
-        int club_id PK,FK
-        enum role "member|committee"
-        timestamp joined_at
-    }
-
-    VENUE {
-        int id PK
-        string name UK
-        string location
-        int capacity
-        string description
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    BOOKING {
-        int id PK
-        int venue_id FK
-        int club_id FK
-        datetime start_time
-        datetime end_time
-        enum status "confirmed|cancelled"
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    EVENT {
-        int id PK
-        int booking_id FK,UK
-        int club_id FK
-        string title
-        text description
-        datetime start_time
-        datetime end_time
-        enum visibility "public|members_only"
-        enum status "published|cancelled"
-        int capacity
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    PARTICIPATION {
-        int user_id PK,FK
-        int event_id PK,FK
-        enum status "joined|left|waitlisted"
-        timestamp joined_at
-        timestamp left_at
-    }
+```text
+Browser ──HTTPS :443──▶ web (nginx: built React SPA, proxies /api/; :80 redirects)
+                           │
+                           ▼
+                      backend (Express 5, /api/v1, SSE stream) ──▶ db (MySQL 8.4, volume db_data)
+                      worker  (reminders, digests, clean-up)    ──▶ db
+                      migrate (one-shot: applies schema migrations)
+                      seed    (one-shot: demo data on an empty database)
 ```
 
-## 2. Club and Membership API
+- **web**: nginx serves the built SPA over HTTPS (self-signed certificate on
+  the `web_certs` volume) and proxies `/api/` to the backend.
+- **backend**: the REST API under `/api/v1`. It keeps sessions in MySQL, checks
+  CSRF tokens and `Origin`, rate-limits logins, accepts cover uploads (stored on
+  the `cover_data` volume) and streams live updates with Server-Sent Events.
+- **worker**: claims jobs from the `notification_jobs` outbox (written in the
+  same transaction as each change) and sends reminders and daily club digests,
+  with retries and a heartbeat.
+- **migrate** and **seed**: one-shot jobs that apply ordered, checksummed
+  migrations and load demo data into an empty database.
 
-Until session authentication is implemented, membership endpoints operate on
-the demo user configured by `DEMO_USER_ID`.
+## 2. Backend layers
 
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/clubs` | List clubs with the current user's membership status and role |
-| `GET` | `/api/memberships` | List the current user's club memberships |
-| `POST` | `/api/clubs/:club_id/membership` | Join a club |
-| `DELETE` | `/api/clubs/:club_id/membership` | Leave a club |
+| Layer | Responsibility |
+| --- | --- |
+| Middleware (`src/middleware`) | Request ID, JSON body limit, CSRF and origin checks, and one error handler producing `{ error: { code, message, fields, request_id } }` |
+| Routers (`src/api_v1`) | One router per area: auth, clubs, events, registration, engagement, reports, covers, notifications, Google sign-in |
+| Transactions and queries | Business rules run in MySQL transactions with a fixed lock order (venue → club → bookings → event → participations) |
+| Jobs and live delivery (`src/jobs`, `src/features/notifications`) | Durable job queue with lease tokens; an SSE hub that follows the `notifications` and `live_signals` tables |
 
-Joining an unknown club returns `404`; joining a club twice returns `409`.
-Leaving a club the user has not joined also returns `409`. Invalid club IDs
-return `422`.
+## 3. Entity-relationship diagram
 
-## 3. Event Participation API
+The 17 domain tables of the final schema ([`backend-beta/db/schema.sql`](backend-beta/db/schema.sql)
+plus [`backend-beta/db/migrations/`](backend-beta/db/migrations/) up to
+`018_google_identity`). It was generated from the migrated database by
+[`docs/final-report/er-diagram.mjs`](docs/final-report/er-diagram.mjs).
 
-Until session authentication is implemented, event participation endpoints
-operate on the demo user configured by `DEMO_USER_ID`.
+![ClubSpace ER diagram](docs/final-report/er.svg)
 
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `POST` | `/api/events/:event_id/participation` | Join a published event |
-| `DELETE` | `/api/events/:event_id/participation` | Leave an event |
+Infrastructure tables not drawn above: `notification_jobs` (outbox and job
+queue), `live_signals` (SSE change hints), `sessions`, `audit_logs`,
+`club_action_log`, `activity_digests`, `worker_heartbeats`,
+`schema_migrations` and `schema_metadata`.
 
-`GET /api/events` includes `is_joined` for the demo user and a `joined_count`
-for each event. Joining a members-only event requires membership in its
-organizing club; leaving that club later does not remove the event
-participation. Rejoining after leaving reactivates the existing participation
-record. Unknown event IDs return `404`, membership restrictions return `403`,
-and duplicate joins or attempts to leave an event not joined return `409`.
+## 4. Integrity rules in MySQL
+
+- **One president per club:** a generated `president_club_id` column with a
+  unique index.
+- **No double booking:** overlapping confirmed bookings are rejected inside the
+  approval transaction, which locks the venue and the overlapping bookings.
+- **Check constraints:** time order, event capacity between 1 and 500, and the
+  registration deadline before the start.
+- **Idempotency keys:** on jobs, notifications, audit entries and event views.
+
+## 5. API
+
+The SPA uses only `/api/v1`. See the [API section of the README](README.md#api),
+section 6 of the final documentation, and the full contract in
+[`openspec/changes/expand-clubspace-workflows/handoff/api.md`](openspec/changes/expand-clubspace-workflows/handoff/api.md).

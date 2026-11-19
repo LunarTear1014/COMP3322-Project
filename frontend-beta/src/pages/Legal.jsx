@@ -7,7 +7,7 @@ import { Link } from 'react-router'
 // event activity, uploaded covers, audit rows and capped container logs.
 
 const UPDATED = '18 November 2026'
-const REPOSITORY = 'https://github.com/LunarTear1014/COMP3322-Project'
+const REPOSITORY = 'https://github.com/LunarTear1014/PG19-ClubSpace'
 
 function BackLink({ signedIn }) {
   return <p><Link to={signedIn ? '/events' : '/login'}>{signedIn ? 'Back to Explore' : 'Back to sign in'}</Link></p>

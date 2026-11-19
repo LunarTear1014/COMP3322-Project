@@ -7,7 +7,8 @@ Project, Group 19 (PG19).
 | --- | --- |
 | **Live deployment** | **https://c3322-pg19.cs.hku.hk** (connect to HKUVPN first; the certificate is self-signed, so accept the browser warning once) |
 | Demo password | `clubspacetest123` for every [demo account](#demo-accounts) |
-| Source | https://github.com/LunarTear1014/COMP3322-Project (`main` is what is deployed) |
+| Source | https://github.com/LunarTear1014/PG19-ClubSpace (`main` is what is deployed) |
+| **Final documentation** | [`ClubSpace-Final-Documentation-Group19.pdf`](ClubSpace-Final-Documentation-Group19.pdf): features, team allocation, architecture, ER diagram, API |
 | Proposal | [`proposal/Proposal.md`](proposal/Proposal.md) |
 | Architecture and ER diagram | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 
@@ -166,7 +167,7 @@ internet access to GitHub, Docker Hub and npm during the build. Nothing else
 1. **Get the code.**
 
    ```bash
-   git clone https://github.com/LunarTear1014/COMP3322-Project.git clubspace
+   git clone https://github.com/LunarTear1014/PG19-ClubSpace.git clubspace
    cd clubspace
    ```
 
@@ -285,7 +286,7 @@ volume. The server allows Docker only, so everything runs in containers.
    (
      set -eu
      umask 022
-     repo=https://github.com/LunarTear1014/COMP3322-Project.git
+     repo=https://github.com/LunarTear1014/PG19-ClubSpace.git
      app="$HOME/clubspace-pg19"
      old=
      cd "$HOME"
