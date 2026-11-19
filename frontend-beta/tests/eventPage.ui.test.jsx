@@ -123,7 +123,9 @@ describe('leaving with Undo', () => {
     const { fetch, side } = await openJoinedEvent()
     vi.useFakeTimers()
     fireEvent.click(within(side).getByRole('button', { name: 'Leave event' }))
-    expect(screen.getAllByText('You left the event.').length).toBeGreaterThan(0)
+    // Nothing has been sent yet, so the toast doesn't claim it's done (REG-06).
+    expect(screen.getAllByText('Leaving this event in a few seconds.').length).toBeGreaterThan(0)
+    expect(screen.queryByText('You left the event.')).toBeNull()
     expect(within(side).getByRole('button', { name: 'Leaving…' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     act(() => { vi.advanceTimersByTime(6000) })
@@ -140,6 +142,8 @@ describe('leaving with Undo', () => {
     vi.useRealTimers()
     await waitFor(() => expect(writes(fetch).length).toBe(1))
     expect(writes(fetch)[0][1].method).toBe('DELETE')
+    // The confirmation follows the server's answer.
+    expect(await screen.findByText('You left the event.')).toBeTruthy()
   })
 })
 

@@ -103,6 +103,23 @@ describe('Toast', () => {
     expect(onExpire).toHaveBeenCalledTimes(1)
   })
 
+  it('a passive live notice never cuts an Undo window short', () => {
+    const onExpire = vi.fn()
+    function Both() {
+      const toast = useToast()
+      return <>
+        <button onClick={() => toast.show({ message: 'Leaving soon.', action: { label: 'Undo', onClick: () => {} }, onExpire })}>undoable</button>
+        <button onClick={() => toast.show({ message: 'New message', passive: true })}>notice</button>
+      </>
+    }
+    render(<ToastProvider><Both /></ToastProvider>)
+    fireEvent.click(screen.getByText('undoable'))
+    fireEvent.click(screen.getByText('notice'))
+    expect(onExpire).not.toHaveBeenCalled()
+    expect(screen.getByText('Leaving soon.')).toBeTruthy()
+    expect(screen.queryByText('New message')).toBeNull()
+  })
+
   it('pauses while hovered and a new toast ends the previous undo window', () => {
     const first = vi.fn()
     render(<ToastProvider><Trigger options={{ message: 'One', onExpire: first }} /></ToastProvider>)

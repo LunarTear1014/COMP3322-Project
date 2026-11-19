@@ -375,7 +375,10 @@ describe('frontend preview workflows', () => {
     window.history.pushState({}, '', '/organizer/events/2?tab=edit')
     fireEvent.popState(window)
     await screen.findByRole('heading', { name: 'Film night: stories in motion' })
-    expect((await screen.findByRole('textbox', { name: 'Title' })).value).toBe('Film night: stories in motion')
+    // Event 2 belongs to Film Society, where this account has no club role:
+    // no editor is mounted for it (F02), and nothing from event 1 lingers.
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull())
+    expect(screen.queryByDisplayValue('Unsaved first event title')).toBeNull()
   })
 
   it('preserves request fields after an unsuccessful submission', async () => {
@@ -391,6 +394,15 @@ describe('frontend preview workflows', () => {
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A practical session.' } })
     fireEvent.change(screen.getByLabelText('Capacity'), { target: { value: '20' } })
     fireEvent.click(screen.getByRole('button', { name: 'Next: review' }))
+    // A campus tag is required (TAG-01): Review is blocked until one is chosen.
+    expect((await screen.findAllByText('Choose 1 to 3 campus tags.')).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Submit request' })).toBeNull()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Arts' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next: review' }))
+    // Review lists the deadline and tags (F17) and says the president signs off first (F03).
+    expect(await screen.findByText('When the event starts')).toBeTruthy()
+    expect(screen.getByText('Tags').nextElementSibling.textContent).toBe('Arts')
+    expect(screen.getByText(/Your president signs this request off first/)).toBeTruthy()
     fireEvent.submit(screen.getByRole('button', { name: 'Submit request' }).closest('form'))
 
     expect((await screen.findByRole('alert')).textContent).toContain('read-only preview')

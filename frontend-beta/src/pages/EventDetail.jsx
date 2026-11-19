@@ -11,10 +11,15 @@ import { eventChanged, useLiveSignal } from '../hooks/useLiveSignal'
 import { usePhone } from '../hooks/useMediaQuery'
 import { clubColour } from '../lib/club'
 import { dateTile, seatSummary, timeLine } from '../lib/format'
-import { downloadIcs } from '../lib/ics'
+import { downloadIcs, icsFileName } from '../lib/ics'
 import { registrationToast, registrationView } from '../lib/registration'
 
 const SUCCESS_MS = 2000
+const LEAVE_WORDS = {
+  leave: { pending: 'Leaving this event in a few seconds.', done: 'You left the event.' },
+  leave_waitlist: { pending: 'Leaving the waitlist in a few seconds.', done: 'You left the waitlist.' },
+  cancel_request: { pending: 'Cancelling your request in a few seconds.', done: 'You cancelled your request.' },
+}
 
 export function EventDetail() {
   const { id } = useParams()
@@ -30,6 +35,9 @@ export function EventDetail() {
   const [checkingIn, setCheckingIn] = useState(false)
   const viewed = useRef(null)
   const source = location.state?.source ?? 'share'
+  // Back to the list this page was opened from, filters included; same-site paths only.
+  const back = location.state?.back
+  const backTo = typeof back === 'string' && back.startsWith('/') && !back.startsWith('//') ? back : '/events'
 
   // Counts and queue position are advisory snapshots: refetch when the tab regains focus.
   useEffect(() => {
@@ -48,6 +56,17 @@ export function EventDetail() {
 
   const details = event.data
   const view = details ? registrationView(details) : null
+  // After an outage (the event itself failed to load), the action's error goes
+  // once Try again loads the event: the fresh page is the outcome (F12).
+  const { error: actionError, reset: resetAction } = action
+  const outage = useRef(false)
+  useEffect(() => { if (event.error) outage.current = true }, [event.error])
+  useEffect(() => {
+    if (!details || !outage.current) return
+    outage.current = false
+    if (actionError) resetAction()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [details])
 
   async function register() {
     const result = await action.run(`/events/${id}/registration`, 'POST', { allow_waitlist: Boolean(details.eligibility?.can_waitlist) })
@@ -60,16 +79,25 @@ export function EventDetail() {
     }
   }
 
-  // Leaving is undoable: the request goes out only after the 5 second window.
+  // Leaving is undoable: the request goes out after the 5 second window, or
+  // at once if the page is reloaded or closed first (F16, F14). The first
+  // toast says what is about to happen; "You left…" only follows once the
+  // server has confirmed it (REG-06, CLUB-09).
   function leave() {
+    const words = LEAVE_WORDS[view.kind] ?? LEAVE_WORDS.leave
     setLeaving(true)
     toast.show({
-      message: view.kind === 'cancel_request' ? 'You cancelled your request.' : view.kind === 'leave_waitlist' ? 'You left the waitlist.' : 'You left the event.',
+      message: words.pending,
       tone: 'info',
       action: { label: 'Undo', onClick: () => setLeaving(false) },
-      onExpire: async () => {
-        await action.run(`/events/${id}/registration`, 'DELETE', {})
+      onExpire: async ({ unloading = false } = {}) => {
+        if (unloading) {
+          request(`/events/${id}/registration`, { method: 'DELETE', body: {}, keepalive: true }).catch(() => {})
+          return
+        }
+        const result = await action.run(`/events/${id}/registration`, 'DELETE', {})
         setLeaving(false)
+        if (result) toast.show({ message: words.done })
       },
     })
   }
@@ -90,6 +118,7 @@ export function EventDetail() {
             onLeave={leave}
             checkingIn={checkingIn}
             setCheckingIn={setCheckingIn}
+            backTo={backTo}
           />
         )}
       </Resource>
@@ -128,8 +157,8 @@ function CheckinForm({ id, onDone }) {
   )
 }
 
-function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, details, checkin, onCheckin }) {
-  if (leaving) return <Button disabled busy>Leaving…</Button>
+function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, details, checkin, onCheckin, onCalendar }) {
+  if (leaving) return <Button disabled busy>{view.kind === 'cancel_request' ? 'Cancelling…' : 'Leaving…'}</Button>
   if (going) return <Button variant="success" disabled>You’re going!</Button>
   if (checkin) return <Button variant="primary" onClick={onCheckin}>Check in</Button>
   switch (view.kind) {
@@ -139,7 +168,7 @@ function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, detail
     case 'join_club':
       return <ButtonLink variant="primary" to="/clubs">{view.label}</ButtonLink>
     case 'leave':
-      return <Button onClick={() => downloadIcs(details)}><CalendarPlus className="cs-icon" aria-hidden="true" />Add to calendar</Button>
+      return <Button onClick={() => onCalendar(details)}><CalendarPlus className="cs-icon" aria-hidden="true" />Add to calendar</Button>
     case 'leave_waitlist':
     case 'cancel_request':
       return <Button onClick={onLeave}>{view.label}</Button>
@@ -148,7 +177,13 @@ function PrimaryAction({ view, going, leaving, busy, onRegister, onLeave, detail
   }
 }
 
-function EventBody({ details, view, phone, going, leaving, busy, error, onRegister, onLeave, checkingIn, setCheckingIn }) {
+function EventBody({ details, view, phone, going, leaving, busy, error, onRegister, onLeave, checkingIn, setCheckingIn, backTo }) {
+  const toast = useToast()
+  // The download happens silently in most browsers, so say where it went (DISC-09).
+  const onCalendar = event => {
+    downloadIcs(event)
+    toast.show({ message: `Calendar file downloaded (${icsFileName(event)}). Open it to add the event.` })
+  }
   const canCheckIn = view.kind === 'leave' && details.state === 'published' && checkinOpen(details)
   const colour = clubColour(details.club?.id)
   const tile = dateTile(details.start_at)
@@ -180,7 +215,7 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
             <time className="cs-datetile event-tile" dateTime={tile.iso}><small>{tile.month}</small><b>{tile.day}</b></time>
           </EventCover>
         )}
-        <Link className="cs-iconbtn event-back" to="/events" aria-label="Back to events"><ChevronLeft className="cs-icon" aria-hidden="true" /></Link>
+        <Link className="cs-iconbtn event-back" to={backTo} aria-label="Back to events"><ChevronLeft className="cs-icon" aria-hidden="true" /></Link>
       </div>
 
       <div className="event-layout">
@@ -226,7 +261,7 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
             <ErrorNotice error={error} />
             {!phone && (
               <div className="cs-col registration-actions">
-                <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} checkin={canCheckIn} onCheckin={() => setCheckingIn(true)} />
+                <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} checkin={canCheckIn} onCheckin={() => setCheckingIn(true)} onCalendar={onCalendar} />
                 {view.kind === 'leave' && !leaving && <Button onClick={onLeave}>{view.label}</Button>}
               </div>
             )}
@@ -238,7 +273,7 @@ function EventBody({ details, view, phone, going, leaving, busy, error, onRegist
 
       {phone && (
         <StickyActionBar info={info}>
-          <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} checkin={canCheckIn} onCheckin={() => setCheckingIn(true)} />
+          <PrimaryAction view={view} going={going} leaving={leaving} busy={busy} onRegister={onRegister} onLeave={onLeave} details={details} checkin={canCheckIn} onCheckin={() => setCheckingIn(true)} onCalendar={onCalendar} />
         </StickyActionBar>
       )}
     </div>

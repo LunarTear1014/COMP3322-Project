@@ -8,6 +8,9 @@ async function build_world(app) {
   for (const [key, platform_role] of [["admin", "venue_admin"], ["pres", "student"], ["comm", "student"], ["pres2", "student"], ["mem", "student"], ["s1", "student"], ["s2", "student"], ["s3", "student"], ["s4", "student"], ["admin_c", "venue_admin"]]) {
     ids[key] = await app.user({ email: `${key}@x.test`, name: key, student_id: key, platform_role });
   }
+  // Events need a campus tag; the tags migration seeds Social.
+  const [[social]] = await admin.query("SELECT id FROM campus_tags WHERE slug = 'social'");
+  app.campus_tag_id = social.id;
   await admin.query("INSERT INTO memberships (user_id, club_id, role) VALUES (?, 1, 'president'), (?, 1, 'committee'), (?, 1, 'member'), (?, 2, 'president'), (?, 1, 'committee')",
     [ids.pres, ids.comm, ids.mem, ids.pres2, ids.admin_c]);
   return ids;
@@ -21,7 +24,7 @@ function future_date(app, days) {
 
 const create_body = (app, over = {}) => ({
   club_id: 1, venue_id: 1, title: "Photo walk", description: "Walk and shoot.", date: future_date(app, 5), slot_id: "morning",
-  visibility: "public", capacity: 2, ...over,
+  visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id], ...over,
 });
 
 // Creates an event as the president, approves the booking as admin, publishes it.

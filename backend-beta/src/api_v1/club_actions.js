@@ -36,14 +36,41 @@ const action_dto = (row) => ({
 async function list_actions(db, club_id, { page, page_size }) {
   const [[{ total }]] = await db.query("SELECT COUNT(*) AS total FROM club_action_log WHERE club_id = ?", [club_id]);
   const [rows] = await db.query(
-    `SELECT id, actor_user_id, actor_name, target_user_id, target_name, action_type, description, undoable,
+    `SELECT id, actor_user_id, actor_name, target_user_id, target_name, action_type, description, undoable, details,
        UNIX_TIMESTAMP(created_at) AS created_epoch, undone_at, UNIX_TIMESTAMP(undone_at) AS undone_epoch
      FROM club_action_log WHERE club_id = ? ORDER BY id DESC LIMIT ? OFFSET ?`,
     [club_id, page_size, (page - 1) * page_size]);
-  return { rows: rows.map(action_dto), total: Number(total) };
+  // Offer Undo only while no later row touched the same members (see undo_action).
+  const oldest = rows.length ? Math.min(...rows.map((row) => Number(row.id))) : 0;
+  const [newer] = rows.length
+    ? await db.query("SELECT id, target_user_id, details FROM club_action_log WHERE club_id = ? AND id > ? ORDER BY id", [club_id, oldest])
+    : [[]];
+  const superseded = (row) => {
+    const mine = new Set(touched_users(row));
+    return newer.some((later) => Number(later.id) > Number(row.id) && touched_users(later).some((id) => mine.has(id)));
+  };
+  return { rows: rows.map((row) => ({ ...action_dto(row), undoable: action_dto(row).undoable && !superseded(row) })), total: Number(total) };
 }
 
 const changed = () => new ApiError("INVALID_STATE", "Things changed since this action, so it can’t be undone safely.");
+
+// Everyone whose role or membership a log row touched. A presidency transfer
+// touches both presidents, but only the new one is its target_user_id, and an
+// undo row lists the members it rewound in details.affected_user_ids.
+function touched_users(row) {
+  const details = parse_action_details(row.details);
+  return [row.target_user_id, details.previous_president_id, details.new_president_id, ...(details.affected_user_ids ?? [])]
+    .filter((id) => id != null).map(Number);
+}
+
+// Any later row that touched one of `affected`, including an undo of a later
+// action, means the state this action produced has been superseded.
+async function later_action_for(conn, club_id, action_id, affected) {
+  const [rows] = await conn.query(
+    "SELECT id, target_user_id, details FROM club_action_log WHERE club_id = ? AND id > ? ORDER BY id", [club_id, action_id]);
+  const wanted = new Set(affected.map(Number));
+  return rows.find((row) => touched_users(row).some((id) => wanted.has(id))) ?? null;
+}
 
 async function set_role(conn, club_id, user_id, role) {
   await conn.query("UPDATE memberships SET role = ?, version = version + 1 WHERE club_id = ? AND user_id = ?", [role, club_id, user_id]);
@@ -85,11 +112,8 @@ async function undo_action(conn, { club, action_id, actor_id, now, committee_ids
   const details = parse_action_details(action.details);
   const affected = action.action_type === "presidency_transferred"
     ? [details.previous_president_id, details.new_president_id] : [action.target_user_id];
-  for (const user_id of affected) {
-    const [[later]] = await conn.query(
-      `SELECT id FROM club_action_log WHERE club_id = ? AND id > ? AND target_user_id = ? AND undone_at IS NULL AND action_type <> 'action_undone' LIMIT 1`,
-      [club.id, action.id, user_id]);
-    if (later) throw new ApiError("INVALID_STATE", "A later action affects this member. Undo that one first.");
+  if (await later_action_for(conn, club.id, action.id, affected)) {
+    throw new ApiError("INVALID_STATE", "A later action affects this member, so this one can no longer be undone.");
   }
   const role_of = async (user_id) => {
     const [[row]] = await conn.query("SELECT role FROM memberships WHERE club_id = ? AND user_id = ? FOR UPDATE", [club.id, user_id]);
@@ -146,7 +170,8 @@ async function undo_action(conn, { club, action_id, actor_id, now, committee_ids
   await notify(conn, { users: affected, type: "role_changed", club_id: club.id, now, key: `undo:${action.id}`,
     title: `Club action undone: ${club.name}`, body: `An action affecting your role or membership in ${club.name} was undone by the president.` });
   await conn.query("UPDATE club_action_log SET undone_at = CURRENT_TIMESTAMP, undone_by = ? WHERE id = ?", [actor_id, action.id]);
-  await log_action(conn, { club, actor_id, target_id: action.target_user_id, type: "action_undone", description: `Undid action #${action.id}: ${action.description}` });
+  await log_action(conn, { club, actor_id, target_id: action.target_user_id, type: "action_undone", description: `Undid action #${action.id}: ${action.description}`,
+    details: { undone_action_id: Number(action.id), affected_user_ids: affected.map(Number) } });
   await audit(conn, { actor: actor_id, entity_type: "membership", entity_id: club.id, action: "action.undone", details: { action_id: action.id, type: action.action_type }, now });
 }
 

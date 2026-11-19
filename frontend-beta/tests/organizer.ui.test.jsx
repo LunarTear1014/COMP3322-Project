@@ -25,6 +25,17 @@ describe('lifecycle', () => {
     expect(lifecycle({ ...base, state: 'awaiting_president', booking: { status: 'awaiting_president' } }, now).steps[1].note).toBe('Waiting for the president')
   })
 
+  it('names where a request is and never offers Publish while publication waits (F01, F03)', () => {
+    const signoff = lifecycle({ ...base, booking: { status: 'awaiting_president' } }, now)
+    expect(signoff.steps[1]).toMatchObject({ label: 'President sign-off', state: 'current' })
+    expect(lifecycle({ ...base }, now).steps[1]).toMatchObject({ label: 'Venue review', note: 'Venue team reviewing' })
+    const waiting = lifecycle({ ...base, state: 'awaiting_president', booking: { status: 'confirmed' } }, now)
+    expect(waiting.next.kind).toBe('wait')
+    expect(waiting.steps[2]).toMatchObject({ state: 'current', note: 'Waiting for the president' })
+    const returned = lifecycle({ ...base, booking: { status: 'returned' }, signoff: { reason: 'Add a rain plan.' } }, now)
+    expect(returned.steps[1]).toMatchObject({ label: 'Returned', note: 'Add a rain plan.' })
+  })
+
   it('groups needs action, upcoming and past', () => {
     const g = groupManaged([
       { id: 1, ...base, booking: { status: 'confirmed' } },
@@ -32,10 +43,14 @@ describe('lifecycle', () => {
       { id: 3, ...base },
       { id: 4, ...base, state: 'published', booking: { status: 'confirmed' } },
       { id: 5, ...base, start_at: '2026-11-01T05:00:00Z' },
+      { id: 6, ...base, state: 'cancelled', booking: { status: 'cancelled' } },
+      { id: 7, ...base, state: 'cancelled', start_at: '2026-11-01T05:00:00Z' },
     ], now)
     expect(g.needs.map(e => e.id)).toEqual([1, 2])
     expect(g.upcoming.map(e => e.id)).toEqual([3, 4])
     expect(g.past.map(e => e.id)).toEqual([5])
+    // A future cancellation is neither upcoming nor past (UX-01).
+    expect(g.cancelled.map(e => e.id)).toEqual([6, 7])
   })
 })
 
@@ -62,12 +77,19 @@ describe('organizer pages', () => {
     render(<App />)
     const steps = await screen.findByRole('list', { name: 'Event progress' })
     expect(within(steps).getByText('Publish').closest('li').getAttribute('aria-current')).toBe('step')
-    fireEvent.click(screen.getByRole('button', { name: 'Publish event' }))
+    // A committee member asks the president; the toast never claims it is live (F01).
+    expect(screen.queryByRole('button', { name: 'Publish event' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Request publication' }))
     await waitFor(() => expect(fetch.mock.calls.some(([u, o]) => String(u).endsWith('/events/21/publish') && o.method === 'POST')).toBe(true))
     expect(JSON.parse(fetch.mock.calls.find(([u]) => String(u).endsWith('/publish'))[1].body)).toEqual({ expected_version: 1 })
+    expect((await screen.findAllByText('Publication requested. Waiting for the president to publish it.')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Event published. Students can join now.')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel event' }))
     expect(screen.getByRole('heading', { name: 'Cancel this event?' })).toBeTruthy()
+    const confirm = screen.getAllByRole('button', { name: 'Cancel event' }).find(button => button.type === 'submit')
+    fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: '   ' } })
+    expect(confirm.disabled).toBe(true)
     expect(fetch.mock.calls.some(([u]) => String(u).endsWith('/cancel'))).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'Keep event' }))
     expect(screen.queryByRole('heading', { name: 'Cancel this event?' })).toBeNull()

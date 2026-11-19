@@ -38,3 +38,9 @@
 /* Fixed above the tab bar on phones. */
 .sticky-action-bar { position: fixed; left: 0; right: 0; bottom: calc(var(--bars-height, 0px) + env(safe-area-inset-bottom)); z-index: var(--z-sticky); }
 .sticky-action-bar .cs-btn { flex: none; min-width: 140px; }
+
+/* Short viewports (400% zoom, UX-04): the action bar sits in the page flow
+   instead of covering it. */
+@media (max-height: 480px) {
+  .sticky-action-bar { position: static; }
+}

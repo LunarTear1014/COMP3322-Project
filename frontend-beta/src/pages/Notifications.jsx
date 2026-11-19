@@ -33,7 +33,11 @@ function NotificationRow({ item, action }) {
             <Button disabled={action.busy} onClick={() => review('reject')}>Reject request</Button>
           </div>
         )}
-        {!item.read_at && <div><Button variant="ghost" disabled={action.busy} onClick={() => action.run(`/notifications/${item.id}/read`, 'PATCH', {}, 'Marked as read.')}>Mark as read</Button></div>}
+        <div>
+          {item.read_at
+            ? <Button variant="ghost" disabled={action.busy} onClick={() => action.run(`/notifications/${item.id}/read`, 'DELETE', {}, 'Marked as unread.')}>Mark as unread</Button>
+            : <Button variant="ghost" disabled={action.busy} onClick={() => action.run(`/notifications/${item.id}/read`, 'PATCH', {}, 'Marked as read.')}>Mark as read</Button>}
+        </div>
       </div>
     </li>
   )
@@ -63,19 +67,20 @@ export function Notifications({ refreshInbox }) {
     }
   }, [refreshList])
 
-  const unread = (list.data || []).filter(item => !item.read_at)
+  const unreadTotal = list.meta?.unread_count ?? (list.data || []).filter(item => !item.read_at).length
 
-  // The API marks one notification at a time, so "Mark all as read" marks the
-  // unread ones on this page and reports any that failed.
+  // "Mark all as read" covers every unread message, on every page (MSG-02).
   async function markAll() {
     setMarking(true)
-    const results = await Promise.allSettled(unread.map(item => request(`/notifications/${item.id}/read`, { method: 'PATCH', body: {} })))
-    setMarking(false)
-    const failed = results.filter(result => result.status === 'rejected').length
-    refresh()
-    toast.show(failed
-      ? { message: `${failed} could not be marked as read. Try again.`, tone: 'error' }
-      : { message: 'All caught up.' })
+    try {
+      await request('/notifications/read-all', { method: 'POST', body: {} })
+      toast.show({ message: 'All caught up.' })
+    } catch (error) {
+      toast.show({ message: `Messages weren’t marked as read: ${error.message}`, tone: 'error' })
+    } finally {
+      setMarking(false)
+      refresh()
+    }
   }
 
   const groups = groupByDay(list.data || [])
@@ -84,7 +89,7 @@ export function Notifications({ refreshInbox }) {
       <PageHeading title="Inbox" description="Messages can arrive a moment after the action that caused them." />
       <div className="cs-row inbox-tools">
         <button className="cs-chip-filter" type="button" aria-pressed={unreadOnly} onClick={() => { setUnreadOnly(value => !value); setPage(1) }}>Unread only</button>
-        <Button disabled={!unread.length || marking} busy={marking} onClick={markAll}><CheckCheck className="cs-icon" aria-hidden="true" />Mark all as read</Button>
+        <Button disabled={!unreadTotal || marking} busy={marking} onClick={markAll}><CheckCheck className="cs-icon" aria-hidden="true" />Mark all as read</Button>
         {list.meta && <span className="cs-meta cs-nums" role="status">{list.meta.unread_count} unread in total</span>}
       </div>
       <Feedback action={action} />

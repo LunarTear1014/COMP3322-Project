@@ -109,7 +109,7 @@ describe("v1 event covers", { skip }, () => {
 
   test("a hidden draft's cover is 404 for outsiders, exactly like the event; Origin and CSRF still apply", async () => {
     const pres = await app.client_for("pres@x.test");
-    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "D", description: "d", date: future_date(app, (day += 1)), slot_id: "evening", visibility: "public", capacity: 2 })).body.data;
+    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "D", description: "d", date: future_date(app, (day += 1)), slot_id: "evening", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] })).body.data;
     const result = await upload(pres, draft.id, await jpeg(), { version: 1 });
     assert.equal(result.status, 200, "drafts can have covers");
     const outsider = await app.client_for("s1@x.test");

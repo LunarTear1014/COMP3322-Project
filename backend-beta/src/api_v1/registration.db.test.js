@@ -173,7 +173,7 @@ describe("v1 registration, waitlist and participants", { skip }, () => {
 
   test("a hidden draft cannot be registered for and gives no existence oracle", async () => {
     const pres = await app.client_for("pres@x.test");
-    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "Secret", description: "d", date: future_date(app, 60), slot_id: "morning", visibility: "public", capacity: 2 })).body.data;
+    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "Secret", description: "d", date: future_date(app, 60), slot_id: "morning", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] })).body.data;
     const s1 = await app.client_for("s1@x.test");
     assert.equal((await join(s1, draft)).status, 404);
     assert.equal((await s1.get("/events/999999")).status, 404);

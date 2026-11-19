@@ -70,6 +70,7 @@ export function Organizer({ session }) {
             <Group id="needs-action" title="Needs action" events={groups.needs} empty="Nothing waiting on you." />
             <Group id="upcoming" title="Upcoming" events={groups.upcoming} empty="No upcoming events." />
             <Group id="past" title="Past" events={groups.past} empty="No past events." />
+            {groups.cancelled.length > 0 && <Group id="cancelled" title="Cancelled" events={groups.cancelled} empty="" />}
           </>
         )}
       </Resource>

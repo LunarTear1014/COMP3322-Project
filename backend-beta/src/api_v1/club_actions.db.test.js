@@ -121,4 +121,30 @@ describe("v1 club management and action log", { skip }, () => {
     assert.equal(await role(ids.pres), "president");
     assert.equal(await role(ids.comm), "committee");
   });
+
+  test("an older presidency transfer can't be undone once a later transfer or undo touched either president (GOV-08)", async () => {
+    const pres = await app.client_for("pres@x.test");
+    const comm = await app.client_for("comm@x.test");
+    assert.equal((await pres.post("/clubs/1/presidency", { to_user_id: ids.comm, expected_version: await version(pres, ids.comm) })).status, 200);
+    const first = await latest(comm);
+    assert.equal((await comm.post("/clubs/1/presidency", { to_user_id: ids.pres, expected_version: await version(comm, ids.pres) })).status, 200);
+    const second = await latest(pres);
+    assert.equal(second.type, "presidency_transferred");
+    const log = (await pres.get("/clubs/1/actions")).body.data;
+    assert.equal(log.find((row) => row.id === first.id).undoable, false, "the log no longer offers the superseded undo");
+    assert.equal(log.find((row) => row.id === second.id).undoable, true);
+    const blocked = await pres.post(`/clubs/1/actions/${first.id}/undo`, {});
+    assert.equal(blocked.body.error.code, "INVALID_STATE");
+    assert.equal(await role(ids.pres), "president");
+    // Undo the newer transfer: the roles now match the older one again, but
+    // the undo itself is a later action, so the older entry stays closed.
+    assert.equal((await pres.post(`/clubs/1/actions/${second.id}/undo`, {})).status, 200);
+    assert.equal(await role(ids.comm), "president");
+    assert.equal((await comm.post(`/clubs/1/actions/${first.id}/undo`, {})).body.error.code, "INVALID_STATE");
+    assert.equal(await role(ids.comm), "president");
+    assert.equal(await role(ids.pres), "committee");
+    // Restore the fixture roles for any later test.
+    await app.admin.query("UPDATE memberships SET role = 'committee' WHERE club_id = 1 AND user_id = ?", [ids.comm]);
+    await app.admin.query("UPDATE memberships SET role = 'president' WHERE club_id = 1 AND user_id = ?", [ids.pres]);
+  });
 });

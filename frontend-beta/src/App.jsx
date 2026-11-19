@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { BrowserRouter, Link, Navigate, Route, Routes, matchPath, useLocation, useNavigate } from 'react-router'
 import { request, setCsrf } from './api'
 import { Reports } from './pages/Reports'
 import { isOrganizer } from './lib/roles'
@@ -26,8 +26,33 @@ import { Admin } from './pages/Admin'
 import { Notifications } from './pages/Notifications'
 import { ToastProvider, useToast } from './components/ui'
 import { useLiveInbox } from './hooks/useLiveInbox'
+import { dispatchNotification } from './hooks/useLiveSignal'
 import { usePhone } from './hooks/useMediaQuery'
 import './App.css'
+import { safeReturn } from './lib/navigation'
+
+// Session identity and memberships, for spotting a real change.
+// Every signed-in page, so a signed-out visit to anything else is a plain
+// "Page not found" rather than a sign-in prompt (NAV-02).
+const APP_PATHS = [
+  '/', '/events', '/events/:id', '/profile', '/me/registrations', '/venues', '/venues/:id/calendar', '/clubs',
+  '/organizer', '/organizer/clubs', '/organizer/club-tools', '/organizer/clubs/:id/members', '/organizer/clubs/:id/reports',
+  '/organizer/clubs/:id/reports/effectiveness', '/organizer/events/:id', '/bookings/new', '/admin/bookings', '/notifications',
+]
+const knownPath = pathname => APP_PATHS.some(pattern => matchPath(pattern, pathname))
+
+function NotFound({ signedIn }) {
+  return (
+    <main className="page" id={signedIn ? undefined : 'main-content'}>
+      <h1>Page not found</h1>
+      <p>That address doesn’t match a ClubSpace page.</p>
+      <p>{signedIn ? <Link className="cs-btn" to="/events">Go to Explore</Link> : <Link className="cs-btn" to="/login">Sign in</Link>}</p>
+    </main>
+  )
+}
+
+const ROLE_TYPES = new Set(['role_changed', 'club_membership'])
+const sessionKey = data => JSON.stringify([data?.user, data?.memberships])
 
 
 function Shell({ streamOverride }) {
@@ -57,12 +82,34 @@ function Shell({ streamOverride }) {
     }
   }, [])
 
+  // Rechecks the session without disturbing the page: a signed-out session
+  // goes to sign-in (keeping this page as the return path), and changed roles
+  // replace the old ones. Other failures are left to the page's own request.
+  const checkSession = useCallback(async () => {
+    try {
+      const result = await request('/auth/session')
+      setCsrf(result.data.csrf_token)
+      setSession(current => (current && sessionKey(current) === sessionKey(result.data) ? current : result.data))
+    } catch (error) {
+      if (error.status === 401) { setSession(null); setCsrf(null) }
+    }
+  }, [])
+
   useEffect(() => {
     refreshSession()
     const expired = () => { setSession(null); setCsrf(null) }
+    // A refused CSRF token usually means the session ended in another tab (AUTH-06).
+    const recheck = () => checkSession()
+    const visible = () => { if (!document.hidden) checkSession() }
     window.addEventListener('clubspace:unauthorized', expired)
-    return () => window.removeEventListener('clubspace:unauthorized', expired)
-  }, [refreshSession])
+    window.addEventListener('clubspace:session-check', recheck)
+    document.addEventListener('visibilitychange', visible)
+    return () => {
+      window.removeEventListener('clubspace:unauthorized', expired)
+      window.removeEventListener('clubspace:session-check', recheck)
+      document.removeEventListener('visibilitychange', visible)
+    }
+  }, [refreshSession, checkSession])
 
   const refreshInbox = useCallback(async () => {
     if (!session || document.hidden) return
@@ -80,7 +127,13 @@ function Shell({ streamOverride }) {
     enabled: Boolean(session),
     refreshInbox,
     onUnread: setUnread,
-    onNotification: notification => toast.show({ message: notification.title, tone: 'info', action: { label: 'View', onClick: () => navigate('/notifications') } }),
+    onNotification: notification => {
+      dispatchNotification(notification)
+      // Someone changed this user's club role: pick up the new permissions (F08).
+      if (ROLE_TYPES.has(notification.type)) checkSession()
+      // A hidden tab only updates its badge; a live notice never cuts an Undo window short.
+      if (!document.hidden) toast.show({ message: notification.title, tone: 'info', passive: true, action: { label: 'View', onClick: () => navigate('/notifications') } })
+    },
     streamFactory: streamOverride,
   })
 
@@ -113,6 +166,7 @@ function Shell({ streamOverride }) {
   if (!session && location.pathname === '/privacy') return <PrivacyPolicy signedIn={false} />
   if (!session && location.pathname === '/terms') return <Terms signedIn={false} />
   const publicPage = location.pathname === '/login' || location.pathname === '/register'
+  if (!session && !publicPage && !knownPath(location.pathname)) return <NotFound signedIn={false} />
   if (!session && !publicPage) {
     // A Google callback error marker (?error=…) must survive the signed-out
     // bounce: pass it through as its own query param so the auth page can
@@ -140,7 +194,9 @@ function Shell({ streamOverride }) {
       <div id="main-content" tabIndex={-1} className="app-content">
         <Routes>
           <Route path="/" element={<Navigate to="/events" replace />} />
-          <Route path="/login" element={<Navigate to="/events" replace />} />
+          {/* Signing in renders this before the sign-in form's own navigation
+              lands, so it must honour ?return= as well (AUTH-03). */}
+          <Route path="/login" element={<Navigate to={safeReturn(location.search)} replace />} />
           <Route path="/register" element={<Navigate to="/events" replace />} />
           <Route path="/events" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
@@ -162,7 +218,7 @@ function Shell({ streamOverride }) {
           <Route path="/privacy" element={<PrivacyPolicy signedIn />} />
           <Route path="/terms" element={<Terms signedIn />} />
           <Route path="/organizer/clubs/:id/reports" element={<Reports />} />
-          <Route path="*" element={<main><h1>Page not found</h1></main>} />
+          <Route path="*" element={<NotFound signedIn />} />
         </Routes>
       </div>
       {phone && <TabBar unread={unread} />}

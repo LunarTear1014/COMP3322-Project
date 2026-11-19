@@ -50,7 +50,13 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .cs-sticker-ink { background: var(--ink); color: var(--bg); }
 
 /* Filter chips */
-.cs-filter-strip { display: flex; gap: var(--space-2); overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+/* Quick filters wrap onto more rows when there is room (UX-04: at 200% zoom
+   chips were hidden past the edge); on narrow screens they scroll sideways
+   with a visible scrollbar so the hidden chips are discoverable. */
+.cs-filter-strip { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: 2px 2px 6px; }
+@media (max-width: 479px) {
+  .cs-filter-strip { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+}
 .cs-chip-filter { font: inherit; font-size: 14px; font-weight: 700; min-height: 44px; padding: 10px 16px; border-radius: var(--radius-pill); border: 2px solid transparent; background: var(--surface-sunk); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: background-color .16s ease-out, transform .16s ease-out; }
 .cs-chip-filter:hover { border-color: var(--outline); }
 .cs-chip-filter:active { transform: scale(.97); }
@@ -66,6 +72,13 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .cs-card a { color: inherit; text-decoration: none; }
 .cs-card a:focus-visible { outline: none; }
 .cs-card a::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+/* Cards with several links or buttons keep each control clickable: no
+   stretched overlay, and links look like links (F11). */
+.cs-card.has-actions a::after { content: none; }
+.cs-card.has-actions a:not(.cs-btn) { color: var(--link, var(--ink)); text-decoration: underline; }
+.cs-card.has-actions a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.cs-card.has-actions:has(a:focus-visible) { outline: none; }
+.cs-card.has-actions:hover, .cs-card.has-actions:active { transform: none; }
 .cs-cover { position: relative; aspect-ratio: 3 / 2; max-height: 170px; width: 100%; border-bottom: 2px solid var(--outline); overflow: visible; }
 .cs-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .cs-cover-art { position: absolute; inset: 0; background-color: var(--club); background-image: radial-gradient(circle at 78% 34%, var(--sheen-strong) 0 21%, transparent 21.5%), repeating-linear-gradient(135deg, var(--sheen-soft) 0 12px, transparent 12px 24px); }

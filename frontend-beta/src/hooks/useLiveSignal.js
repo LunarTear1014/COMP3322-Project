@@ -44,3 +44,22 @@ export function useLiveSignal(matches, onSignal, { wait = 700 } = {}) {
 export const eventChanged = id => hint => hint?.topic === 'event' && hint.event_id === Number(id)
 export const anyEventIn = ids => hint => hint?.topic === 'event' && ids.has(hint.event_id)
 export const attendanceChanged = id => hint => hint?.topic === 'attendance' && hint.event_id === Number(id)
+
+// Each live notification is also re-dispatched on window, so open pages can
+// refetch when it concerns them (My events on a registration change, Members
+// and roles on a role change in another session: F08, F11).
+export const NOTIFICATION_EVENT = 'clubspace:notification'
+
+export function dispatchNotification(notification) {
+  window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT, { detail: notification }))
+}
+
+export function useNotificationSignal(matches, onNotification) {
+  const latest = useRef({ matches, onNotification })
+  latest.current = { matches, onNotification }
+  useEffect(() => {
+    const handle = event => { if (latest.current.matches(event.detail)) latest.current.onNotification(event.detail) }
+    window.addEventListener(NOTIFICATION_EVENT, handle)
+    return () => window.removeEventListener(NOTIFICATION_EVENT, handle)
+  }, [])
+}

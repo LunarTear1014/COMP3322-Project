@@ -231,13 +231,15 @@ function create_registration_router({ pool, clock }) {
       const [rows] = await pool.query(
         `SELECT p.*, u.name, u.email, u.student_id,
            (SELECT COUNT(*) FROM participations q WHERE q.event_id = p.event_id AND q.status IN ('waitlisted', 'pending')
-              AND (q.queued_at < p.queued_at OR (q.queued_at = p.queued_at AND q.user_id <= p.user_id))) AS position
+              AND (q.queued_at < p.queued_at OR (q.queued_at = p.queued_at AND q.user_id <= p.user_id))) AS position,
+           EXISTS (SELECT 1 FROM event_attendance a WHERE a.event_id = p.event_id AND a.user_id = p.user_id) AS checked_in
          FROM participations p JOIN users u ON u.id = p.user_id WHERE p.event_id = ? AND p.status IN (?)
          ORDER BY p.last_registered_at, p.user_id LIMIT ? OFFSET ?`, [id, wanted, page_size, (page - 1) * page_size]);
       res.json({ data: rows.map((row) => ({
         user: { id: row.user_id, name: row.name, email: row.email, student_id: row.student_id },
         status: normalize_status(row.status), queue_position: WAITING.includes(row.status) ? Number(row.position) : null,
         last_registered_at: iso(row.last_registered_at), confirmed_at: iso(row.confirmed_at), left_at: iso(row.left_at),
+        checked_in: Boolean(Number(row.checked_in)),
       })), meta: page_meta(total, { page, page_size }) });
     })],
   });

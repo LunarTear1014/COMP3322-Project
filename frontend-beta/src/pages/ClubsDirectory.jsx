@@ -6,13 +6,13 @@ import { useAction, useAllOptions } from '../hooks/resources'
 import { clubColour } from '../lib/club'
 import { isOrganizer } from '../lib/roles'
 
-function ClubCard({ club, membership, busy, onJoin, onLeave }) {
+function ClubCard({ club, membership, busy, onJoin, onLeave, onWithdraw }) {
   const [confirming, setConfirming] = useState(false)
   const colour = clubColour(club.id)
   const organizer = membership && isOrganizer(membership)
   const pending = club.request_status === 'pending'
   return (
-    <article className="cs-card" style={{ '--club': colour.cssVar }}>
+    <article className="cs-card has-actions" style={{ '--club': colour.cssVar }}>
       <div className="cs-clubhead"><span className="cs-clubbadge" aria-hidden="true">{[...club.name][0]}</span></div>
       <div className="cs-card-body">
         <h3 className="cs-card-title">{club.name}</h3>
@@ -26,7 +26,7 @@ function ClubCard({ club, membership, busy, onJoin, onLeave }) {
         {club.description && <p className="clamp-2">{club.description}</p>}
         {confirming ? (
           <div className="inline-confirm" role="group" aria-label={`Leave ${club.name}`}>
-            <p>Leave {club.name}? You can join again later.</p>
+            <p>Leave {club.name}? To join again you’ll send a new request, and the committee has to approve it.</p>
             <div className="cs-row">
               <Button variant="danger" busy={busy} onClick={() => { setConfirming(false); onLeave(club) }}>Leave club</Button>
               <Button onClick={() => setConfirming(false)}>Stay in club</Button>
@@ -45,7 +45,10 @@ function ClubCard({ club, membership, busy, onJoin, onLeave }) {
                 <Button disabled={busy} onClick={() => setConfirming(true)}>Leave</Button>
               </>
             ) : pending ? (
-              <StatusChip state="pending" label="Join request pending" />
+              <>
+                <StatusChip state="pending" label="Join request pending" />
+                <Button disabled={busy} onClick={() => onWithdraw(club)} aria-label={`Cancel join request for ${club.name}`}>Cancel request</Button>
+              </>
             ) : (
               <>
                 <span className="cs-meta">Not a member</span>
@@ -72,6 +75,11 @@ export function ClubsDirectory({ refreshSession }) {
     // Both providers send a request; a current member gets their membership back.
     if (result) toast.show({ message: result.data?.role ? `You’re a member of ${club.name}.` : `Request sent to ${club.name}.` })
   }
+  // Withdraws a pending request; the committee can no longer approve it (CLUB-06).
+  async function withdraw(club) {
+    const result = await action.run(`/clubs/${club.id}/membership`, 'DELETE', {})
+    if (result) toast.show({ message: `Your request to join ${club.name} was cancelled.`, tone: 'info' })
+  }
   async function leave(club) {
     const result = await action.run(`/clubs/${club.id}/membership`, 'DELETE', {})
     if (result) toast.show({ message: `You left ${club.name}.`, tone: 'info' })
@@ -94,7 +102,7 @@ export function ClubsDirectory({ refreshSession }) {
               <section aria-labelledby="your-clubs">
                 <h2 id="your-clubs" className="section-title">Your clubs</h2>
                 {mine.length ? (
-                  <div className="card-grid">{mine.map(club => <ClubCard key={club.id} club={club} membership={membershipFor(club.id)} busy={action.busy} onJoin={join} onLeave={leave} />)}</div>
+                  <div className="card-grid">{mine.map(club => <ClubCard key={club.id} club={club} membership={membershipFor(club.id)} busy={action.busy} onJoin={join} onLeave={leave} onWithdraw={withdraw} />)}</div>
                 ) : (
                   <p className="cs-meta">You haven’t joined a club yet. Pick one below.</p>
                 )}
@@ -102,7 +110,7 @@ export function ClubsDirectory({ refreshSession }) {
               <section aria-labelledby="discover-clubs">
                 <h2 id="discover-clubs" className="section-title">Discover clubs</h2>
                 {others.length ? (
-                  <div className="card-grid">{others.map(club => <ClubCard key={club.id} club={club} busy={action.busy} onJoin={join} onLeave={leave} />)}</div>
+                  <div className="card-grid">{others.map(club => <ClubCard key={club.id} club={club} busy={action.busy} onJoin={join} onLeave={leave} onWithdraw={withdraw} />)}</div>
                 ) : (
                   <p className="cs-meta">You’re in every club. Nice.</p>
                 )}

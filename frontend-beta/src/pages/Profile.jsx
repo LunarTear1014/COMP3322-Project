@@ -11,6 +11,9 @@ const ROLE_LABEL = { president: 'President', committee: 'Committee', member: 'Me
 export function Profile({ session, refreshSession }) {
   const profile = useResource('/profile')
   const memberships = useAllOptions('/me/memberships')
+  // Join requests still waiting for a committee decision show here too (CLUB-06).
+  const clubs = useAllOptions('/clubs')
+  const pending = (clubs.data ?? []).filter(club => club.request_status === 'pending')
   const toast = useToast()
   const [form, setForm] = useState(null)
 
@@ -56,7 +59,17 @@ export function Profile({ session, refreshSession }) {
         ) : (
           <p className="cs-meta">You haven’t joined a club yet.</p>
         )}
-        <p><Link to="/clubs">Join or leave clubs</Link></p>
+        {pending.length > 0 && (
+          <ul className="stack-list" aria-label="Join requests waiting">
+            {pending.map(club => (
+              <li key={club.id} className="membership-row" style={{ '--club': clubColour(club.id).cssVar }}>
+                <span className="cs-club"><i aria-hidden="true" /><span>{club.name}</span></span>
+                <StatusChip state="pending" label="Join request pending" />
+              </li>
+            ))}
+          </ul>
+        )}
+        <p><Link to="/clubs">{pending.length ? 'Join or leave clubs, or cancel a request' : 'Join or leave clubs'}</Link></p>
       </Resource>
     </main>
   )

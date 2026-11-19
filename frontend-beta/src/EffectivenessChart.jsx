@@ -6,7 +6,7 @@ export default function EffectivenessChart({ events }) {
   const dataset = events.map(event => ({
     label: event.title.length > 18 ? `${event.title.slice(0, 17)}…` : event.title,
     fill: Math.round((event.fill_rate ?? 0) * 100),
-    turnout: event.turnout === null ? null : Math.round(event.turnout * 100),
+    turnout: event.turnout == null ? null : Math.round(event.turnout * 100),
   }))
   return (
     <BarChart
@@ -16,6 +16,7 @@ export default function EffectivenessChart({ events }) {
       xAxis={[{ scaleType: 'band', dataKey: 'label' }]}
       yAxis={[{ min: 0, max: 100, label: 'Percent' }]}
       series={[{ dataKey: 'fill', label: 'Filled at start (%)' }, { dataKey: 'turnout', label: 'Turnout (%)' }]}
+      skipAnimation
     />
   )
 }

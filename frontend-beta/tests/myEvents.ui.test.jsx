@@ -87,25 +87,36 @@ describe('Inbox', () => {
     expect(screen.getByText('3 unread in total')).toBeTruthy()
   })
 
-  it('marks every unread message on the page as read and confirms it', async () => {
+  it('marks every unread message, on every page, as read in one request (MSG-02)', async () => {
     window.history.replaceState({}, '', '/notifications')
-    const fetch = fixtureFetch((url, options) => (options.method === 'PATCH' ? json({ data: { id: 1 } }) : null))
+    const fetch = fixtureFetch((url, options) => (options.method === 'POST' && url.pathname === '/api/v1/notifications/read-all' ? json({ data: { marked: 3, unread_count: 0 } }) : null))
     vi.stubGlobal('fetch', fetch)
     render(<App />)
 
     const markAll = await screen.findByRole('button', { name: /Mark all as read/ })
     await waitFor(() => expect(markAll.disabled).toBe(false))
     fireEvent.click(markAll)
-    await waitFor(() => expect(calls(fetch, 'PATCH').length).toBe(3))
-    expect(calls(fetch, 'PATCH').map(([url]) => new URL(url, 'http://x').pathname).sort()).toEqual([
-      '/api/v1/notifications/29/read', '/api/v1/notifications/30/read', '/api/v1/notifications/31/read',
-    ])
+    await waitFor(() => expect(calls(fetch, 'POST').filter(([url]) => String(url).endsWith('/notifications/read-all')).length).toBe(1))
+    expect(calls(fetch, 'PATCH').length).toBe(0)
     expect((await screen.findAllByText('All caught up.')).length).toBeGreaterThan(0)
   })
 
-  it('reports messages that could not be marked as read', async () => {
+  it('marks a read message as unread again (MSG-01)', async () => {
     window.history.replaceState({}, '', '/notifications')
-    vi.stubGlobal('fetch', fixtureFetch((url, options) => (options.method === 'PATCH'
+    const fetch = fixtureFetch((url, options) => (options.method === 'DELETE' && url.pathname === '/api/v1/notifications/28/read'
+      ? json({ data: { id: 28, read_at: null } }) : null))
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    const row = (await screen.findByRole('heading', { name: 'Tomorrow: Joined event' })).closest('li')
+    expect(within(row).queryByRole('button', { name: 'Mark as read' })).toBeNull()
+    fireEvent.click(within(row).getByRole('button', { name: 'Mark as unread' }))
+    await waitFor(() => expect(calls(fetch, 'DELETE').filter(([url]) => String(url).endsWith('/notifications/28/read')).length).toBe(1))
+  })
+
+  it('reports when messages could not be marked as read', async () => {
+    window.history.replaceState({}, '', '/notifications')
+    vi.stubGlobal('fetch', fixtureFetch((url, options) => (options.method === 'POST' && url.pathname === '/api/v1/notifications/read-all'
       ? json({ error: { code: 'INTERNAL_ERROR', message: 'Nope', fields: {}, request_id: 'r' } }, 500)
       : null)))
     render(<App />)
@@ -113,7 +124,7 @@ describe('Inbox', () => {
     const markAll = await screen.findByRole('button', { name: /Mark all as read/ })
     await waitFor(() => expect(markAll.disabled).toBe(false))
     fireEvent.click(markAll)
-    expect((await screen.findAllByText('3 could not be marked as read. Try again.')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Messages weren’t marked as read: Nope')).length).toBeGreaterThan(0)
   })
 
   it('shows an inbox-zero state that is not an error', async () => {

@@ -31,6 +31,14 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     app.set_now(new Date(app.get_now().getTime() + 5000));
     const again = await s1.patch(`/notifications/${first.id}/read`, {});
     assert.equal(again.body.data.read_at, read.body.data.read_at, "first read_at preserved");
+    // Mark as unread (MSG-01): owner-only, idempotent, and counted again.
+    assert.equal((await s2.delete(`/notifications/${first.id}/read`, {})).status, 404, "another user's item is 404");
+    const unread = await s1.delete(`/notifications/${first.id}/read`, {});
+    assert.equal(unread.status, 200);
+    assert.equal(unread.body.data.read_at, null);
+    assert.equal((await s1.delete(`/notifications/${first.id}/read`, {})).body.data.read_at, null, "unread twice is fine");
+    assert.equal((await s1.get("/notifications")).body.meta.unread_count, list.body.meta.unread_count, "counted as unread again");
+    await s1.patch(`/notifications/${first.id}/read`, {});
     const unread_only = await s1.get("/notifications?unread_only=true&page_size=1");
     assert.equal(unread_only.body.meta.unread_count, list.body.meta.unread_count - 1, "count ignores pagination and filters");
     assert.equal((await s1.get("/notifications?unread_only=yes")).status, 422);
@@ -76,7 +84,7 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     const date = future_date(app, 40);
     const event = await published_event(app, ids, { date, slot_id: "afternoon" });
     const pres = await app.client_for("pres@x.test");
-    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "Hidden", description: "d", date, slot_id: "evening", visibility: "public", capacity: 2 })).body.data;
+    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "Hidden", description: "d", date, slot_id: "evening", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] })).body.data;
     const admin = await app.client_for("admin@x.test");
     await admin.post(`/bookings/${draft.booking.id}/decision`, { expected_version: 1, decision: "approve" });
     const student = await app.client_for("s1@x.test");
@@ -87,7 +95,7 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     const [published, hidden] = result.body.data.bookings;
     assert.equal(published.title, event.title);
     assert.deepEqual([hidden.title, hidden.event_id, hidden.club_id, hidden.busy], [null, null, null, true]);
-    const other = await pres.post("/events", { club_id: 1, venue_id: 1, title: "Pending", description: "d", date, slot_id: "morning", visibility: "public", capacity: 2 });
+    const other = await pres.post("/events", { club_id: 1, venue_id: 1, title: "Pending", description: "d", date, slot_id: "morning", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] });
     assert.equal(other.status, 201);
     assert.equal((await student.get(`/venues/1/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).body.data.bookings.length, 2, "pending never blocks");
     assert.equal((await student.get(`/venues/1/calendar?from=${encodeURIComponent(from)}&to=2030-01-01T00:00:00Z`)).status, 422);
@@ -148,7 +156,7 @@ describe("v1 notifications, calendar, check-in, views, reports", { skip }, () =>
     assert.deepEqual(rows.map((r) => r.source), ["explore", "inbox"]);
     assert.equal((await s1.post(`/events/${event.id}/views`, { source: "bogus" })).status, 422);
     const pres = await app.client_for("pres@x.test");
-    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "Hid", description: "d", date: future_date(app, 70), slot_id: "morning", visibility: "public", capacity: 2 })).body.data;
+    const draft = (await pres.post("/events", { club_id: 1, venue_id: 1, title: "Hid", description: "d", date: future_date(app, 70), slot_id: "morning", visibility: "public", capacity: 2, campus_tag_ids: [app.campus_tag_id] })).body.data;
     assert.equal((await s1.post(`/events/${draft.id}/views`, { source: "explore" })).status, 404);
     reset_clock();
   });

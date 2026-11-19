@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { dateTile, seatSummary, timeLine } from '../lib/format'
 import { clubColour } from '../lib/club'
 import { Lock } from 'lucide-react'
@@ -25,6 +25,9 @@ export function EventCover({ event, eager = false, children }) {
 // stickers sit above it. Student surfaces use the sticker shadow; pass
 // `flat` for organizer lists.
 export function EventCard({ event, flat = false, eager = false, chip, source = 'explore' }) {
+  // The detail page's Back link returns here with the same filters (DISC-03).
+  const location = useLocation()
+  const back = location.pathname + location.search
   const seats = seatSummary(event)
   const tile = dateTile(event.start_at)
   const colour = clubColour(event.club?.id)
@@ -43,7 +46,7 @@ export function EventCard({ event, flat = false, eager = false, chip, source = '
       </EventCover>
       <div className="cs-card-body">
         <span className="cs-club"><i aria-hidden="true" /><span>{event.club?.name}</span></span>
-        <h3 className="cs-card-title"><Link to={`/events/${event.id}`} state={{ source }}>{event.title}</Link></h3>
+        <h3 className="cs-card-title"><Link to={`/events/${event.id}`} state={{ source, back }}>{event.title}</Link></h3>
         <span className="cs-meta">{timeLine(event.start_at, event.end_at)} · {event.venue?.name}</span>
         <div className="cs-meter">
           <div className="cs-meter-track" role="presentation">

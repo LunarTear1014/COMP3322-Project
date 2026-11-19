@@ -31,7 +31,7 @@ export function TagPicker({ clubId, campus, club, onCampus, onClub, error }) {
 
   return (
     <>
-      <fieldset className="tag-picker">
+      <fieldset className={`tag-picker${error ? ' is-invalid' : ''}`}>
         <legend>Campus tags <span className="cs-hint">Choose 1 to 3.</span></legend>
         <div className="cs-row">
           {campusTags.data?.map(tag => {
@@ -44,7 +44,7 @@ export function TagPicker({ clubId, campus, club, onCampus, onClub, error }) {
             )
           })}
         </div>
-        {error && <span className="cs-error">{error}</span>}
+        {error && <span className="cs-error" role="alert">{error}</span>}
       </fieldset>
       {clubId && (
         <fieldset className="tag-picker">

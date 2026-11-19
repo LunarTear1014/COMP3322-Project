@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { campusTime, query } from '../api'
 import { ErrorNotice, PageHeading, Pagination, Resource } from '../components/common'
 import { Button, StatusChip, TextField, useToast } from '../components/ui'
 import { useAction, useAllOptions, useResource } from '../hooks/resources'
+import { useNotificationSignal } from '../hooks/useLiveSignal'
 import { isOrganizer } from '../lib/roles'
 
 const ROLE = { president: 'President', committee: 'Committee', member: 'Member' }
@@ -28,7 +29,7 @@ export function ClubTools({ session, refreshSession }) {
       <ErrorNotice error={action.error} />
       <div className="card-grid">
         {clubs.map(club => (
-          <article key={club.club_id} className="cs-card is-flat">
+          <article key={club.club_id} className="cs-card is-flat has-actions">
             <div className="cs-card-body">
               <h2 className="cs-card-title">{club.club_name}</h2>
               <StatusChip state="joined" label={ROLE[club.role]} />
@@ -102,10 +103,13 @@ function MemberRow({ member, mine, onChange, onRemove, busy, self }) {
 }
 
 // The president's log of role, membership and join-request actions, with undo.
-function ActionLog({ clubId, refresh }) {
+function ActionLog({ clubId, refresh, changes }) {
   const [page, setPage] = useState(1)
   const toast = useToast()
   const log = useResource(`/clubs/${clubId}/actions${query({ page })}`)
+  const refreshLog = log.refresh
+  // Role and membership changes made above add log rows (F06).
+  useEffect(() => { if (changes) refreshLog() }, [changes, refreshLog])
   const action = useAction(() => { log.refresh(); refresh() })
   async function undo(item) {
     const result = await action.run(`/clubs/${clubId}/actions/${item.id}/undo`, 'POST', {})
@@ -139,8 +143,15 @@ export function ClubMembers({ session, refreshSession }) {
   const [search, setSearch] = useState('')
   const members = useAllOptions(`/clubs/${id}/members`)
   const mine = session.memberships.find(item => String(item.club_id) === id)?.role
-  const refresh = () => { members.refresh(); refreshSession?.() }
+  const [changes, setChanges] = useState(0)
+  const refresh = () => { members.refresh(); refreshSession?.(); setChanges(count => count + 1) }
   const action = useAction(refresh)
+  // A role or membership change made in another session refreshes the roster,
+  // the log and this user's own controls (F08).
+  useNotificationSignal(note => ['role_changed', 'club_membership', 'club_join_request'].includes(note?.type) && String(note.club_id) === id, () => {
+    members.refresh()
+    setChanges(count => count + 1)
+  })
   const shown = (members.data ?? []).filter(member => member.user.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
 
   async function change(member, role) {
@@ -169,7 +180,7 @@ export function ClubMembers({ session, refreshSession }) {
         </ul>
         {members.data && !shown.length && <p role="status">No members match “{search}”.</p>}
       </Resource>
-      {mine === 'president' && <ActionLog clubId={id} refresh={refresh} />}
+      {mine === 'president' && <ActionLog clubId={id} refresh={() => { members.refresh(); refreshSession?.() }} changes={changes} />}
     </main>
   )
 }

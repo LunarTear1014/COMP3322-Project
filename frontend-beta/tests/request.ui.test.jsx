@@ -63,6 +63,7 @@ describe('request flow', () => {
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Camera workshop' } })
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Practice.' } })
     fireEvent.change(screen.getByLabelText('Capacity'), { target: { value: '20' } })
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Arts' }))
     fireEvent.click(screen.getByRole('button', { name: 'Next: review' }))
     const calendarCalls = () => fetch.mock.calls.filter(([u]) => String(u).includes('/calendar')).length
     const before = calendarCalls()
@@ -73,6 +74,35 @@ describe('request flow', () => {
     expect(window.location.search).not.toContain('slot_id')
     expect(screen.getByLabelText('Title').value).toBe('Camera workshop')
     expect(screen.getByLabelText('Capacity').value).toBe('20')
+  })
+
+  it('keeps typed details after a reload of the details step (EVT-05)', async () => {
+    window.history.replaceState({}, '', '/bookings/new?venue_id=1&date=2026-11-30&slot_id=morning&step=details')
+    vi.stubGlobal('fetch', fixtureFetch())
+    const first = render(<App />)
+    fireEvent.change(await screen.findByLabelText('Title'), { target: { value: 'Camera workshop' } })
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Practice.' } })
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Arts' }))
+    first.unmount()
+
+    render(<App />)
+    expect((await screen.findByLabelText('Title')).value).toBe('Camera workshop')
+    expect(screen.getByLabelText('Description').value).toBe('Practice.')
+    expect((await screen.findByRole('checkbox', { name: 'Arts' })).checked).toBe(true)
+    expect(screen.getByText(/We kept the details you typed/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }))
+    expect(screen.getByLabelText('Title').value).toBe('')
+    expect(screen.queryByText(/We kept the details you typed/)).toBeNull()
+  })
+
+  it('explains the requirement instead of showing the wizard to a regular member (VEN-02)', async () => {
+    window.history.replaceState({}, '', '/bookings/new')
+    vi.stubGlobal('fetch', fixtureFetch((url, options) => (url.pathname === '/api/v1/auth/session' && options.method !== 'POST'
+      ? json({ data: { user: { id: 9, name: 'Mak Hoi Ying', email: 'm@example.com', student_id: '1', platform_role: 'student' }, memberships: [], csrf_token: 't' } }) : null)))
+    render(<App />)
+    expect(await screen.findByText(/Only a club’s committee members and president can request a venue/)).toBeTruthy()
+    expect(screen.queryByRole('combobox', { name: 'Venue' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'See venue availability' }).getAttribute('href')).toBe('/venues')
   })
 
   it('blocks Next with inline errors and capacity above the venue limit', async () => {
@@ -89,5 +119,27 @@ describe('request flow', () => {
     fireEvent.change(screen.getByLabelText('Capacity'), { target: { value: '500' } })
     fireEvent.click(screen.getByRole('button', { name: 'Next: review' }))
     expect(await screen.findByText(/Harbour Room holds up to 80 people/)).toBeTruthy()
+  })
+})
+
+describe('signed-out addresses (NAV-02)', () => {
+  const signedOut = (url) => (url.pathname === '/api/v1/auth/session'
+    ? json({ error: { code: 'AUTHENTICATION_REQUIRED', message: 'Sign in.', fields: {}, request_id: 'r' } }, 401) : null)
+
+  it('shows Page not found for an unknown address instead of a sign-in bounce', async () => {
+    window.history.replaceState({}, '', '/this-route-does-not-exist')
+    vi.stubGlobal('fetch', fixtureFetch(signedOut))
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeTruthy()
+    expect(window.location.pathname).toBe('/this-route-does-not-exist')
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/login')
+  })
+
+  it('still sends a protected page to sign-in with its return path', async () => {
+    window.history.replaceState({}, '', '/events/7')
+    vi.stubGlobal('fetch', fixtureFetch(signedOut))
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(new URLSearchParams(window.location.search).get('return')).toBe('/events/7')
   })
 })

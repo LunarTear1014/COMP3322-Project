@@ -71,6 +71,49 @@ describe('president sign-off and roles (8.2)', () => {
     expect(await screen.findByRole('button', { name: 'Cancel event' })).toBeTruthy()
   })
 
+  it('a plain member gets a pointer to the event page, not an organizer editor (F02)', async () => {
+    window.history.replaceState({}, '', '/organizer/events/1?tab=edit')
+    const fetch = fixtureFetch(url => (url.pathname === '/api/v1/auth/session' ? json({ data: { ...president, memberships: [{ ...president.memberships[0], role: 'member' }] } }) : null))
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+    expect(await screen.findByText('Only Photography Society’s committee can manage this event.')).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: 'Title' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Open the event page' }).getAttribute('href')).toBe('/events/1')
+    expect(fetch.mock.calls.filter(([u]) => /participants/.test(String(u))).length).toBe(0)
+  })
+
+  it('a stale editor is told about the newer version instead of overwriting it (EVT-08)', async () => {
+    window.history.replaceState({}, '', '/organizer/events/1?tab=edit')
+    const base = fixtureFetch(asCommittee)
+    let changedElsewhere = false
+    const fetch = fixtureFetch((url, options) => {
+      if (url.pathname === '/api/v1/auth/session') return json({ data: committee })
+      if (url.pathname === '/api/v1/events/1' && options.method === 'PATCH') {
+        if (!changedElsewhere) { changedElsewhere = true; return json({ error: { code: 'STALE_VERSION', message: 'This event changed. Refresh and try again.', fields: {}, request_id: 'r' } }, 409) }
+        return base(url.href, { method: 'GET' }).then(r => r.json()).then(d => json({ data: { ...d.data, version: 3, title: 'Mine after reload' } }))
+      }
+      if (url.pathname === '/api/v1/events/1' && changedElsewhere) {
+        return base(url.href, options).then(r => r.json()).then(d => json({ data: { ...d.data, version: 2, title: 'Changed in another tab' } }))
+      }
+      return null
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+    const title = await screen.findByRole('textbox', { name: 'Title' })
+    fireEvent.change(title, { target: { value: 'My stale edit' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(calls(fetch, 'PATCH', /events\/1$/).length).toBe(1))
+    expect(body(calls(fetch, 'PATCH', /events\/1$/)[0]).expected_version).toBe(1)
+    // The refresh after the 409 brings version 2; the typed edit is kept and flagged.
+    expect(await screen.findByText(/changed somewhere else after you started editing/)).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Title' }).value).toBe('My stale edit')
+    fireEvent.click(screen.getByRole('button', { name: 'Load the latest version' }))
+    expect(screen.getByRole('textbox', { name: 'Title' }).value).toBe('Changed in another tab')
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(calls(fetch, 'PATCH', /events\/1$/).length).toBe(2))
+    expect(body(calls(fetch, 'PATCH', /events\/1$/)[1]).expected_version).toBe(2)
+  })
+
   it('the president appoints, removes and transfers with a confirmation; committee is read-only', async () => {
     window.history.replaceState({}, '', '/organizer/clubs/1/members')
     const fetch = fixtureFetch(asPresident((url, options) => (options.method && options.method !== 'GET' ? json({ data: {} }) : null)))

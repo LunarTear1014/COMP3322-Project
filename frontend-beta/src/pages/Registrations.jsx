@@ -1,11 +1,13 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router'
 import { PageHeading, Resource } from '../components/common'
 import { EventCard } from '../components/EventCard'
 import { ButtonLink, EmptyState, StatusChip } from '../components/ui'
 import { useAllOptions } from '../hooks/resources'
-import { anyEventIn, useLiveSignal } from '../hooks/useLiveSignal'
+import { anyEventIn, useLiveSignal, useNotificationSignal } from '../hooks/useLiveSignal'
 import { TABS, chipFor, sortRegistrations } from '../lib/myEvents'
+
+const REGISTRATION_TYPES = new Set(['registration_changed', 'event_cancelled', 'event_join_request'])
 
 const EMPTY = {
   upcoming: { title: 'You haven’t joined anything yet', text: 'Find something happening on campus and tap Join event.', action: <ButtonLink variant="primary" to="/events">Explore events</ButtonLink> },
@@ -22,6 +24,15 @@ export function Registrations() {
   // Waitlist positions and request decisions update live.
   const mine = useMemo(() => new Set((registrations.data ?? []).map(item => item.event.id)), [registrations.data])
   useLiveSignal(anyEventIn(mine), registrations.refresh, { wait: 1500 })
+  // Joining or leaving in another tab arrives as a notification: refetch so
+  // the list converges on the server's state (F11).
+  useNotificationSignal(note => REGISTRATION_TYPES.has(note?.type), registrations.refresh)
+  const refreshMine = registrations.refresh
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) refreshMine() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [refreshMine])
   const refs = useRef({})
   const groups = sortRegistrations(registrations.data || [])
 

@@ -35,7 +35,9 @@ export function ToastProvider({ children, duration = DURATION_MS }) {
     timer.current = setTimeout(() => finish(true), ms)
   }, [clear, finish])
 
-  const show = useCallback(({ message, tone = 'success', action, onExpire, durationMs = duration }) => {
+  const show = useCallback(({ message, tone = 'success', action, onExpire, passive = false, durationMs = duration }) => {
+    // A passive toast (a live notification) never replaces an open Undo window.
+    if (passive && current.current?.onExpire) return
     // A new toast replaces the old one; an unfinished Undo window ends first.
     if (current.current?.onExpire) current.current.onExpire()
     const next = { id: Date.now() + Math.random(), message, tone, action, onExpire }
@@ -52,6 +54,21 @@ export function ToastProvider({ children, duration = DURATION_MS }) {
   const resume = useCallback(() => { if (current.current && !timer.current) start(remaining.current) }, [start])
 
   useEffect(() => clear, [clear])
+
+  // Leaving or reloading the page must not silently drop an Undo window's
+  // request (F16): finish it now. onExpire receives { unloading: true } so it
+  // can send a keepalive request the browser delivers after the page is gone.
+  useEffect(() => {
+    const flush = () => {
+      const active = current.current
+      if (!active?.onExpire) return
+      current.current = null
+      clear()
+      active.onExpire({ unloading: true })
+    }
+    window.addEventListener('pagehide', flush)
+    return () => window.removeEventListener('pagehide', flush)
+  }, [clear])
 
   const value = useMemo(() => ({ show, dismiss: () => finish(false) }), [show, finish])
   const Icon = toast ? TONE_ICON[toast.tone] || Check : null

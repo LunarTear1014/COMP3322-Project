@@ -7,7 +7,7 @@ import { TagPicker } from '../components/TagPicker'
 import { coverForm } from '../lib/cover'
 import { ErrorNotice, PageHeading, Resource } from '../components/common'
 import { SlotPicker } from '../components/SlotPicker'
-import { Button, TextField, useToast } from '../components/ui'
+import { Button, ButtonLink, TextField, useToast } from '../components/ui'
 import { useAction, useAllOptions, useResource } from '../hooks/resources'
 import { dayLabel } from '../lib/format'
 import { isOrganizer } from '../lib/roles'
@@ -20,6 +20,21 @@ const STEPS = [
 ]
 const CONFLICT = 'That slot was just booked. Pick another time.'
 
+// Typed details survive a reload of the wizard (EVT-05). They stay in this tab
+// only (sessionStorage) and are cleared once the request is sent. A chosen
+// cover file can't be stored, so the page asks for it again.
+const draftKey = userId => `clubspace:request-draft:${userId ?? 'me'}`
+function readDraft(userId) {
+  try { return JSON.parse(sessionStorage.getItem(draftKey(userId)) || 'null') } catch { return null }
+}
+function writeDraft(userId, draft) {
+  try { sessionStorage.setItem(draftKey(userId), JSON.stringify(draft)) } catch { /* storage unavailable */ }
+}
+function clearRequestDraft(userId) {
+  try { sessionStorage.removeItem(draftKey(userId)) } catch { /* storage unavailable */ }
+}
+const hasText = form => Boolean(form?.title?.trim() || form?.description?.trim())
+
 // Venue request in three steps. Step, venue, week, day and slot live in the URL
 // (?step=details&venue_id=1&week=2026-11-09&date=2026-11-12&slot_id=morning) so a
 // refresh or a shared link returns to the same place. Other fields stay in the
@@ -30,6 +45,9 @@ export function CreateEvent({ session }) {
   const navigate = useNavigate()
   const toast = useToast()
   const copy = location.state?.copyEvent
+  const userId = session.user?.id
+  // A copied event starts fresh; otherwise pick up what this tab typed before a reload.
+  const [saved] = useState(() => (copy ? null : readDraft(userId)))
   const venues = useAllOptions('/venues')
   const config = useResource('/config')
   const clubs = session.memberships.filter(isOrganizer)
@@ -39,8 +57,8 @@ export function CreateEvent({ session }) {
   const [conflict, setConflict] = useState('')
   const [errors, setErrors] = useState({})
   const [cover, setCover] = useState(null)
-  const [tags, setTags] = useState({ campus: [], club: [] })
-  const [form, setForm] = useState({
+  const [tags, setTags] = useState(saved?.tags ?? { campus: copy?.campus_tag_ids ?? [], club: copy?.club_tag_ids ?? [] })
+  const [form, setForm] = useState(saved?.form ?? {
     club_id: copy?.club_id ? String(copy.club_id) : clubs.length === 1 ? String(clubs[0].club_id) : '',
     title: copy?.title || '',
     description: copy?.description || '',
@@ -48,6 +66,13 @@ export function CreateEvent({ session }) {
     capacity: copy?.capacity ? String(copy.capacity) : '',
     registration_closes_at: '',
   })
+  const [restored, setRestored] = useState(() => hasText(saved?.form))
+  const sent = useRef(false)
+  useEffect(() => {
+    if (sent.current) return
+    if (hasText(form) || tags.campus.length || tags.club.length) writeDraft(userId, { form, tags, cover: Boolean(cover) || (restored && Boolean(saved?.cover)) })
+    else clearRequestDraft(userId)
+  }, [form, tags, cover, userId, saved, restored])
 
   const step = STEPS.some(item => item.id === params.get('step')) ? params.get('step') : 'venue'
   const venueId = params.get('venue_id') || (copy?.venue_id ? String(copy.venue_id) : '')
@@ -56,6 +81,8 @@ export function CreateEvent({ session }) {
   const today = campusDate(new Date())
   const anchor = params.get('week') || date || today
   const window_ = weekWindow(anchor)
+  const campusTags = useResource('/tags')
+  const clubTags = useResource(form.club_id ? `/clubs/${form.club_id}/tags` : null)
   const venue = venues.data?.find(item => String(item.id) === venueId)
   const slot = config.data?.slots.find(item => item.id === slotId)
 
@@ -114,6 +141,8 @@ export function CreateEvent({ session }) {
     if (form.registration_closes_at && slot && new Date(campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16))) > new Date(campusInstant(date, slot.start))) {
       found.registration_closes_at = 'Registration must close before the event starts.'
     }
+    // Every event needs 1 to 3 campus tags (TAG-01); the server refuses none.
+    if (!tags.campus.length) found.campus_tags = 'Choose 1 to 3 campus tags.'
     return found
   }
 
@@ -122,7 +151,7 @@ export function CreateEvent({ session }) {
     setErrors(found)
     if (Object.keys(found).length) {
       // Move focus to the first invalid field.
-      requestAnimationFrame(() => formRef.current?.querySelector('[aria-invalid="true"], .is-invalid button, .slot-picker .cs-slot')?.focus())
+      requestAnimationFrame(() => formRef.current?.querySelector('[aria-invalid="true"], .is-invalid button, .slot-picker .cs-slot, .tag-picker.is-invalid input')?.focus())
       return
     }
     setConflict('')
@@ -136,10 +165,12 @@ export function CreateEvent({ session }) {
       date, slot_id: slotId, visibility: form.visibility, capacity: Number(form.capacity),
     }
     if (form.registration_closes_at) body.registration_closes_at = campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16))
-    if (tags.campus.length) body.campus_tag_ids = tags.campus
+    body.campus_tag_ids = tags.campus
     if (tags.club.length) body.club_tag_ids = tags.club
     const result = await action.run('/events', 'POST', body)
     if (result) {
+      sent.current = true
+      clearRequestDraft(userId)
       if (cover) {
         try {
           await request(`/events/${result.data.id}/cover`, { method: 'PUT', body: coverForm({ file: cover.file, alt: cover.alt, expectedVersion: result.data.version ?? 1 }) })
@@ -168,7 +199,25 @@ export function CreateEvent({ session }) {
 
   const stepIndex = STEPS.findIndex(item => item.id === step)
   const selected = { date, slot_id: slotId }
+  const membership = clubs.find(item => String(item.club_id) === form.club_id)
+  const needsSignoff = membership?.role !== 'president'
+  const tagNames = [
+    ...(campusTags.data ?? []).filter(tag => tags.campus.includes(tag.id)),
+    ...(clubTags.data ?? []).filter(tag => tags.club.includes(tag.id)),
+  ].map(tag => tag.name)
   const clubName = clubs.find(item => String(item.club_id) === form.club_id)?.club_name || clubs.find(item => String(item.club_id) === form.club_id)?.name
+
+  if (!clubs.length) {
+    return (
+      <main className="page request-page">
+        <PageHeading title="Request a venue for an event" description="Approval and publication are separate. Times are Hong Kong time." />
+        <div className="notice notice-info" role="status">
+          <p>Only a club’s committee members and president can request a venue. Ask your club’s committee to make the request, or see which venues are free.</p>
+          <p className="cs-row"><ButtonLink to="/venues">See venue availability</ButtonLink><ButtonLink to="/clubs">Your clubs</ButtonLink></p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="page request-page">
@@ -177,7 +226,12 @@ export function CreateEvent({ session }) {
         description="Approval and publication are separate. Times are Hong Kong time."
       />
       {copy && <p className="notice notice-info">Details copied. Choose a new date and time. The original event remains unchanged.</p>}
-      {!clubs.length && <p className="notice notice-error" role="alert">Committee or president membership is required.</p>}
+      {restored && (
+        <p className="notice notice-info" role="status">
+          We kept the details you typed before the page reloaded.{saved?.cover ? ' Choose the cover image again.' : ''}{' '}
+          <Button variant="ghost" onClick={() => { setForm(current => ({ ...current, title: '', description: '', capacity: '', registration_closes_at: '', visibility: 'public' })); setTags({ campus: [], club: [] }); clearRequestDraft(userId); setRestored(false) }}>Start over</Button>
+        </p>
+      )}
 
       <ol className="cs-steps" aria-label="Request progress">
         {STEPS.map((item, index) => (
@@ -244,7 +298,7 @@ export function CreateEvent({ session }) {
             </TextField>
             <TextField label="Capacity" name="capacity" type="number" inputMode="numeric" min="1" max="500" autoComplete="off" value={form.capacity} error={errors.capacity} hint={venue ? `${venue.name} holds up to ${venue.capacity}.` : undefined} onChange={update} />
             <TextField label="Registration deadline (Hong Kong time)" optional name="registration_closes_at" type="datetime-local" value={form.registration_closes_at} error={errors.registration_closes_at} hint="Leave empty to close registration when the event starts." onChange={update} />
-            <TagPicker clubId={form.club_id} campus={tags.campus} club={tags.club} onCampus={campus => setTags({ ...tags, campus })} onClub={club => setTags({ ...tags, club })} />
+            <TagPicker clubId={form.club_id} campus={tags.campus} club={tags.club} error={errors.campus_tags} onCampus={campus => { setTags({ ...tags, campus }); setErrors(current => ({ ...current, campus_tags: undefined })) }} onClub={club => setTags({ ...tags, club })} />
             <CoverUploader title={form.title} onChange={setCover} />
             <div className="step-actions">
               <Button onClick={() => goTo('venue')}>Back</Button>
@@ -262,8 +316,12 @@ export function CreateEvent({ session }) {
               {cover && <div><dt>Cover</dt><dd>{cover.file.name}</dd></div>}
               <div><dt>Who can join</dt><dd>{form.visibility === 'members_only' ? 'Members only' : 'Open to everyone'}</dd></div>
               <div><dt>Capacity</dt><dd>{form.capacity}</dd></div>
+              <div><dt>Registration closes</dt><dd>{form.registration_closes_at ? `${dayLabel(campusInstant(form.registration_closes_at.slice(0, 10), form.registration_closes_at.slice(11, 16)))} · ${form.registration_closes_at.slice(11, 16)} Hong Kong time` : 'When the event starts'}</dd></div>
+              <div><dt>Tags</dt><dd>{tagNames.length ? tagNames.join(', ') : '—'}</dd></div>
             </dl>
-            <p className="cs-meta">Your request goes to a venue administrator. The event stays a draft until you publish it.</p>
+            <p className="cs-meta">{needsSignoff
+              ? 'Your president signs this request off first, then the venue team reviews it. The event stays a private draft until it is published.'
+              : 'Your request goes to the venue team. The event stays a private draft until you publish it.'}</p>
             {action.error && !conflict && <ErrorNotice error={action.error} />}
             <div className="step-actions">
               <Button onClick={() => goTo('details')}>Back</Button>

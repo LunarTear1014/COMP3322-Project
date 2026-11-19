@@ -85,6 +85,8 @@ function create_events_router({ pool, clock }) {
   define_route(router, "/events", {
     post: [require_user, wrap(async (req, res) => {
       const body = validate_body(req.body, CREATE);
+      // Every event carries 1–3 campus tags (event-tags spec); there is no silent default.
+      if (!body.campus_tag_ids) throw validation_error({ campus_tag_ids: "Choose 1 to 3 campus tags." });
       const now = clock();
       const { start, end } = resolve_slot(body.date, body.slot_id, now);
       let closes = start;
@@ -114,12 +116,7 @@ function create_events_router({ pool, clock }) {
           `INSERT INTO events (booking_id, club_id, title, description, start_time, end_time, visibility, status, capacity, version, registration_closes_at, created_by)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, 1, ?, ?)`,
           [booking.insertId, body.club_id, body.title, body.description, to_db(start), to_db(end), body.visibility, body.capacity, to_db(closes), req.user.id]);
-        let campus = body.campus_tag_ids;
-        if (!campus) {
-          const [[social]] = await conn.query("SELECT id FROM campus_tags WHERE slug = 'social' AND retired_at IS NULL");
-          campus = social ? [social.id] : undefined;
-        }
-        await set_tags(conn, event.insertId, body.club_id, { campus_tag_ids: campus, club_tag_ids: body.club_tag_ids });
+        await set_tags(conn, event.insertId, body.club_id, { campus_tag_ids: body.campus_tag_ids, club_tag_ids: body.club_tag_ids });
         await audit(conn, { actor: req.user.id, entity_type: "booking", entity_id: booking.insertId, action: "booking.requested", details: { event_id: event.insertId, awaiting_president: awaiting }, now });
         if (awaiting) {
           await notify(conn, { users: [president], type: "signoff_requested", club_id: body.club_id, event_id: event.insertId, booking_id: booking.insertId, now, key: `signoff_requested:b${booking.insertId}:1`, title: `Venue request needs your sign-off: ${body.title}`, body: `${req.user.name} asked for ${venue.name}.` });

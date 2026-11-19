@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { Component, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { addDays, campusDate, campusInstant, query } from '../api'
 import { PageHeading, Resource } from '../components/common'
@@ -7,6 +7,29 @@ import { useResource } from '../hooks/resources'
 import { dayLabel } from '../lib/format'
 
 const EffectivenessChart = lazy(() => import('../EffectivenessChart'))
+const CHART_PATIENCE_MS = 8000
+
+// A chart that fails or never arrives must not leave "Loading chart…" on
+// screen forever (F18); the table below always has every number.
+class ChartBoundary extends Component {
+  constructor(props) { super(props); this.state = { failed: false } }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    return this.state.failed
+      ? <p className="cs-meta" role="status">The chart couldn’t be shown. Every number is in the table below.</p>
+      : this.props.children
+  }
+}
+
+function ChartLoading() {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), CHART_PATIENCE_MS)
+    return () => clearTimeout(timer)
+  }, [])
+  return <p role="status">{slow ? 'The chart is taking a while to load. Every number is in the table below.' : 'Loading chart…'}</p>
+}
+
 const pct = value => (value === null || value === undefined ? null : `${Math.round(value * 100)}%`)
 const NOT_RECORDED = 'Not recorded'
 const SOURCES = [['explore', 'Explore'], ['club', 'Club'], ['inbox', 'Inbox'], ['my_events', 'My events'], ['share', 'Shared link'], ['other', 'Other']]
@@ -85,7 +108,7 @@ export function Effectiveness() {
           <>
             <p className="cs-meta cs-nums" role="status">{totals.events} events · {totals.joined} seats held at start · {totals.views} views</p>
             <figure className="chart-figure" aria-label="Chart: filled at start and turnout per event">
-              <Suspense fallback={<p role="status">Loading chart…</p>}><EffectivenessChart events={data.events} /></Suspense>
+              <ChartBoundary><Suspense fallback={<ChartLoading />}><EffectivenessChart events={data.events} /></Suspense></ChartBoundary>
               <figcaption className="cs-hint">The table below lists every exact number. Events without check-in have no turnout bar.</figcaption>
             </figure>
             <section aria-label="Per event">
