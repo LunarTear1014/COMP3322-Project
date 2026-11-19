@@ -381,7 +381,9 @@ is safe to run again:
 docker compose exec -T backend node src/ops/attach-demo-covers.js
 ```
 
-The five demo clubs get generated icons from
+The five demo clubs get GPT-generated icons from
+[`backend-beta/db/demo-icons/`](backend-beta/db/demo-icons/) (512 px copies of
+[`generated-club-icons/`](generated-club-icons/)), loaded by
 [`backend-beta/src/ops/demo_club_icons.js`](backend-beta/src/ops/demo_club_icons.js).
 `seed` adds any missing ones on every `docker compose up`, even on a database
 that already has data, and never replaces an icon a committee uploaded. To

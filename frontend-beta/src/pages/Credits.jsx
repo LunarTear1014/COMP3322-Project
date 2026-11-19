@@ -68,8 +68,8 @@ export function Credits({ signedIn }) {
       <section className="credits-section" aria-labelledby="credits-images">
         <h2 id="credits-images" className="section-title">Images</h2>
         <p>
-          The demo club and event cover images were generated with OpenAI&apos;s GPT image generation for ClubSpace&apos;s
-          fictional demo data. They are not taken from stock libraries or other websites, and the people shown are not
+          The demo club icons and event cover images were generated with OpenAI&apos;s GPT image generation for
+          ClubSpace&apos;s fictional demo data. They are not taken from stock libraries or other websites, and the people shown are not
           real.
         </p>
       </section>

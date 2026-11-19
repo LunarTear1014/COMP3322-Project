@@ -180,7 +180,7 @@
     <tr><td><strong>Effectiveness report</strong></td><td>Fill rate, turnout, drop-outs, no-shows, peak waitlist, promotions and view-to-join by source, with comparisons by tag, weekday and slot.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Tags and covers</strong></td><td>Admin-curated campus tags (1–3 per event, at least one required) and club tags (0–5 per event), both filterable. Event cover images (JPEG or WebP up to 5 MB) are resized by sharp.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Club action log</strong></td><td>The president sees a history of committee actions and can undo the ones that are safe to undo. Undo is refused once a later action affects the same people.</td><td><span class="pill extra">Extra</span></td></tr>
-    <tr><td><strong>Club icons</strong></td><td>The committee uploads, replaces or removes a club icon (JPEG, PNG or WebP, at least 128 × 128 px, up to 2 MB), checked in the browser and again on the server. sharp crops it to a square 256 px WebP. Icons appear on the Clubs page, and a club without one shows its colour badge with its first letter. The demo clubs get generated icons from the seed.</td><td><span class="pill extra">Extra</span></td></tr>
+    <tr><td><strong>Club icons</strong></td><td>The committee uploads, replaces or removes a club icon (JPEG, PNG or WebP, at least 128 × 128 px, up to 2 MB), checked in the browser and again on the server. sharp crops it to a square 256 px WebP. Icons appear on the Clubs page, and a club without one shows its colour badge with its first letter. The demo clubs get GPT-generated icons from the seed.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Members-only join requests</strong></td><td>Students outside a club can request a place at a members-only event, and the committee decides.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Credits, privacy and terms</strong></td><td>An in-app <code>/credits</code> page as the guideline requires, plus public privacy policy and terms pages for the Google consent screen.</td><td><span class="pill extra">Extra</span></td></tr>
     <tr><td><strong>Usability fixes from UI/UX testing</strong></td><td>After a full UI/UX test round: sign-in returns to the page you asked for, a stale edit shows a "changed by someone else" notice, request forms keep typed details across a reload, the check-in roster is paginated, the Back button keeps Explore filters, and pages reflow up to 400% zoom.</td><td><span class="pill extra">Extra</span></td></tr>
@@ -651,10 +651,10 @@ curl -fsS http://127.0.0.1/api/health # {"status":"ok"}</pre>
     <tr><th style="width:30%">Area</th><th>Credited libraries and assets</th></tr>
     <tr><td>Frontend</td><td>React and React DOM, React Router, MUI Material UI, MUI X Charts, Emotion, Lucide icons</td></tr>
     <tr><td>Fonts</td><td>Bricolage Grotesque, Lexend</td></tr>
-    <tr><td>Backend</td><td>Node.js and Express, express-session, mysql2, Multer, sharp, dotenv</td></tr>
+    <tr><td>Backend</td><td>Node.js and Express, express-session, mysql2, Multer, sharp, dotenv, openid-client</td></tr>
     <tr><td>Database and infrastructure</td><td>MySQL 8.4, Docker and nginx</td></tr>
     <tr><td>Tooling</td><td>Vite, Vitest and Testing Library, Oxlint</td></tr>
-    <tr><td>Demo images</td><td>Cover images for the fictional demo clubs and events, generated with OpenAI's GPT image generation (<code>backend-beta/db/demo-images/</code>), and generated icons for the five demo clubs. All demo people are fictional and use the reserved <code>.example</code> domain.</td></tr>
+    <tr><td>Demo images</td><td>Cover images for the fictional demo clubs and events, generated with OpenAI's GPT image generation (<code>backend-beta/db/demo-images/</code>), and the icons of the five demo clubs (<code>backend-beta/db/demo-icons/</code>), generated the same way. All demo people are fictional and use the reserved <code>.example</code> domain.</td></tr>
   </table>
 
   <h3>Repository map</h3>
